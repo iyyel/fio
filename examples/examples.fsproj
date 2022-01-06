@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="Program.fs" />
+    <Compile Include="Examples.fs" />
   </ItemGroup>
 
 </Project>
