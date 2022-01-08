@@ -6,10 +6,18 @@ let main argv =
 
     let p: FIO.Effect<int> =
         FIO.receive (fun x -> FIO.receive (fun y -> FIO.send (x + y)))
-  
-    FIO.socketSend "127.0.0.1" 8888 "test"
-    
-    FIO.socketReceive
 
+    let msg = "test"
+
+    let asyncReceive = async {
+        let result = FIO.receiveFromSocket
+        printfn "Received: %s" result
+    }
+
+    Async.Start asyncReceive
+
+    printfn "Sending message: %s" msg
+    FIO.sendToSocket msg
+   
     printfn "%s" "Examples program finished"
     0
