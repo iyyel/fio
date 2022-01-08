@@ -2,15 +2,16 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
+    <WarnOn>3390;$(WarnOn)</WarnOn>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../src/FIO.fsproj" />
+    <Compile Include="Examples.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="Examples.fs" />
+    <ProjectReference Include="..\FIO\FIO.fsproj" />
   </ItemGroup>
 
 </Project>
