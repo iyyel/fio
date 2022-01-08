@@ -37,7 +37,7 @@ module FIO =
 
     let socketReceive =
         let addr = IPAddress.Parse("127.0.0.1")
-        let port = 32000
+        let port = 8888
         let tcpListener = new TcpListener (addr, port)
         try
             tcpListener.Start()
