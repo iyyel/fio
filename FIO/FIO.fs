@@ -6,6 +6,9 @@ open System
 
 module FIO =
 
+    let addr = "127.0.0.1"
+    let port = 8888
+
     type Effect<'a> =
         | Input of ('a -> Effect<'a>)
         | Output of 'a
@@ -29,22 +32,27 @@ module FIO =
         | :? SocketException as excp ->
             printfn "SocketException encountered: %s" excp.Message
 
-    let receiveFromSocket (addr:String) port =
-        let addr' = IPAddress.Parse(addr)
-        let tcpListener = new TcpListener(addr', port)
-        tcpListener.Start()
-        let bytes = Array.create 256 (byte (0))
-        printfn "Waiting for a connection..."
-        let tcpClient = tcpListener.AcceptTcpClient()
-        let ns = tcpClient.GetStream()
-        let mutable i = ns.Read(bytes, 0, (Array.length bytes))
-        let data = System.Text.Encoding.ASCII.GetString(bytes, 0, i)
-        printfn "Received: %s" data
-        tcpListener.Stop()
-        data
+    let receiveFromSocket (addr:String) port = 
+        async {
+            let addr' = IPAddress.Parse(addr)
+            let tcpListener = new TcpListener(addr', port)
+            tcpListener.Start()
+            let bytes = Array.create 256 (byte (0))
+            printfn "Waiting for a connection..."
+            let tcpClient = tcpListener.AcceptTcpClient()
+            let ns = tcpClient.GetStream()
+            let mutable i = ns.Read(bytes, 0, (Array.length bytes))
+            let data = System.Text.Encoding.ASCII.GetString(bytes, 0, i)
+            printfn "Received: %s" data
+            tcpListener.Stop()
+            return data
+        }
         
     let rec naiveEval e = 
         match e with 
-        | Input(f)         -> failwith "not implemented!"
-        | Output(v)        -> failwith "not implemented!"
+        | Input(f)         -> let v = receiveFromSocket addr port |> Async.RunSynchronously
+                              printfn "Received message '%s' from %s:%d" v addr port
+                              naiveEval(f v)
+        | Output(v)        -> sendToSocket addr port v
+                              printfn "Sent message '%s' to %s:%d" v addr port
         | Parallel(e1, e2) -> failwith "not implemented!"
