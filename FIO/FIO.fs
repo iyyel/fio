@@ -1,10 +1,19 @@
 ﻿namespace FSharp.FIO
 
 open System.Collections.Generic
+open System
+
+module internal Channel =
+
+    let defaultChannel = Queue<'a>()
+    
+    let sendToChannel (c : Queue<'a>) v =
+          c.Enqueue v
+      
+    let receiveFromChannel (c : Queue<'a>) =
+          c.Dequeue()
 
 module FIO =
-    
-    let defaultChannel = Queue<'a>()
 
     type Effect<'a> =
         | Input of ('a -> Effect<'a>)
@@ -15,21 +24,15 @@ module FIO =
     let send (v, f) = Output(v, f)
     let receive f = Input f
     
-    let sendToChannel (c : Queue<'a>) v =
-        c.Enqueue v
-    
-    let receiveFromChannel (c : Queue<'a>) =
-        if c.Count = 0 then
-            "error: channel is empty!"
-        else
-            c.Dequeue()
-        
     let rec naiveEval e = 
         match e with 
-        | Input f          -> let v = receiveFromChannel defaultChannel
-                              printfn "Received message: '%s'" v
-                              naiveEval(f v)
-        | Output(v, f)     -> sendToChannel defaultChannel v
+        | Input f          -> try 
+                                  let v = Channel.receiveFromChannel Channel.defaultChannel
+                                  printfn "Received message: '%s'" v
+                                  naiveEval(f v)
+                              with 
+                              | :? InvalidOperationException -> ()
+        | Output(v, f)     -> Channel.sendToChannel Channel.defaultChannel v
                               printfn "Sent message: '%s'" v
                               naiveEval(f ())
         | Parallel(e1, e2) -> async {
