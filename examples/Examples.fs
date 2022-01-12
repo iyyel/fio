@@ -20,8 +20,10 @@ let p2: FIO.Effect<string> = FIO.Parallel(
 [<EntryPoint>]
 let main argv =
     
-    FIO.naiveEval p
-    FIO.naiveEval p1
-    FIO.naiveEval p2
+    let c = Channel.getFIOSocket
+    
+    FIO.naiveEval p c
+    FIO.naiveEval p1 c
+    FIO.naiveEval p2 c
 
     0

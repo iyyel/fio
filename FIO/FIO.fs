@@ -2,16 +2,53 @@
 
 open System.Collections.Generic
 open System
+open System.Net
+open System.Net.Sockets
 
-module internal Channel =
+module Channel =
 
-    let queue = Queue<'a>()
+    type Channel =
+        | FIOQueue of Queue<string>
+        | FIOSocket of Socket
+
+    let getFIOSocket =
+        let ipAddress = Dns.GetHostEntry("127.0.0.1").AddressList.[0]
+        let port = 8888
+        let endpoint = IPEndPoint(ipAddress, port)
+        let s = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+        s.Bind(endpoint)
+        s.Connect(endpoint)
+        FIOSocket s
+
+    let getFIOQueue = FIOQueue (Queue<string>())
+
+    let stopChannel c =
+        match c with
+        | FIOSocket s -> s.Shutdown(SocketShutdown.Both)
+                         s.Close()
+        | _           -> ()
+
+    let internal sendToSocket (s : Socket) (msg : string) = 
+        let data = System.Text.Encoding.ASCII.GetBytes msg
+        s.SendBufferSize <- Array.length data
+        s.Send(data) |> ignore
+
+    let internal receiveFromSocket (s : Socket) =
+        let bytes = Array.create 1 (byte (0))
+        s.ReceiveBufferSize <- Array.length bytes
+        let len = s.Receive(bytes)
+        let data = System.Text.Encoding.ASCII.GetString(bytes, 0, len)
+        data
     
-    let sendToChannel (c : Queue<'a>) v =
-          c.Enqueue v
+    let internal sendToChannel c v =
+        match c with
+        | FIOQueue q  -> q.Enqueue(v)
+        | FIOSocket s -> sendToSocket s v
       
-    let receiveFromChannel (c : Queue<'a>) =
-          c.Dequeue()
+    let internal receiveFromChannel c =
+        match c with
+        | FIOQueue q  -> q.Dequeue()
+        | FIOSocket s -> receiveFromSocket s
 
 module FIO =
 
@@ -24,19 +61,19 @@ module FIO =
     let send (v, f) = Output(v, f)
     let receive f = Input f
     
-    let rec naiveEval e = 
+    let rec naiveEval e c = 
         match e with 
         | Input f          -> try 
-                                  let v = Channel.receiveFromChannel Channel.queue
+                                  let v = Channel.receiveFromChannel c
                                   printfn "Received message: '%s'" v
-                                  naiveEval(f v)
+                                  naiveEval (f v) c
                               with 
                               | :? InvalidOperationException -> ()
-        | Output(v, f)     -> Channel.sendToChannel Channel.queue v
+        | Output(v, f)     -> Channel.sendToChannel c v
                               printfn "Sent message: '%s'" v
-                              naiveEval(f ())
+                              naiveEval (f ()) c
         | Parallel(e1, e2) -> async {
-                                naiveEval(e1)
+                                naiveEval e1 c
                               } |> Async.Start
-                              naiveEval(e2)
+                              naiveEval e2 c
         | Unit             -> ()
