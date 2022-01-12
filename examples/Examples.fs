@@ -4,8 +4,7 @@ let p: FIO.Effect<string> =
     FIO.send("test 1", fun () ->
         FIO.send("test 2", fun () -> 
             FIO.receive(fun x -> 
-                FIO.receive(
-                fun y -> 
+                FIO.receive(fun y ->
                     FIO.send(x + " " + y, fun () ->
                         FIO.receive(fun y -> FIO.Unit))))))
 

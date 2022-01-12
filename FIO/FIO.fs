@@ -5,7 +5,7 @@ open System
 
 module internal Channel =
 
-    let defaultChannel = Queue<'a>()
+    let queue = Queue<'a>()
     
     let sendToChannel (c : Queue<'a>) v =
           c.Enqueue v
@@ -27,12 +27,12 @@ module FIO =
     let rec naiveEval e = 
         match e with 
         | Input f          -> try 
-                                  let v = Channel.receiveFromChannel Channel.defaultChannel
+                                  let v = Channel.receiveFromChannel Channel.queue
                                   printfn "Received message: '%s'" v
                                   naiveEval(f v)
                               with 
                               | :? InvalidOperationException -> ()
-        | Output(v, f)     -> Channel.sendToChannel Channel.defaultChannel v
+        | Output(v, f)     -> Channel.sendToChannel Channel.queue v
                               printfn "Sent message: '%s'" v
                               naiveEval(f ())
         | Parallel(e1, e2) -> async {
