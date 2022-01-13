@@ -1,22 +1,18 @@
 ﻿namespace FSharp.FIO
 
-open System.Collections.Generic
-open System.Threading.Tasks
+open System.Collections.Concurrent
 
 module FIO =
 
     type Channel<'a>() =
-        let q = Queue<'a>()
+        let q = ConcurrentQueue<'a>()
         
         member internal this.send v =
                 q.Enqueue v
         
         member internal this.receive() =
-                if q.Count = 0 then
-                    Task.Delay(1) |> ignore
-                    this.receive()
-                else
-                    q.Dequeue()
+                let s, v = q.TryDequeue()
+                if s then v else this.receive()
             
     type Effect<'a> =
         | Input of Channel<'a> * ('a -> Effect<'a>)
