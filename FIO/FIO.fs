@@ -1,79 +1,40 @@
 ﻿namespace FSharp.FIO
 
 open System.Collections.Generic
-open System
-open System.Net
-open System.Net.Sockets
-
-module Channel =
-
-    type Channel =
-        | FIOQueue of Queue<string>
-        | FIOSocket of Socket
-
-    let getFIOSocket =
-        let ipAddress = Dns.GetHostEntry("127.0.0.1").AddressList.[0]
-        let port = 8888
-        let endpoint = IPEndPoint(ipAddress, port)
-        let s = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
-        s.Bind(endpoint)
-        s.Connect(endpoint)
-        FIOSocket s
-
-    let getFIOQueue = FIOQueue (Queue<string>())
-
-    let stopChannel c =
-        match c with
-        | FIOSocket s -> s.Shutdown(SocketShutdown.Both)
-                         s.Close()
-        | _           -> ()
-
-    let internal sendToSocket (s : Socket) (msg : string) = 
-        let data = System.Text.Encoding.ASCII.GetBytes msg
-        s.SendBufferSize <- Array.length data
-        s.Send(data) |> ignore
-
-    let internal receiveFromSocket (s : Socket) =
-        let bytes = Array.create 1 (byte (0))
-        s.ReceiveBufferSize <- Array.length bytes
-        let len = s.Receive(bytes)
-        let data = System.Text.Encoding.ASCII.GetString(bytes, 0, len)
-        data
-    
-    let internal sendToChannel c v =
-        match c with
-        | FIOQueue q  -> q.Enqueue(v)
-        | FIOSocket s -> sendToSocket s v
-      
-    let internal receiveFromChannel c =
-        match c with
-        | FIOQueue q  -> q.Dequeue()
-        | FIOSocket s -> receiveFromSocket s
+open System.Threading.Tasks
 
 module FIO =
 
+    type Channel<'a>() =
+        let q = Queue<'a>()
+        
+        member internal this.send v =
+                q.Enqueue v
+        
+        member internal this.receive() =
+                if q.Count = 0 then
+                    Task.Delay(1) |> ignore
+                    this.receive()
+                else
+                    q.Dequeue()
+            
     type Effect<'a> =
-        | Input of ('a -> Effect<'a>)
-        | Output of 'a * (unit -> Effect<'a>)
+        | Input of Channel<'a> * ('a -> Effect<'a>)
+        | Output of 'a * Channel<'a> * (unit -> Effect<'a>)
         | Parallel of Effect<'a> * Effect<'a>
-        | Unit
+        | Return of 'a
 
-    let send (v, f) = Output(v, f)
-    let receive f = Input f
+    let send (v, c, f) = Output(v, c, f)
+    let receive (c, f) = Input(c, f)
     
-    let rec naiveEval e c = 
+    let rec naiveEval (e : Effect<'a>) : 'a =
         match e with 
-        | Input f          -> try 
-                                  let v = Channel.receiveFromChannel c
-                                  printfn "Received message: '%s'" v
-                                  naiveEval (f v) c
-                              with 
-                              | :? InvalidOperationException -> ()
-        | Output(v, f)     -> Channel.sendToChannel c v
-                              printfn "Sent message: '%s'" v
-                              naiveEval (f ()) c
+        | Input(c, f)      -> let v = c.receive()
+                              naiveEval(f v)
+        | Output(v, c, f)  -> c.send v
+                              naiveEval(f ())
         | Parallel(e1, e2) -> async {
-                                naiveEval e1 c
+                                naiveEval e1 |> ignore // TODO: We should not ignore the result of the 'e1' effect.
                               } |> Async.Start
-                              naiveEval e2 c
-        | Unit             -> ()
+                              naiveEval e2
+        | Return v         -> v
