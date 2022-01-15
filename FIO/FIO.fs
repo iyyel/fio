@@ -34,11 +34,8 @@ module FIO =
                                         NaiveEval <| cont (r1, r2)
         | Return value               -> value
     and ParallelWork effs =
-        let asyncEval eff = async {
-            return NaiveEval eff
-        }
         let work = async {
-            let funcs = List.map (fun eff -> asyncEval eff) effs
+            let funcs = List.map (fun eff -> async { return NaiveEval eff }) effs
             let! result = Async.Parallel <| Seq.ofList funcs
             return result
         }
