@@ -24,23 +24,23 @@ module FIO =
     let Receive(chan, cont) = Input(chan, cont)
     
     let rec NaiveEval (eff : Effect<'a>) : 'a =
-        match eff with 
+        match eff with
         | Input(chan, cont)          -> let value = chan.Receive
                                         NaiveEval <| cont value
         | Output(value, chan, cont)  -> chan.Send value
                                         NaiveEval <| cont ()
-        | Parallel(eff1, eff2, cont) -> let task = Async.AwaitTask <| Async.StartAsTask (ParallelWork eff1 eff2)
-                                        let (r1, r2) = Async.RunSynchronously task
+        | Parallel(eff1, eff2, cont) -> let results = ParallelWork [eff1; eff2]
+                                        let (r1, r2) = (Array.get results 0, Array.get results 1)
                                         NaiveEval <| cont (r1, r2)
         | Return value               -> value
-    and ParallelWork eff1 eff2 = 
-        async {
-            let workEff1 = async {
-                return NaiveEval eff1
-            }
-            let workEff2 = async {
-                return NaiveEval eff2
-            }
-            let! result = Async.Parallel <| Seq.ofList [workEff1; workEff2]
-            return (result[0], result[1])
+    and ParallelWork effs =
+        let asyncEval eff = async {
+            return NaiveEval eff
         }
+        let work = async {
+            let funcs = List.map (fun eff -> asyncEval eff) effs
+            let! result = Async.Parallel <| Seq.ofList funcs
+            return result
+        }
+        let task = Async.AwaitTask <| Async.StartAsTask work
+        Async.RunSynchronously task
