@@ -29,7 +29,17 @@ module FIO =
                                         NaiveEval <| cont value
         | Output(value, chan, cont)  -> chan.Send value
                                         NaiveEval <| cont ()
-        | Parallel(eff1, eff2, cont) -> let r1 = NaiveEval eff1
-                                        let r2 = NaiveEval eff2
+        | Parallel(eff1, eff2, cont) -> let work = async {
+                                            let workEff1 = async {
+                                                return NaiveEval eff1
+                                            }
+                                            let workEff2 = async {
+                                                return NaiveEval eff2
+                                            }
+                                            let! result = Async.Parallel <| Seq.ofList [workEff1; workEff2]
+                                            return (result[0], result[1])
+                                        }
+                                        let task = Async.AwaitTask <| Async.StartAsTask work
+                                        let (r1, r2) = Async.RunSynchronously task
                                         NaiveEval <| cont (r1, r2)
         | Return value               -> value
