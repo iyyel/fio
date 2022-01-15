@@ -30,7 +30,7 @@ let p2 c =
 [<EntryPoint>]
 let main argv =
     
-    let result = FIO.NaiveEval(FIO.Parallel(p1 c, p2 c))
+    let result = FIO.NaiveEval(FIO.Parallel(p1 c, p2 c, fun (a, b) -> FIO.Return (a + b)))
     printfn "Result: %i" result
 
     0
