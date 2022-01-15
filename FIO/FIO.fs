@@ -23,12 +23,12 @@ module FIO =
     let Send(value, chan, cont) = Output(value, chan, cont)
     let Receive(chan, cont) = Input(chan, cont)
     
-    let rec NaiveEval (eff : Effect<'a>) =
+    let rec NaiveEval (eff : Effect<'a>) : 'a =
         match eff with 
         | Input(chan, cont)         -> let value = chan.Receive
-                                       NaiveEval(cont value)
+                                       NaiveEval <| cont value
         | Output(value, chan, cont) -> chan.Send value
-                                       NaiveEval(cont ())
+                                       NaiveEval <| cont ()
         | Parallel(eff1, eff2)      -> async {
                                            NaiveEval eff1 |> ignore
                                        } |> Async.Start
