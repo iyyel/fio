@@ -13,29 +13,46 @@ module FIO =
         member internal this.Receive =
                 let status, value = queue.TryDequeue()
                 if status then value else this.Receive
-        
-    type Effect<'a> =
-        | Input of Channel<'a> * ('a -> Effect<'a>)
-        | Output of 'a * Channel<'a> * (unit -> Effect<'a>)
-        | Parallel of Effect<'a> * Effect<'a> * ('a * 'a -> Effect<'a>)
-        | Return of 'a
+
+    [<AbstractClass>]
+    type Effect<'Result>() =
+        class end
+    and Input<'Result>(chan : Channel<'Result>, cont : 'Result -> Effect<'Result>) = 
+        inherit Effect<'Result>()
+        member internal this.Chan = chan
+        member internal this.Cont = cont
+    and Output<'Result>(value : 'Result, chan : Channel<'Result>, cont : unit -> Effect<'Result>) =
+        inherit Effect<'Result>()
+        member internal this.Value = value
+        member internal this.Chan = chan
+        member internal this.Cont = cont
+    and Concurrent<'Result, 'Future>(eff: Effect<'Future>, cont: Async<'Future> -> Effect<'Result>) = 
+        inherit Effect<'Result>()
+        member internal this.Eff = eff
+        member internal this.Cont = cont
+    and Await<'Result, 'Future>(future: Async<'Future>, cont: 'Future -> Effect<'Result>) =
+        inherit Effect<'Result>()
+        member internal this.Future = future
+        member internal this.Cont = cont
+    and Return<'Result>(value : 'Result) =
+        inherit Effect<'Result>()
+        member internal this.Value = value
 
     let Send(value, chan, cont) = Output(value, chan, cont)
     let Receive(chan, cont) = Input(chan, cont)
     
-    let rec NaiveEval (eff : Effect<'a>) : 'a =
+    let rec NaiveEval (eff : Effect<_>) : _ =
         match eff with
-        | Input(chan, cont)          -> let value = chan.Receive
-                                        NaiveEval <| cont value
-        | Output(value, chan, cont)  -> chan.Send value
-                                        NaiveEval <| cont ()
-        | Parallel(eff1, eff2, cont) -> let work eff1 eff2 = async {
-                                            let funcs = List.map (fun eff -> async { return NaiveEval eff }) [eff1; eff2]
-                                            let! result = Async.Parallel <| Seq.ofList funcs
-                                            return (result[0], result[1])
-                                        }
-                                        let task = Async.AwaitTask <| Async.StartAsTask (work eff1 eff2)
-                                        let (res1, res2) = Async.RunSynchronously task
-                                        NaiveEval <| cont (res1, res2)
-        | Return value               -> value
-    
+        | :? Input<'Result> as input             -> let value = input.Chan.Receive
+                                                    NaiveEval <| input.Cont value
+        | :? Output<'Result> as output           -> output.Chan.Send output.Value
+                                                    NaiveEval <| output.Cont ()
+        | :? Concurrent<'Result, 'Future> as con -> let work = async {
+                                                        return NaiveEval con.Eff
+                                                    }
+                                                    let task = Async.AwaitTask <| Async.StartAsTask work
+                                                    NaiveEval <| con.Cont task
+        | :? Await<'Result, 'Future> as await    -> let res = Async.RunSynchronously await.Future
+                                                    NaiveEval <| await.Cont res
+        | :? Return<'Result> as ret              -> ret.Value
+        | _                                      -> failwith "Unsupported effect!"
