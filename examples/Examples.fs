@@ -3,83 +3,75 @@
 let chanInt = FIO.Channel<int>()
 let chanStr = FIO.Channel<string>()
 
-let p1 c =
+let p1 chanInt =
     let x = 0
-    FIO.Send(x, c, fun () ->
+    FIO.Send(x, chanInt, fun () ->
         printfn $"p1 sent: %i{x}"
-        FIO.Receive(c, fun y ->
+        FIO.Receive(chanInt, fun y ->
             printfn $"p1 received: %i{y}"
-            FIO.Send(y, c, fun () ->
+            FIO.Send(y, chanInt, fun () ->
                 printfn $"p1 sent: %i{y}"
-                FIO.Receive(c, fun z -> 
+                FIO.Receive(chanInt, fun z ->
                     printfn $"p1 received: %i{z}"
                     FIO.Return z))))
 
-let p2 c =
-    FIO.Receive(c, fun x ->
+let p2 chanInt =
+    FIO.Receive(chanInt, fun x ->
         printfn $"p2 received: %i{x}"
         let y = x + 10
-        FIO.Send(y, c, fun () ->
+        FIO.Send(y, chanInt, fun () ->
             printfn $"p2 sent: %i{y}"
-            FIO.Receive(c, fun z ->
+            FIO.Receive(chanInt, fun z ->
                 printfn $"p2 received: %i{z}"
                 let v = z + 10
-                FIO.Send(v, c, fun () ->
+                FIO.Send(v, chanInt, fun () ->
                     printfn $"p2 sent: %i{v}"
                     FIO.Return v))))
 
-let p11 c =
+let p11 chanStr =
     let x = ""
-    FIO.Send(x, c, fun () ->
-        printfn $"p1 sent: %s{x}"
-        FIO.Receive(c, fun y ->
-            printfn $"p1 received: %s{y}"
-            FIO.Send(y, c, fun () ->
-                printfn $"p1 sent: %s{y}"
-                FIO.Receive(c, fun z ->
-                    printfn $"p1 received: %s{z}"
+    FIO.Send(x, chanStr, fun () ->
+        printfn $"p11 sent: %s{x}"
+        FIO.Receive(chanStr, fun y ->
+            printfn $"p11 received: %s{y}"
+            FIO.Send(y, chanStr, fun () ->
+                printfn $"p11 sent: %s{y}"
+                FIO.Receive(chanStr, fun z ->
+                    printfn $"p11 received: %s{z}"
                     FIO.Return z))))
 
-let p22 c =
-    FIO.Receive(c, fun x ->
-        printfn $"p2 received: %s{x}"
+let p22 chanStr =
+    FIO.Receive(chanStr, fun x ->
+        printfn $"p22 received: %s{x}"
         let y = x + "a"
-        FIO.Send(y, c, fun () ->
-            printfn $"p2 sent: %s{y}"
-            FIO.Receive(c, fun z ->
-                printfn $"p2 received: %s{z}"
+        FIO.Send(y, chanStr, fun () ->
+            printfn $"p22 sent: %s{y}"
+            FIO.Receive(chanStr, fun z ->
+                printfn $"p22 received: %s{z}"
                 let v = z + "b"
-                FIO.Send(v, c, fun () ->
-                    printfn $"p2 sent: %s{v}"
+                FIO.Send(v, chanStr, fun () ->
+                    printfn $"p22 sent: %s{v}"
                     FIO.Return v))))
 
-let p3 chan =
-    FIO.Concurrent(p1 chan, fun t1 ->
-        FIO.Concurrent(p2 chan, fun t2 ->
-            FIO.Await(t1, fun res1 ->
-                FIO.Await(t2, fun res2 ->
-                    FIO.Return(res1 + res2)))))
-
-let p33 chan =
-    FIO.Concurrent(p11 chan, fun t1 ->
-        FIO.Concurrent(p22 chan, fun t2 ->
-            FIO.Await(t1, fun res1 ->
-                FIO.Await(t2, fun res2 ->
-                    FIO.Return(res1 + res2)))))
-
-let p10 chanInt chanStr =
-    FIO.Concurrent(p3 chanInt, fun t1 ->
-        FIO.Concurrent(p33 chanStr, fun t2 ->
-            FIO.Await(t1, fun res1 ->
-                FIO.Await(t2, fun res2 ->
-                    printfn $"int result: %i{res1}"
-                    printfn $"string result: %s{res2}"
-                    FIO.Return(res1)))))
+let p chanInt chanStr =
+    FIO.Concurrent(p1 chanInt, fun t1 ->
+        printfn "p1 start"
+        FIO.Concurrent(p2 chanInt, fun t2 ->
+            printfn "p2 start"
+            FIO.Concurrent(p11 chanStr, fun t11 ->
+                printfn "p11 start"
+                FIO.Concurrent(p22 chanStr, fun t22 ->
+                    printfn "p22 start"
+                    FIO.Await(t1, fun intResult ->
+                        FIO.Await(t2, fun _ ->
+                            FIO.Await(t11, fun strResult ->
+                                FIO.Await(t22, fun _ ->
+                                    FIO.Return((intResult, strResult))))))))))
 
 [<EntryPoint>]
 let main _ =
 
-    let result = FIO.NaiveEval(p10 chanInt chanStr)
-    printfn $"Result: %i{result}"
+    let result = FIO.NaiveEval(p chanInt chanStr)
+    printfn $"Result: %A{result}"
 
     0
