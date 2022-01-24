@@ -19,6 +19,7 @@ module FIO =
         abstract member VisitOutput<'Result> : Output<'Result> -> 'Result
         abstract member VisitConcurrent<'Result, 'Async> : Concurrent<'Result, 'Async> -> 'Result
         abstract member VisitAwait<'Result, 'Async> : Await<'Result, 'Async> -> 'Result
+        abstract member VisitParallel<'ResultA, 'ResultB> : Parallel<'ResultA, 'ResultB> -> 'ResultA * 'ResultB
         abstract member VisitReturn<'Result> : Return<'Result> -> 'Result
     and [<AbstractClass>] Effect() =
         abstract member Visit : EffectVisitor -> 'Result
@@ -49,6 +50,12 @@ module FIO =
         member internal this.Cont = cont
         override this.Visit<'Result>(await) =
             await.VisitAwait<'Result, 'Async>(this)
+    and Parallel<'ResultA, 'ResultB>(effA : Effect<'ResultA>, effB : Effect<'ResultB>) =
+        inherit Effect<'ResultA * 'ResultB>()
+        member internal this.EffA = effA
+        member internal this.EffB = effB
+        override this.Visit<'ResultA>(par) =
+            par.VisitParallel<'ResultA, 'ResultB>(this)
     and Return<'Result>(value : 'Result) =
         inherit Effect<'Result>()
         member internal this.Value = value
@@ -76,6 +83,13 @@ module FIO =
                 member _.VisitAwait(await) =
                     let result = Async.RunSynchronously await.Task
                     NaiveEval <| await.Cont result
+                member _.VisitParallel(par) =
+                    let p = Concurrent(par.EffA, fun taskA ->
+                                Concurrent(par.EffB, fun taskB ->
+                                    Await(taskA, fun resultA ->
+                                        Await(taskB, fun resultB ->
+                                            Return((resultA, resultB))))))
+                    NaiveEval p
                 member _.VisitReturn<'Result>(ret : Return<'Result>) : 'Result =
                     ret.Value
         })
