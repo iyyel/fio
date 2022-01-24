@@ -1,8 +1,5 @@
 ﻿open FSharp.FIO
 
-let chanInt = FIO.Channel<int>()
-let chanStr = FIO.Channel<string>()
-
 module Pingpong =
 
     let intPing chanInt =
@@ -66,6 +63,9 @@ module Pingpong =
 
 [<EntryPoint>]
 let main _ =
+
+    let chanInt = FIO.Channel<int>()
+    let chanStr = FIO.Channel<string>()
 
     let result = FIO.NaiveEval(Pingpong.intStrPingpong chanInt chanStr)
     printfn $"intStrPingpong result: %A{result}"
