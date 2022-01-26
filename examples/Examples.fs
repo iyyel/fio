@@ -3,7 +3,7 @@
 module Pingpong =
 
     let intPing chanInt =
-        let x = 0
+        let x = 10
         FIO.Send(x, chanInt, fun () ->
             printfn $"intPing sent: %i{x}"
             FIO.Receive(chanInt, fun y ->
@@ -26,9 +26,6 @@ module Pingpong =
                     FIO.Send(v, chanInt, fun () ->
                         printfn $"intPong sent: %i{v}"
                         FIO.Return v))))
-
-    let intPingpong chanInt =
-        FIO.Parallel(intPing chanInt, intPong chanInt)
 
     let strPing chanStr =
         let x = ""
@@ -55,11 +52,44 @@ module Pingpong =
                         printfn $"strPong sent: %s{v}"
                         FIO.Return v))))
 
+    let intPingpong chanInt =
+        FIO.Parallel(intPing chanInt, intPong chanInt)
+
     let strPingpong chanStr =
         FIO.Parallel(strPing chanStr, strPong chanStr)
 
     let intStrPingpong chanInt chanStr =
         FIO.Parallel(intPingpong chanInt, strPingpong chanStr)
+
+module Ring =
+
+    let spawnSend chanSend chanRecv value name =
+        FIO.Send(value, chanSend, fun () ->
+            printfn $"%s{name} sent: %i{value}"
+            FIO.Receive(chanRecv, fun v ->
+                printfn $"%s{name} received: %i{v}"
+                FIO.Return v))
+
+    let spawnRecv chanRecv chanSend name =
+        FIO.Receive(chanRecv, fun v ->
+            printfn $"%s{name} received: %i{v}"
+            let value = v + 10
+            FIO.Send(value, chanSend, fun () ->
+                printfn $"%s{name} sent: %i{value}"
+                FIO.Return value))
+
+    let ring = 
+        let chan1 = FIO.Channel<int>()
+        let chan2 = FIO.Channel<int>()
+        let chan3 = FIO.Channel<int>()
+        let chan4 = FIO.Channel<int>()
+        let chan5 = FIO.Channel<int>()
+
+        FIO.Parallel(spawnSend chan1 chan5 0 "p1", 
+            FIO.Parallel(spawnRecv chan1 chan2 "p2",
+                FIO.Parallel(spawnRecv chan2 chan3 "p3", 
+                    FIO.Parallel(spawnRecv chan3 chan4 "p4", 
+                        spawnRecv chan4 chan5 "p5"))))
 
 [<EntryPoint>]
 let main _ =
@@ -67,7 +97,7 @@ let main _ =
     let chanInt = FIO.Channel<int>()
     let chanStr = FIO.Channel<string>()
 
-    let result = FIO.NaiveEval(Pingpong.intStrPingpong chanInt chanStr)
+    let result = FIO.NaiveEval(Ring.ring)
     printfn $"intStrPingpong result: %A{result}"
 
     0
