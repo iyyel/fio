@@ -1,5 +1,6 @@
 ﻿open FSharp.FIO
 
+
 module Pingpong =
 
     let intPing chanInt =
@@ -61,35 +62,65 @@ module Pingpong =
     let intStrPingpong chanInt chanStr =
         FIO.Parallel(intPingpong chanInt, strPingpong chanStr)
 
+
 module Ring =
 
-    let spawnSend chanSend chanRecv value name =
-        FIO.Send(value, chanSend, fun () ->
-            printfn $"%s{name} sent: %i{value}"
-            FIO.Receive(chanRecv, fun v ->
-                printfn $"%s{name} received: %i{v}"
-                FIO.Return v))
+    let rec repeat n template eff =
+        if n = 1 then
+            eff
+        else 
+            repeat (n - 1) template (template eff)
 
-    let spawnRecv chanRecv chanSend name =
-        FIO.Receive(chanRecv, fun v ->
-            printfn $"%s{name} received: %i{v}"
-            let value = v + 10
+    let channelPair<'a> =
+        let chan1 = FIO.Channel<'a>()
+        let chan2 = FIO.Channel<'a>()
+        (chan1, chan2)
+
+    let spawnSendProcess chanSend chanRecv value name m =
+        let eff = 
             FIO.Send(value, chanSend, fun () ->
                 printfn $"%s{name} sent: %i{value}"
-                FIO.Return value))
+                FIO.Receive(chanRecv, fun v ->
+                    printfn $"%s{name} received: %i{v}"
+                    FIO.Return v))
+        let template eff = 
+            FIO.Send(value, chanSend, fun () ->
+                printfn $"%s{name} sent: %i{value}"
+                FIO.Receive(chanRecv, fun v ->
+                    printfn $"%s{name} received: %i{v}"
+                    eff))
+        repeat m template eff
 
-    let ring = 
+    let spawnRecvProcess chanRecv chanSend name m =
+        let eff = 
+            FIO.Receive(chanRecv, fun v ->
+                printfn $"%s{name} received: %i{v}"
+                let value = v + 10
+                FIO.Send(value, chanSend, fun () ->
+                    printfn $"%s{name} sent: %i{value}"
+                    FIO.Return value))
+        let template eff = 
+            FIO.Receive(chanRecv, fun v ->
+                printfn $"%s{name} received: %i{v}"
+                let value = v + 10
+                FIO.Send(value, chanSend, fun () ->
+                    printfn $"%s{name} sent: %i{value}"
+                    eff))
+        repeat m template eff
+
+    let ring n m = 
         let chan1 = FIO.Channel<int>()
         let chan2 = FIO.Channel<int>()
         let chan3 = FIO.Channel<int>()
         let chan4 = FIO.Channel<int>()
         let chan5 = FIO.Channel<int>()
 
-        FIO.Parallel(spawnSend chan1 chan5 0 "p1", 
-            FIO.Parallel(spawnRecv chan1 chan2 "p2",
-                FIO.Parallel(spawnRecv chan2 chan3 "p3", 
-                    FIO.Parallel(spawnRecv chan3 chan4 "p4", 
-                        spawnRecv chan4 chan5 "p5"))))
+        FIO.Parallel(spawnSendProcess chan1 chan5 0 "p1" m, 
+            FIO.Parallel(spawnRecvProcess chan1 chan2 "p2" m,
+                FIO.Parallel(spawnRecvProcess chan2 chan3 "p3" m, 
+                    FIO.Parallel(spawnRecvProcess chan3 chan4 "p4" m, 
+                        spawnRecvProcess chan4 chan5 "p5" m))))
+
 
 [<EntryPoint>]
 let main _ =
@@ -97,7 +128,7 @@ let main _ =
     let chanInt = FIO.Channel<int>()
     let chanStr = FIO.Channel<string>()
 
-    let result = FIO.NaiveEval(Ring.ring)
-    printfn $"intStrPingpong result: %A{result}"
+    let result = FIO.NaiveEval(Ring.ring 0 1)
+    printfn $"Result: %A{result}"
 
     0
