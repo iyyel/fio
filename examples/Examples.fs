@@ -8,7 +8,6 @@ let main _ =
     let chanInt = FIO.Channel<int>()
     let chanStr = FIO.Channel<string>()
 
-
     let result = FIO.NaiveEval(intStrPingpongInf chanInt chanStr)
     printfn $"Result: %A{result}"
     
