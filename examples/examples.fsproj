@@ -7,9 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Ring.fs" />
-    <Compile Include="Pingpong.fs" />
     <Compile Include="Examples.fs" />
+	<Compile Include="Program.fs" />
   </ItemGroup>
 
   <ItemGroup>
