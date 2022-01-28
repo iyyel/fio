@@ -9,7 +9,7 @@ let main _ =
     let chanInt = Channel<int>()
     let chanStr = Channel<string>()
 
-    let result = NaiveEval(Ring.processRing 10 1000)
+    let result = NaiveEval(Ring.processRing 3 1)
     printfn $"Result: %A{result}"
 
     0
