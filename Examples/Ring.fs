@@ -42,8 +42,14 @@ let private createRecvProcess chanRecv chanSend name m =
                          create (n - 1)))
     create m
 
-let run processCount roundCount =
-    let getRecvChannel index (chans : FIO.Channel<int> list) =
+let processRing processCount roundCount =
+    let par(effA, effB) = FIO.Concurrent(effA, fun asyncA ->
+                              FIO.Concurrent(effB, fun asyncB ->
+                                  FIO.Await(asyncA, fun _ ->
+                                      FIO.Await(asyncB, fun _ ->
+                                          FIO.Return 0))))
+
+    let getRecvChan index (chans : FIO.Channel<int> list) =
         match index with
         | i when i - 1 < 0 -> chans.Item (List.length chans - 1)
         | i                -> chans.Item (i - 1)
@@ -51,13 +57,19 @@ let run processCount roundCount =
     let rec createProcesses chans allChans index acc =
         match chans with
         | []    -> acc
-        | c::cs -> let proc = {Name = $"p{index}"; ChanSend = c; ChanRecv = getRecvChannel index allChans}
+        | c::cs -> let proc = {Name = $"p{index}"; ChanSend = c; ChanRecv = getRecvChan index allChans}
                    createProcesses cs allChans (index + 1) (acc @ [proc])
+
+    let rec createProcessRing procs index m = 
+        match procs with
+        | pa::pb::[] when index = 0 -> par(createSendProcess pa.ChanSend pa.ChanRecv 0 pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m)
+        | pa::pb::[]                -> par(createRecvProcess pa.ChanRecv pa.ChanSend pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m)
+        | p::ps when index = 0      -> par(createSendProcess p.ChanSend p.ChanRecv 0 p.Name m, createProcessRing ps (index + 1) m)
+        | p::ps                     -> par(createRecvProcess p.ChanRecv p.ChanSend p.Name m, createProcessRing ps (index + 1) m)
+        | _                         -> failwith "createRing failed!"
 
     let chans = [for _ in 1..processCount -> FIO.Channel<int>()]
 
     let processes = createProcesses chans chans 0 []
 
-    printfn "%A" processes
-    
-    ()
+    createProcessRing processes 0 roundCount
