@@ -15,8 +15,8 @@ type Channel<'Result>() =
 type EffectVisitor =
     abstract member VisitInput<'Result> : Input<'Result> -> 'Result
     abstract member VisitOutput<'Result> : Output<'Result> -> 'Result
-    abstract member VisitConcurrent<'Result, 'Async> : Concurrent<'Result, 'Async> -> 'Result
-    abstract member VisitAwait<'Result, 'Async> : Await<'Result, 'Async> -> 'Result
+    abstract member VisitConcurrent<'Async, 'Result> : Concurrent<'Async, 'Result> -> 'Result
+    abstract member VisitAwait<'Async, 'Result> : Await<'Async, 'Result> -> 'Result
     abstract member VisitReturn<'Result> : Return<'Result> -> 'Result
 and [<AbstractClass>] Effect<'Result>() =
     abstract member Visit<'Result> : EffectVisitor -> 'Result
@@ -33,18 +33,18 @@ and Output<'Result>(value : 'Result, chan : Channel<'Result>, cont : unit -> Eff
     member internal this.Cont = cont
     override this.Visit<'Result>(input) =
         input.VisitOutput<'Result>(this)
-and Concurrent<'Result, 'Async>(eff : Effect<'Async>, cont : Async<'Async> -> Effect<'Result>) =
+and Concurrent<'Async, 'Result>(eff : Effect<'Async>, cont : Async<'Async> -> Effect<'Result>) =
     inherit Effect<'Result>()
     member internal this.Eff = eff
     member internal this.Cont = cont
     override this.Visit<'Result>(con) =
-        con.VisitConcurrent<'Result, 'Async>(this)
-and Await<'Result, 'Async>(task : Async<'Async>, cont : 'Async -> Effect<'Result>) =
+        con.VisitConcurrent<'Async, 'Result>(this)
+and Await<'Async, 'Result>(task : Async<'Async>, cont : 'Async -> Effect<'Result>) =
     inherit Effect<'Result>()
     member internal this.Task = task
     member internal this.Cont = cont
     override this.Visit<'Result>(await) =
-        await.VisitAwait<'Result, 'Async>(this)
+        await.VisitAwait<'Async, 'Result>(this)
 and Return<'Result>(value : 'Result) =
     inherit Effect<'Result>()
     member internal this.Value = value
