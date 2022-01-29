@@ -106,31 +106,31 @@ module Pingpong =
                         strPongInf chanStr))))
 
     let intPingpong chanInt =
-        Parallel(intPing chanInt, intPong chanInt)
+        Parallel(intPing chanInt, intPong chanInt, fun _ -> Return 0)
 
     let intPingpongInf chanInt =
-        Parallel(intPingInf chanInt, intPongInf chanInt)
+        Parallel(intPingInf chanInt, intPongInf chanInt, fun _ -> Return 0)
     
     let intPingpongInfInc chanInt =
-        Parallel(intPingInfInc chanInt 0, intPongInf chanInt)
+        Parallel(intPingInfInc chanInt 0, intPongInf chanInt, fun _ -> Return 0)
     
     let strPingpong chanStr =
-        Parallel(strPing chanStr, strPong chanStr)
+        Parallel(strPing chanStr, strPong chanStr, fun _ -> Return 0)
 
     let strPingpongInf chanStr =
-        Parallel(strPingInf chanStr, strPongInf chanStr)
+        Parallel(strPingInf chanStr, strPongInf chanStr, fun _ -> Return 0)
     
     let strPingpongInfInc chanStr =
-        Parallel(strPingInfInc chanStr "a", strPongInf chanStr)
+        Parallel(strPingInfInc chanStr "a", strPongInf chanStr, fun _ -> Return 0)
     
     let intStrPingpong chanInt chanStr =
-        Parallel(intPingpong chanInt, strPingpong chanStr)
+        Parallel(intPingpong chanInt, strPingpong chanStr, fun _ -> Return 0)
 
     let intStrPingpongInf chanInt chanStr =
-        Parallel(intPingpongInf chanInt, strPingpongInf chanStr)
+        Parallel(intPingpongInf chanInt, strPingpongInf chanStr, fun _ -> Return 0)
     
     let intStrPingpongInfInc chanInt chanStr =
-        Parallel(intPingpongInfInc chanInt, strPingpongInfInc chanStr)
+        Parallel(intPingpongInfInc chanInt, strPingpongInfInc chanStr, fun _ -> Return 0)
 
 module Ring = 
 
@@ -175,12 +175,6 @@ module Ring =
         create m
 
     let processRing processCount roundCount =
-        let par(effA, effB) = Concurrent(effA, fun asyncA ->
-                                  Concurrent(effB, fun asyncB ->
-                                      Await(asyncA, fun _ ->
-                                          Await(asyncB, fun _ ->
-                                              Return 0))))
-
         let getRecvChan index (chans : Channel<int> list) =
             match index with
             | i when i - 1 < 0 -> chans.Item (List.length chans - 1)
@@ -194,10 +188,10 @@ module Ring =
 
         let rec createProcessRing procs index m = 
             match procs with
-            | pa::pb::[] when index = 0 -> par(createSendProcess pa.ChanSend pa.ChanRecv 0 pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m)
-            | pa::pb::[]                -> par(createRecvProcess pa.ChanRecv pa.ChanSend pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m)
-            | p::ps when index = 0      -> par(createSendProcess p.ChanSend p.ChanRecv 0 p.Name m, createProcessRing ps (index + 1) m)
-            | p::ps                     -> par(createRecvProcess p.ChanRecv p.ChanSend p.Name m, createProcessRing ps (index + 1) m)
+            | pa::pb::[] when index = 0 -> Parallel(createSendProcess pa.ChanSend pa.ChanRecv 0 pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m, fun _ -> Return 0)
+            | pa::pb::[]                -> Parallel(createRecvProcess pa.ChanRecv pa.ChanSend pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m, fun _ -> Return 0)
+            | p::ps when index = 0      -> Parallel(createSendProcess p.ChanSend p.ChanRecv 0 p.Name m, createProcessRing ps (index + 1) m, fun _ -> Return 0)
+            | p::ps                     -> Parallel(createRecvProcess p.ChanRecv p.ChanSend p.Name m, createProcessRing ps (index + 1) m, fun _ -> Return 0)
             | _                         -> failwith $"createProcessRing failed! m = %A{m}"
 
         let chans = [for _ in 1..processCount -> Channel<int>()]

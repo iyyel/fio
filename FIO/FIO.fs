@@ -53,11 +53,11 @@ and Return<'Result>(value : 'Result) =
 
 let Send(value, chan, cont) = Output(value, chan, cont)
 let Receive(chan, cont) = Input(chan, cont)
-let Parallel(effA, effB) = Concurrent(effA, fun asyncA ->
-                                Concurrent(effB, fun asyncB ->
-                                    Await(asyncA, fun resultA ->
-                                        Await(asyncB, fun resultB ->
-                                            Return((resultA, resultB))))))
+let Parallel(effA, effB, cont) = Concurrent(effA, fun asyncA ->
+                                    Concurrent(effB, fun asyncB ->
+                                        Await(asyncA, fun resultA ->
+                                            Await(asyncB, fun resultB ->
+                                                cont (resultA, resultB)))))
 
 let rec NaiveEval<'Result> (eff : Effect<'Result>) =
     eff.Visit(effectVisitor)
