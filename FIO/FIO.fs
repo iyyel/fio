@@ -17,13 +17,13 @@ type Channel<'Msg>() =
         if status then value else this.Receive
 
 type FIOVisitor =
-    abstract member VisitInput<'Msg, 'Success> : Input<'Msg, 'Success> -> 'Success
-    abstract member VisitOutput<'Msg, 'Success> : Output<'Msg, 'Success> -> 'Success
-    abstract member VisitConcurrent<'Async, 'Success> : Concurrent<'Async, 'Success> -> 'Success
-    abstract member VisitAwait<'Async, 'Success> : Await<'Async, 'Success> -> 'Success
-    abstract member VisitSucceed<'Success> : Succeed<'Success> -> 'Success
+    abstract VisitInput<'Msg, 'Success> : Input<'Msg, 'Success> -> 'Success
+    abstract VisitOutput<'Msg, 'Success> : Output<'Msg, 'Success> -> 'Success
+    abstract VisitConcurrent<'Async, 'Success> : Concurrent<'Async, 'Success> -> 'Success
+    abstract VisitAwait<'Async, 'Success> : Await<'Async, 'Success> -> 'Success
+    abstract VisitSucceed<'Success> : Succeed<'Success> -> 'Success
 and [<AbstractClass>] FIO<'Success>() =
-    abstract member Visit<'Success> : FIOVisitor -> 'Success
+    abstract Visit<'Success> : FIOVisitor -> 'Success
 and Input<'Msg, 'Success>(chan : Channel<'Msg>, cont : 'Msg -> FIO<'Success>) =
     inherit FIO<'Success>()
     member internal this.Chan = chan
