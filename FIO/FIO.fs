@@ -1,9 +1,13 @@
-﻿module FSharp.FIO
+﻿// FIO - effectful programming library for F#
+// Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)
+// All rights reserved.
+
+module FSharp.FIO
 
 open System.Collections.Concurrent
 
-type Channel<'Result>() =
-    let queue = ConcurrentQueue<'Result>()
+type Channel<'Msg>() =
+    let queue = ConcurrentQueue<'Msg>()
 
     member internal this.Send value =
         queue.Enqueue value
@@ -12,71 +16,73 @@ type Channel<'Result>() =
         let status, value = queue.TryDequeue()
         if status then value else this.Receive
 
-type EffectVisitor =
-    abstract member VisitInput<'Result> : Input<'Result> -> 'Result
-    abstract member VisitOutput<'Result> : Output<'Result> -> 'Result
-    abstract member VisitConcurrent<'Async, 'Result> : Concurrent<'Async, 'Result> -> 'Result
-    abstract member VisitAwait<'Async, 'Result> : Await<'Async, 'Result> -> 'Result
-    abstract member VisitReturn<'Result> : Return<'Result> -> 'Result
-and [<AbstractClass>] Effect<'Result>() =
-    abstract member Visit<'Result> : EffectVisitor -> 'Result
-and Input<'Result>(chan : Channel<'Result>, cont : 'Result -> Effect<'Result>) =
-    inherit Effect<'Result>()
+type FIOVisitor =
+    abstract member VisitInput<'Msg, 'Success> : Input<'Msg, 'Success> -> 'Success
+    abstract member VisitOutput<'Msg, 'Success> : Output<'Msg, 'Success> -> 'Success
+    abstract member VisitConcurrent<'Async, 'Success> : Concurrent<'Async, 'Success> -> 'Success
+    abstract member VisitAwait<'Async, 'Success> : Await<'Async, 'Success> -> 'Success
+    abstract member VisitSucceed<'Success> : Succeed<'Success> -> 'Success
+and [<AbstractClass>] FIO<'Success>() =
+    abstract member Visit<'Success> : FIOVisitor -> 'Success
+and Input<'Msg, 'Success>(chan : Channel<'Msg>, cont : 'Msg -> FIO<'Success>) =
+    inherit FIO<'Success>()
     member internal this.Chan = chan
     member internal this.Cont = cont
-    override this.Visit<'Result>(input) =
-        input.VisitInput<'Result>(this)
-and Output<'Result>(value : 'Result, chan : Channel<'Result>, cont : unit -> Effect<'Result>) =
-    inherit Effect<'Result>()
+    override this.Visit<'Success>(input) =
+        input.VisitInput<'Msg, 'Success>(this)
+and Output<'Msg, 'Success>(value : 'Msg, chan : Channel<'Msg>, cont : unit -> FIO<'Success>) =
+    inherit FIO<'Success>()
     member internal this.Value = value
     member internal this.Chan = chan
     member internal this.Cont = cont
-    override this.Visit<'Result>(input) =
-        input.VisitOutput<'Result>(this)
-and Concurrent<'Async, 'Result>(eff : Effect<'Async>, cont : Async<'Async> -> Effect<'Result>) =
-    inherit Effect<'Result>()
+    override this.Visit<'Success>(input) =
+        input.VisitOutput<'Msg, 'Success>(this)
+and Concurrent<'Async, 'Success>(eff : FIO<'Async>, cont : Async<'Async> -> FIO<'Success>) =
+    inherit FIO<'Success>()
     member internal this.Eff = eff
     member internal this.Cont = cont
-    override this.Visit<'Result>(con) =
-        con.VisitConcurrent<'Async, 'Result>(this)
-and Await<'Async, 'Result>(task : Async<'Async>, cont : 'Async -> Effect<'Result>) =
-    inherit Effect<'Result>()
+    override this.Visit<'Success>(con) =
+        con.VisitConcurrent<'Async, 'Success>(this)
+and Await<'Async, 'Success>(task : Async<'Async>, cont : 'Async -> FIO<'Success>) =
+    inherit FIO<'Success>()
     member internal this.Task = task
     member internal this.Cont = cont
-    override this.Visit<'Result>(await) =
-        await.VisitAwait<'Async, 'Result>(this)
-and Return<'Result>(value : 'Result) =
-    inherit Effect<'Result>()
+    override this.Visit<'Success>(await) =
+        await.VisitAwait<'Async, 'Success>(this)
+and Succeed<'Success>(value : 'Success) =
+    inherit FIO<'Success>()
     member internal this.Value = value
-    override this.Visit<'Result>(input) =
-        input.VisitReturn<'Result>(this)
+    override this.Visit<'Success>(input) =
+        input.VisitSucceed<'Success>(this)
 
-let Send(value, chan, cont) = Output(value, chan, cont)
-let Receive(chan, cont) = Input(chan, cont)
-let Parallel(effA, effB, cont) = Concurrent(effA, fun asyncA ->
-                                    Concurrent(effB, fun asyncB ->
-                                        Await(asyncA, fun resultA ->
-                                            Await(asyncB, fun resultB ->
-                                                cont (resultA, resultB)))))
+let Send<'Msg, 'Success>(value : 'Msg, chan : Channel<'Msg>, cont : (unit -> FIO<'Success>)) : Output<'Msg, 'Success> = Output(value, chan, cont)
+let Receive<'Msg, 'Success>(chan : Channel<'Msg>, cont : ('Msg -> FIO<'Success>)) : Input<'Msg, 'Success> = Input(chan, cont)
+let Parallel<'SuccessA, 'SuccessB, 'SuccessC>(effA : FIO<'SuccessA>, effB : FIO<'SuccessB>, cont : ('SuccessA * 'SuccessB -> FIO<'SuccessC>)) : Concurrent<'SuccessA, 'SuccessC>=
+    Concurrent(effA, fun asyncA ->
+        Concurrent(effB, fun asyncB ->
+            Await(asyncA, fun succA ->
+                Await(asyncB, fun succB ->
+                    cont (succA, succB)))))
+let End() : Succeed<unit> = Succeed ()
 
-let rec NaiveEval<'Result> (eff : Effect<'Result>) =
-    eff.Visit(effectVisitor)
-and effectVisitor = { new EffectVisitor with
-                        member _.VisitInput<'Result>(input : Input<'Result>) =
+let rec NaiveEval<'Success> (eff : FIO<'Success>) =
+    eff.Visit(fioVisitor)
+and fioVisitor = { new FIOVisitor with
+                        member _.VisitInput<'Msg, 'Success>(input : Input<'Msg, 'Success>) =
                             let value = input.Chan.Receive
                             NaiveEval <| input.Cont value
-                        member _.VisitOutput<'Result>(output : Output<'Result>) =
+                        member _.VisitOutput<'Msg, 'Success>(output : Output<'Msg, 'Success>) =
                             output.Chan.Send output.Value
                             NaiveEval <| output.Cont ()
                         member _.VisitConcurrent(con) =
                             let work = async {
                                 return NaiveEval con.Eff
                             }
-                            let async' = Async.AwaitTask <| Async.StartAsTask work
-                            NaiveEval <| con.Cont async'
+                            let task = Async.AwaitTask <| Async.StartAsTask work
+                            NaiveEval <| con.Cont task
                         member _.VisitAwait(await) =
-                            let result = Async.RunSynchronously await.Task
-                            NaiveEval <| await.Cont result
-                        member _.VisitReturn<'Result>(ret : Return<'Result>) =
-                            ret.Value
+                            let succ = Async.RunSynchronously await.Task
+                            NaiveEval <| await.Cont succ
+                        member _.VisitSucceed<'Success>(succ : Succeed<'Success>) =
+                            succ.Value
                     }

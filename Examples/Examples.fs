@@ -1,4 +1,8 @@
-﻿namespace Examples
+﻿// FIO - effectful programming library for F#
+// Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)
+// All rights reserved.
+
+namespace Examples
 
 open FSharp.FIO
 
@@ -14,7 +18,7 @@ module Pingpong =
                     printfn $"intPing sent: %A{y}"
                     Receive(chanInt, fun z ->
                         printfn $"intPing received: %A{z}"
-                        Return 0))))
+                        End()))))
 
     let intPong chanInt =
         Receive(chanInt, fun x ->
@@ -27,7 +31,7 @@ module Pingpong =
                     let v = z + 10
                     Send(v, chanInt, fun () ->
                         printfn $"intPong sent: %A{v}"
-                        Return 0))))
+                        End()))))
 
     let rec intPingInf chanInt =
         let x = 0
@@ -62,7 +66,7 @@ module Pingpong =
                     printfn $"strPing sent: %A{y}"
                     Receive(chanStr, fun z ->
                         printfn $"strPing received: %A{z}"
-                        Return ""))))
+                        End()))))
     
     let strPong chanStr =
         Receive(chanStr, fun x ->
@@ -75,7 +79,7 @@ module Pingpong =
                     let v = z + "b"
                     Send(v, chanStr, fun () ->
                         printfn $"strPong sent: %A{v}"
-                        Return ""))))
+                        End()))))
 
     let rec strPingInf chanStr =
         let x = ""
@@ -106,31 +110,31 @@ module Pingpong =
                         strPongInf chanStr))))
 
     let intPingpong chanInt =
-        Parallel(intPing chanInt, intPong chanInt, fun _ -> Return 0)
+        Parallel(intPing chanInt, intPong chanInt, fun _ -> End())
 
     let intPingpongInf chanInt =
-        Parallel(intPingInf chanInt, intPongInf chanInt, fun _ -> Return 0)
+        Parallel(intPingInf chanInt, intPongInf chanInt, fun _ -> End())
     
     let intPingpongInfInc chanInt =
-        Parallel(intPingInfInc chanInt 0, intPongInf chanInt, fun _ -> Return 0)
+        Parallel(intPingInfInc chanInt 0, intPongInf chanInt, fun _ -> End())
     
     let strPingpong chanStr =
-        Parallel(strPing chanStr, strPong chanStr, fun _ -> Return 0)
+        Parallel(strPing chanStr, strPong chanStr, fun _ -> End())
 
     let strPingpongInf chanStr =
-        Parallel(strPingInf chanStr, strPongInf chanStr, fun _ -> Return 0)
+        Parallel(strPingInf chanStr, strPongInf chanStr, fun _ -> End())
     
     let strPingpongInfInc chanStr =
-        Parallel(strPingInfInc chanStr "a", strPongInf chanStr, fun _ -> Return 0)
+        Parallel(strPingInfInc chanStr "a", strPongInf chanStr, fun _ -> End())
     
     let intStrPingpong chanInt chanStr =
-        Parallel(intPingpong chanInt, strPingpong chanStr, fun _ -> Return 0)
+        Parallel(intPingpong chanInt, strPingpong chanStr, fun _ -> End())
 
     let intStrPingpongInf chanInt chanStr =
-        Parallel(intPingpongInf chanInt, strPingpongInf chanStr, fun _ -> Return 0)
+        Parallel(intPingpongInf chanInt, strPingpongInf chanStr, fun _ -> End())
     
     let intStrPingpongInfInc chanInt chanStr =
-        Parallel(intPingpongInfInc chanInt, strPingpongInfInc chanStr, fun _ -> Return 0)
+        Parallel(intPingpongInfInc chanInt, strPingpongInfInc chanStr, fun _ -> End())
 
 module Ring = 
 
@@ -147,7 +151,7 @@ module Ring =
                     printfn $"%s{name} sent: %A{value}"
                     Receive(chanRecv, fun v ->
                         printfn $"%s{name} received: %A{v}"
-                        Return 0))
+                        End()))
             else 
                 Send(value, chanSend, fun () ->
                     printfn $"%s{name} sent: %A{value}"
@@ -164,7 +168,7 @@ module Ring =
                     let value = v + 10
                     Send(value, chanSend, fun () ->
                         printfn $"%s{name} sent: %A{value}"
-                        Return 0))
+                        End()))
             else
                 Receive(chanRecv, fun v ->
                          printfn $"%s{name} received: %A{v}"
@@ -188,10 +192,10 @@ module Ring =
 
         let rec createProcessRing procs index m = 
             match procs with
-            | pa::pb::[] when index = 0 -> Parallel(createSendProcess pa.ChanSend pa.ChanRecv 0 pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m, fun _ -> Return 0)
-            | pa::pb::[]                -> Parallel(createRecvProcess pa.ChanRecv pa.ChanSend pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m, fun _ -> Return 0)
-            | p::ps when index = 0      -> Parallel(createSendProcess p.ChanSend p.ChanRecv 0 p.Name m, createProcessRing ps (index + 1) m, fun _ -> Return 0)
-            | p::ps                     -> Parallel(createRecvProcess p.ChanRecv p.ChanSend p.Name m, createProcessRing ps (index + 1) m, fun _ -> Return 0)
+            | pa::pb::[] when index = 0 -> Parallel(createSendProcess pa.ChanSend pa.ChanRecv 0 pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m, fun _ -> End())
+            | pa::pb::[]                -> Parallel(createRecvProcess pa.ChanRecv pa.ChanSend pa.Name m, createRecvProcess pb.ChanRecv pb.ChanSend pb.Name m, fun _ -> End())
+            | p::ps when index = 0      -> Parallel(createSendProcess p.ChanSend p.ChanRecv 0 p.Name m, createProcessRing ps (index + 1) m, fun _ -> End())
+            | p::ps                     -> Parallel(createRecvProcess p.ChanRecv p.ChanSend p.Name m, createProcessRing ps (index + 1) m, fun _ -> End())
             | _                         -> failwith $"createProcessRing failed! m = %A{m}"
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
