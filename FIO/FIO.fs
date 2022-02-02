@@ -7,14 +7,13 @@ module FSharp.FIO
 open System.Collections.Concurrent
 
 type Channel<'Msg>() =
-    let queue = ConcurrentQueue<'Msg>()
+    let bc = new BlockingCollection<'Msg>()
 
-    member internal this.Send value =
-        queue.Enqueue value
+    member this.Send value =
+        bc.Add value
 
-    member internal this.Receive =
-        let status, value = queue.TryDequeue()
-        if status then value else this.Receive
+    member this.Receive =
+        bc.Take()
 
 type FIOVisitor =
     abstract VisitInput<'Msg, 'Success> : Input<'Msg, 'Success> -> 'Success
@@ -65,24 +64,24 @@ let Parallel<'SuccessA, 'SuccessB, 'SuccessC>(effA : FIO<'SuccessA>, effB : FIO<
                     cont (succA, succB)))))
 let End() : Succeed<unit> = Succeed ()
 
-let rec NaiveEval<'Success> (eff : FIO<'Success>) =
-    eff.Visit(fioVisitor)
-and fioVisitor = { new FIOVisitor with
-                        member _.VisitInput<'Msg, 'Success>(input : Input<'Msg, 'Success>) =
-                            let value = input.Chan.Receive
-                            NaiveEval <| input.Cont value
-                        member _.VisitOutput<'Msg, 'Success>(output : Output<'Msg, 'Success>) =
-                            output.Chan.Send output.Value
-                            NaiveEval <| output.Cont ()
-                        member _.VisitConcurrent(con) =
-                            let work = async {
-                                return NaiveEval con.Eff
-                            }
-                            let task = Async.AwaitTask <| Async.StartAsTask work
-                            NaiveEval <| con.Cont task
-                        member _.VisitAwait(await) =
-                            let succ = Async.RunSynchronously await.Task
-                            NaiveEval <| await.Cont succ
-                        member _.VisitSucceed<'Success>(succ : Succeed<'Success>) =
-                            succ.Value
-                    }
+let rec NaiveEval<'Success> (eff : FIO<'Success>) : 'Success =
+    eff.Visit({ 
+        new FIOVisitor with
+            member _.VisitInput<'Msg, 'Success>(input : Input<'Msg, 'Success>) =
+                let value = input.Chan.Receive
+                NaiveEval <| input.Cont value
+            member _.VisitOutput<'Msg, 'Success>(output : Output<'Msg, 'Success>) =
+                output.Chan.Send output.Value
+                NaiveEval <| output.Cont ()
+            member _.VisitConcurrent(con) =
+                let work = async {
+                    return NaiveEval con.Eff
+                }
+                let task = Async.AwaitTask <| Async.StartAsTask work
+                NaiveEval <| con.Cont task
+            member _.VisitAwait(await) =
+                let succ = Async.RunSynchronously await.Task
+                NaiveEval <| await.Cont succ
+            member _.VisitSucceed<'Success>(succ : Succeed<'Success>) =
+                succ.Value
+    })

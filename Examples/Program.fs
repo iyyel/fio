@@ -13,7 +13,9 @@ let main _ =
     let chanInt = Channel<int>()
     let chanStr = Channel<string>()
 
-    let result = NaiveEval(Ring.processRing 3 1)
+    //System.Threading.ThreadPool.SetMaxThreads(1000, 1000) |> ignore
+
+    let result = NaiveEval <| Ring.processRing 3 1
     printfn $"Result: %A{result}"
 
     0
