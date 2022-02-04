@@ -144,22 +144,29 @@ module Ring =
           ChanRecv: Channel<int>
         }
 
-    let private createProcess chanRecv chanSend name m =
+    let private createProcess chanRecv chanSend name first m =
         let rec create n =
-            if n = 1 then
-                Receive(chanRecv, fun v ->
-                    printfn $"%s{name} received: %A{v}"
-                    let value = v + 10
-                    Send(value, chanSend, fun () ->
-                        printfn $"%s{name} sent: %A{value}"
-                        End()))
-            else
-                Receive(chanRecv, fun v ->
-                         printfn $"%s{name} received: %A{v}"
-                         let value = v + 10
-                         Send(value, chanSend, fun () ->
-                             printfn $"%s{name} sent: %A{value}"
-                             create (n - 1)))
+            match n with
+            | 1 when first -> Receive(chanRecv, fun x ->
+                                  printfn $"%s{name} received: %A{x}"
+                                  let y = x + 10
+                                  Send(y, chanSend, fun () ->
+                                      printfn $"%s{name} sent: %A{y}"
+                                      Receive(chanRecv, fun z -> 
+                                          printfn $"%s{name} received: %A{z}"
+                                          End())))
+            | 1            -> Receive(chanRecv, fun v ->
+                                  printfn $"%s{name} received: %A{v}"
+                                  let value = v + 10
+                                  Send(value, chanSend, fun () ->
+                                      printfn $"%s{name} sent: %A{value}"
+                                      End()))
+            | _            -> Receive(chanRecv, fun v ->
+                                  printfn $"%s{name} received: %A{v}"
+                                  let value = v + 10
+                                  Send(value, chanSend, fun () ->
+                                      printfn $"%s{name} sent: %A{value}"
+                                      create (n - 1)))
         create m
 
     let processRing processCount roundCount =
@@ -174,15 +181,14 @@ module Ring =
             | c::cs -> let proc = {Name = $"p{index}"; ChanSend = c; ChanRecv = getRecvChan index allChans}
                        createProcesses cs allChans (index + 1) (acc @ [proc])
 
-        let rec createProcessRing procs m =
+        let rec createProcessRing procs m first =
             match procs with
-            | pa::pb::[] -> Parallel(createProcess pa.ChanRecv pa.ChanSend pa.Name m, createProcess pb.ChanRecv pb.ChanSend pb.Name m, fun _ -> End())
-            | p::ps      -> Parallel(createProcess p.ChanRecv p.ChanSend p.Name m, createProcessRing ps m, fun _ -> End())
+            | pa::pb::[] -> Parallel(createProcess pa.ChanRecv pa.ChanSend pa.Name first m, createProcess pb.ChanRecv pb.ChanSend pb.Name false m, fun _ -> End())
+            | p::ps      -> Parallel(createProcess p.ChanRecv p.ChanSend p.Name first m, createProcessRing ps m false, fun _ -> End())
             | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
 
         let injectMessage p startMsg =
-            p.ChanSend.Send startMsg
-            printfn $"%s{p.Name} sent: %A{startMsg}"
+            p.ChanRecv.Send startMsg
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
 
@@ -190,7 +196,7 @@ module Ring =
 
         injectMessage (List.item 0 processes) 0
 
-        createProcessRing processes roundCount
+        createProcessRing processes roundCount true
 
 module TestRing = 
 
@@ -200,21 +206,27 @@ module TestRing =
           ChanRecv: Channel<int>
         }
 
-    let private createProcess (chanRecv : Channel<int>) (chanSend : Channel<int>) name m =
+    let private createProcess (chanRecv : Channel<int>) (chanSend : Channel<int>) name first m =
         let rec create n =
-            if n = 1 then
-                let recv = chanRecv.Receive
-                printfn $"%s{name} received: %A{recv}"
-                let value = recv + 10
-                chanSend.Send value
-                printfn $"%s{name} sent: %A{value}"
-            else
-                let recv = chanRecv.Receive
-                printfn $"%s{name} received: %A{recv}"
-                let value = recv + 10
-                chanSend.Send value
-                printfn $"%s{name} sent: %A{value}"
-                create (n - 1)
+            match n with
+            | 1 when first -> let x = chanRecv.Receive
+                              printfn $"%s{name} received: %A{x}"
+                              let y = x + 10
+                              chanSend.Send y
+                              printfn $"%s{name} sent: %A{y}"
+                              let z = chanRecv.Receive
+                              printfn $"%s{name} received: %A{z}"
+            | 1            -> let x = chanRecv.Receive
+                              printfn $"%s{name} received: %A{x}"
+                              let y = x + 10
+                              chanSend.Send y
+                              printfn $"%s{name} sent: %A{y}"
+            | _            -> let recv = chanRecv.Receive
+                              printfn $"%s{name} received: %A{recv}"
+                              let value = recv + 10
+                              chanSend.Send value
+                              printfn $"%s{name} sent: %A{value}"
+                              create (n - 1)
         create m
 
     let processRing processCount roundCount =
@@ -229,29 +241,28 @@ module TestRing =
             | c::cs -> let proc = {Name = $"p{index}"; ChanSend = c; ChanRecv = getRecvChan index allChans}
                        createProcesses cs allChans (index + 1) (acc @ [proc])
 
-        let rec createProcessRing procs m =
+        let rec createProcessRing procs m first =
             match procs with
             | pa::pb::[] -> let recvAsync1 = async {
-                                                 createProcess pa.ChanRecv pa.ChanSend pa.Name m
+                                                 createProcess pa.ChanRecv pa.ChanSend pa.Name first m
                                              }
                             let recvAsync2 = async {
-                                                 createProcess pb.ChanRecv pb.ChanSend pb.Name m
+                                                 createProcess pb.ChanRecv pb.ChanSend pb.Name false m
                                              }
                             let recvTask1 = Async.AwaitTask <| Async.StartAsTask recvAsync1
                             let recvTask2 = Async.AwaitTask <| Async.StartAsTask recvAsync2
                             Async.RunSynchronously recvTask1
                             Async.RunSynchronously recvTask2
             | p::ps -> let recvAsync = async {
-                                           createProcess p.ChanRecv p.ChanSend p.Name m
+                                           createProcess p.ChanRecv p.ChanSend p.Name first m
                                        }
                        let sendTask = Async.AwaitTask <| Async.StartAsTask recvAsync
-                       createProcessRing ps m
+                       createProcessRing ps m false
                        Async.RunSynchronously sendTask
             | _     -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
 
         let injectMessage p startMsg =
-            p.ChanSend.Send startMsg
-            printfn $"%s{p.Name} sent: %A{startMsg}"
+            p.ChanRecv.Send startMsg
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
 
