@@ -9,12 +9,8 @@ open System.Threading.Tasks
 
 type Channel<'Msg>() =
     let bc = new BlockingCollection<'Msg>()
-
-    member this.Send value =
-        bc.Add value
-
-    member this.Receive =
-        bc.Take()
+    member this.Send value = bc.Add value
+    member this.Receive = bc.Take()
 
 type FIOVisitor =
     abstract VisitInput<'Msg, 'Success> : Input<'Msg, 'Success> -> 'Success
