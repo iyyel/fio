@@ -5,6 +5,7 @@
 namespace Examples
 
 open FSharp.FIO
+open System.Threading
 
 module Pingpong =
 
@@ -181,24 +182,24 @@ module Ring =
             | c::cs -> let proc = {Name = $"p{index}"; ChanSend = c; ChanRecv = getRecvChan index allChans}
                        createProcesses cs allChans (index + 1) (acc @ [proc])
 
-        let rec createProcessRing procs m first =
+        let rec createProcessRing procs roundCount first =
             match procs with
-            | pa::pb::[] -> Parallel(createProcess pa.ChanRecv pa.ChanSend pa.Name first m, createProcess pb.ChanRecv pb.ChanSend pb.Name false m, fun _ -> End())
-            | p::ps      -> Parallel(createProcess p.ChanRecv p.ChanSend p.Name first m, createProcessRing ps m false, fun _ -> End())
-            | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
+            | pa::pb::[] -> Parallel(createProcess pa.ChanRecv pa.ChanSend pa.Name first roundCount, createProcess pb.ChanRecv pb.ChanSend pb.Name false roundCount, fun _ -> End())
+            | p::ps      -> Parallel(createProcess p.ChanRecv p.ChanSend p.Name first roundCount, createProcessRing ps roundCount false, fun _ -> End())
+            | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{roundCount}"
 
         let injectMessage p startMsg =
             p.ChanRecv.Send startMsg
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
 
-        let processes = createProcesses chans chans 0 []
+        let procs = createProcesses chans chans 0 []
 
-        injectMessage (List.item 0 processes) 0
+        injectMessage (List.item 0 procs) 0
 
-        createProcessRing processes roundCount true
+        createProcessRing procs roundCount true
 
-module TestRing = 
+module FSharpRing = 
 
     type private Process =
         { Name: string
@@ -243,23 +244,14 @@ module TestRing =
 
         let rec createProcessRing procs m first =
             match procs with
-            | pa::pb::[] -> let recvAsync1 = async {
-                                                 createProcess pa.ChanRecv pa.ChanSend pa.Name first m
-                                             }
-                            let recvAsync2 = async {
-                                                 createProcess pb.ChanRecv pb.ChanSend pb.Name false m
-                                             }
-                            let recvTask1 = Async.AwaitTask <| Async.StartAsTask recvAsync1
-                            let recvTask2 = Async.AwaitTask <| Async.StartAsTask recvAsync2
-                            Async.RunSynchronously recvTask1
-                            Async.RunSynchronously recvTask2
-            | p::ps -> let recvAsync = async {
-                                           createProcess p.ChanRecv p.ChanSend p.Name first m
-                                       }
-                       let sendTask = Async.AwaitTask <| Async.StartAsTask recvAsync
-                       createProcessRing ps m false
-                       Async.RunSynchronously sendTask
-            | _     -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
+            | pa::pb::[] -> let task1 = Tasks.Task.Factory.StartNew(fun () -> createProcess pa.ChanRecv pa.ChanSend pa.Name first m)
+                            let task2 = Tasks.Task.Factory.StartNew(fun () -> createProcess pb.ChanRecv pb.ChanSend pb.Name false m)
+                            task1.Wait()
+                            task2.Wait()
+            | p::ps      -> let task = Tasks.Task.Factory.StartNew(fun () -> createProcess p.ChanRecv p.ChanSend p.Name first m)
+                            createProcessRing ps m false
+                            task.Wait()
+            | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
 
         let injectMessage p startMsg =
             p.ChanRecv.Send startMsg
@@ -270,4 +262,4 @@ module TestRing =
 
         injectMessage (List.item 0 processes) 0
 
-        createProcessRing processes roundCount
+        createProcessRing processes roundCount true

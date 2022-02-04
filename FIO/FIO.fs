@@ -5,6 +5,7 @@
 module FSharp.FIO
 
 open System.Collections.Concurrent
+open System.Threading.Tasks
 
 type Channel<'Msg>() =
     let bc = new BlockingCollection<'Msg>()
@@ -36,18 +37,18 @@ and Output<'Msg, 'Success>(value : 'Msg, chan : Channel<'Msg>, cont : unit -> FI
     member internal this.Cont = cont
     override this.Visit<'Success>(input) =
         input.VisitOutput<'Msg, 'Success>(this)
-and Concurrent<'Async, 'Success>(eff : FIO<'Async>, cont : Async<'Async> -> FIO<'Success>) =
+and Concurrent<'Task, 'Success>(eff : FIO<'Task>, cont : Task<'Task> -> FIO<'Success>) =
     inherit FIO<'Success>()
     member internal this.Eff = eff
     member internal this.Cont = cont
     override this.Visit<'Success>(con) =
-        con.VisitConcurrent<'Async, 'Success>(this)
-and Await<'Async, 'Success>(task : Async<'Async>, cont : 'Async -> FIO<'Success>) =
+        con.VisitConcurrent<'Task, 'Success>(this)
+and Await<'Task, 'Success>(task : Task<'Task>, cont : 'Task -> FIO<'Success>) =
     inherit FIO<'Success>()
     member internal this.Task = task
     member internal this.Cont = cont
     override this.Visit<'Success>(await) =
-        await.VisitAwait<'Async, 'Success>(this)
+        await.VisitAwait<'Task, 'Success>(this)
 and Succeed<'Success>(value : 'Success) =
     inherit FIO<'Success>()
     member internal this.Value = value
@@ -57,10 +58,10 @@ and Succeed<'Success>(value : 'Success) =
 let Send<'Msg, 'Success>(value : 'Msg, chan : Channel<'Msg>, cont : (unit -> FIO<'Success>)) : Output<'Msg, 'Success> = Output(value, chan, cont)
 let Receive<'Msg, 'Success>(chan : Channel<'Msg>, cont : ('Msg -> FIO<'Success>)) : Input<'Msg, 'Success> = Input(chan, cont)
 let Parallel<'SuccessA, 'SuccessB, 'SuccessC>(effA : FIO<'SuccessA>, effB : FIO<'SuccessB>, cont : ('SuccessA * 'SuccessB -> FIO<'SuccessC>)) : Concurrent<'SuccessA, 'SuccessC>=
-    Concurrent(effA, fun asyncA ->
-        Concurrent(effB, fun asyncB ->
-            Await(asyncA, fun succA ->
-                Await(asyncB, fun succB ->
+    Concurrent(effA, fun taskA ->
+        Concurrent(effB, fun taskB ->
+            Await(taskA, fun succA ->
+                Await(taskB, fun succB ->
                     cont (succA, succB)))))
 let End() : Succeed<unit> = Succeed ()
 
@@ -74,14 +75,10 @@ let rec NaiveEval<'Success> (eff : FIO<'Success>) : 'Success =
                 output.Chan.Send output.Value
                 NaiveEval <| output.Cont ()
             member _.VisitConcurrent(con) =
-                let work = async {
-                    return NaiveEval con.Eff
-                }
-                let task = Async.AwaitTask <| Async.StartAsTask work
+                let task = Task.Factory.StartNew(fun () -> NaiveEval con.Eff)
                 NaiveEval <| con.Cont task
             member _.VisitAwait(await) =
-                let succ = Async.RunSynchronously await.Task
-                NaiveEval <| await.Cont succ
+                NaiveEval <| await.Cont await.Task.Result
             member _.VisitSucceed<'Success>(succ : Succeed<'Success>) =
                 succ.Value
     })
