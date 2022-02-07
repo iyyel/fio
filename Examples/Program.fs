@@ -9,11 +9,11 @@ open Examples
 open System.Threading
 
 ThreadPool.SetMaxThreads(32767, 32767) |> ignore
-ThreadPool.SetMinThreads(10000, 10000) |> ignore
+ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 [<EntryPoint>]
 let main _ =
-    let result = Runtime.NaiveRun <| Pingpong.intPingpong (Channel<int>())
+    let result = Runtime.Naive.Run <| Ring.processRing 10000 10000
     printfn $"Result: %A{result}"
 
     0

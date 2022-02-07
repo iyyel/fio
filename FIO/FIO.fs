@@ -18,12 +18,12 @@ type Either<'Error, 'Result> =
     | Right of 'Result
 
 type FIOVisitor =
-    abstract VisitInput<'Msg, 'Error, 'Result> : Input<'Msg, 'Error, 'Result> -> Either<'Error, 'Result>
-    abstract VisitOutput<'Msg, 'Error, 'Result> : Output<'Msg, 'Error, 'Result> -> Either<'Error, 'Result>
-    abstract VisitConcurrent<'Async, 'Error, 'Result> : Concurrent<'Async, 'Error, 'Result> -> Either<'Error, 'Result>
-    abstract VisitAwait<'TaskResult, 'Error, 'Result> : Await<'TaskResult, 'Error, 'Result> -> Either<'Error, 'Result>
-    abstract VisitSucceed<'Result> : Succeed<'Result> -> 'Result
-    abstract VisitFail<'Error> : Fail<'Error> -> 'Error
+    abstract VisitInput<'Msg, 'Error, 'Result>                         : Input<'Msg, 'Error, 'Result> -> Either<'Error, 'Result>
+    abstract VisitOutput<'Msg, 'Error, 'Result>                        : Output<'Msg, 'Error, 'Result> -> Either<'Error, 'Result>
+    abstract VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result> : Concurrent<'TaskError, 'TaskResult, 'Error, 'Result> -> Either<'Error, 'Result>
+    abstract VisitAwait<'TaskResult, 'Error, 'Result>                  : Await<'TaskResult, 'Error, 'Result> -> Either<'Error, 'Result>
+    abstract VisitSucceed<'Result>                                     : Succeed<'Result> -> 'Result
+    abstract VisitFail<'Error>                                         : Fail<'Error> -> 'Error
 and [<AbstractClass>] FIO<'Error, 'Result>() =
     abstract Accept<'Error, 'Result> : FIOVisitor -> Either<'Error, 'Result>
 and Input<'Msg, 'Error, 'Result>(chan : Channel<'Msg>, cont : 'Msg -> FIO<'Error, 'Result>) =
@@ -39,12 +39,12 @@ and Output<'Msg, 'Error, 'Result>(value : 'Msg, chan : Channel<'Msg>, cont : uni
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
         visitor.VisitOutput<'Msg, 'Error, 'Result>(this)
-and Concurrent<'TaskResult, 'Error, 'Result>(eff : FIO<'Error, 'TaskResult>, cont : Task<Either<'Error, 'TaskResult>> -> FIO<'Error, 'Result>) =
+and Concurrent<'TaskError, 'TaskResult, 'Error, 'Result>(eff : FIO<'TaskError, 'TaskResult>, cont : Task<Either<'TaskError, 'TaskResult>> -> FIO<'Error, 'Result>) =
     inherit FIO<'Error, 'Result>()
     member internal _.Eff = eff
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
-        visitor.VisitConcurrent<'TaskResult, 'Error, 'Result>(this)
+        visitor.VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result>(this)
 and Await<'Task, 'Error, 'Result>(task : Task<'Task>, cont : 'Task -> FIO<'Error, 'Result>) =
     inherit FIO<'Error, 'Result>()
     member internal _.Task = task
@@ -64,7 +64,7 @@ and Fail<'Error>(value : 'Error) =
 
 let Send<'Msg, 'Error, 'Result>(value : 'Msg, chan : Channel<'Msg>, cont : unit -> FIO<'Error, 'Result>) : Output<'Msg, 'Error, 'Result> = Output(value, chan, cont)
 let Receive<'Msg, 'Error, 'Result>(chan : Channel<'Msg>, cont : 'Msg -> FIO<'Error, 'Result>) : Input<'Msg, 'Error, 'Result> = Input(chan, cont)
-let Parallel<'Error, 'ResultA, 'ResultB, 'ResultC>(effA : FIO<'Error, 'ResultA>, effB : FIO<'Error, 'ResultB> , cont : Either<'Error, 'ResultA> * Either<'Error, 'ResultB> -> FIO<'Error, 'ResultC>) : Concurrent<'ResultA, 'Error, 'ResultC> =
+let Parallel<'ErrorA, 'ErrorB, 'ErrorC, 'ResultA, 'ResultB, 'ResultC>(effA : FIO<'ErrorA, 'ResultA>, effB : FIO<'ErrorB, 'ResultB>, cont : Either<'ErrorA, 'ResultA> * Either<'ErrorB, 'ResultB> -> FIO<'ErrorC, 'ResultC>) : Concurrent<'ErrorA, 'ResultA, 'ErrorC, 'ResultC> =
     Concurrent(effA, fun taskA ->
         Concurrent(effB, fun taskB ->
             Await(taskA, fun resA ->
@@ -74,25 +74,27 @@ let End() : Succeed<unit> = Succeed ()
 
 module Runtime =
 
-    let rec NaiveRun<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Either<'Error, 'Result> =
-        eff.Accept({ 
-            new FIOVisitor with
-                member _.VisitInput<'Msg, 'Error, 'Result>(input : Input<'Msg, 'Error, 'Result>) =
-                    let value = input.Chan.Receive
-                    NaiveRun <| input.Cont value
-                member _.VisitOutput<'Msg, 'Error, 'Result>(output : Output<'Msg, 'Error, 'Result>) =
-                    output.Chan.Send output.Value
-                    NaiveRun <| output.Cont ()
-                member _.VisitConcurrent<'Async, 'Error, 'Result>(con : Concurrent<'Async, 'Error, 'Result>) =
-                    let task = Task.Factory.StartNew(fun () -> NaiveRun con.Eff)
-                    NaiveRun <| con.Cont task
-                member _.VisitAwait(await) =
-                    NaiveRun <| await.Cont await.Task.Result
-                member _.VisitSucceed<'Result>(res : Succeed<'Result>) =
-                    res.Value
-                member _.VisitFail<'Error>(fail : Fail<'Error>) =
-                    fail.Value
-        })
+    [<AbstractClass; Sealed>]
+    type Naive private () =
+         static member Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Either<'Error, 'Result> =
+            eff.Accept({ 
+                new FIOVisitor with
+                    member _.VisitInput<'Msg, 'Error, 'Result>(input : Input<'Msg, 'Error, 'Result>) =
+                        let value = input.Chan.Receive
+                        Naive.Run <| input.Cont value
+                    member _.VisitOutput<'Msg, 'Error, 'Result>(output : Output<'Msg, 'Error, 'Result>) =
+                        output.Chan.Send output.Value
+                        Naive.Run <| output.Cont ()
+                    member _.VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result>(con : Concurrent<'TaskError, 'TaskResult, 'Error, 'Result>) =
+                        let task = Task.Factory.StartNew(fun () -> Naive.Run con.Eff)
+                        Naive.Run <| con.Cont task
+                    member _.VisitAwait<'TaskResult, 'Error, 'Result> (await : Await<'TaskResult, 'Error, 'Result>) =
+                        Naive.Run <| await.Cont await.Task.Result
+                    member _.VisitSucceed<'Result>(res : Succeed<'Result>) =
+                        res.Value
+                    member _.VisitFail<'Error>(fail : Fail<'Error>) =
+                        fail.Value
+            })
 
     let PrintThreadPoolInfo() =
         let maxWorkerThreads = ref 0;
