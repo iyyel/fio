@@ -13,7 +13,7 @@ ThreadPool.SetMinThreads(10000, 10000) |> ignore
 
 [<EntryPoint>]
 let main _ =
-    let result = Runtime.NaiveRun <| Ring.processRing 10000 1
+    let result = Runtime.NaiveRun <| Pingpong.intPingpong (Channel<int>())
     printfn $"Result: %A{result}"
 
     0

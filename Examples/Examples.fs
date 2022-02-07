@@ -9,124 +9,106 @@ open System.Threading
 
 module Pingpong =
 
-    let intPing chanInt =
+    let intPing chan =
         let x = 0
-        Send(x, chanInt, fun () ->
+        Send(x, chan, fun () ->
             printfn $"intPing sent: %A{x}"
-            Receive(chanInt, fun y ->
+            Receive(chan, fun y ->
                 printfn $"intPing received: %A{y}"
-                Send(y, chanInt, fun () ->
-                    printfn $"intPing sent: %A{y}"
-                    Receive(chanInt, fun z ->
-                        printfn $"intPing received: %A{z}"
-                        End()))))
+                End()))
 
-    let intPong chanInt =
-        Receive(chanInt, fun x ->
+    let intPong chan =
+        Receive(chan, fun x ->
             printfn $"intPong received: %A{x}"
             let y = x + 10
-            Send(y, chanInt, fun () ->
+            Send(y, chan, fun () ->
                 printfn $"intPong sent: %A{y}"
-                Receive(chanInt, fun z ->
-                    printfn $"intPong received: %A{z}"
-                    let v = z + 10
-                    Send(v, chanInt, fun () ->
-                        printfn $"intPong sent: %A{v}"
-                        End()))))
+                End()))
 
-    let rec intPingInf chanInt =
+    let rec intPingInf chan =
         let x = 0
-        Send(x, chanInt, fun () ->
+        Send(x, chan, fun () ->
             printfn $"intPing sent: %A{x}"
-            Receive(chanInt, fun y ->
+            Receive(chan, fun y ->
                 printfn $"intPing received: %A{y}"
-                intPingInf chanInt))
+                intPingInf chan))
 
-    let rec intPingInfInc chanInt value =
-        Send(value, chanInt, fun () ->
-            printfn $"intPing sent: %A{value}"
-            Receive(chanInt, fun y ->
+    let rec intPingInfInc chan x =
+        Send(x, chan, fun () ->
+            printfn $"intPing sent: %A{x}"
+            Receive(chan, fun y ->
                 printfn $"intPing received: %A{y}"
-                intPingInfInc chanInt y))
+                intPingInfInc chan y))
     
-    let rec intPongInf chanInt =
-        Receive(chanInt, fun x ->
+    let rec intPongInf chan =
+        Receive(chan, fun x ->
             printfn $"intPong received: %A{x}"
             let y = x + 10
-            Send(y, chanInt, fun () ->
+            Send(y, chan, fun () ->
                 printfn $"intPong sent: %A{y}"
-                intPongInf chanInt))
+                intPongInf chan))
 
-    let strPing chanStr =
+    let strPing chan =
         let x = ""
-        Send(x, chanStr, fun () ->
+        Send(x, chan, fun () ->
             printfn $"strPing sent: %A{x}"
-            Receive(chanStr, fun y ->
+            Receive(chan, fun y ->
                 printfn $"strPing received: %A{y}"
-                Send(y, chanStr, fun () ->
-                    printfn $"strPing sent: %A{y}"
-                    Receive(chanStr, fun z ->
-                        printfn $"strPing received: %A{z}"
-                        End()))))
+                End()))
     
-    let strPong chanStr =
-        Receive(chanStr, fun x ->
+    let strPong chan =
+        Receive(chan, fun x ->
             printfn $"strPong received: %A{x}"
             let y = x + "a"
-            Send(y, chanStr, fun () ->
+            Send(y, chan, fun () ->
                 printfn $"strPong sent: %A{y}"
-                Receive(chanStr, fun z ->
-                    printfn $"strPong received: %A{z}"
-                    let v = z + "b"
-                    Send(v, chanStr, fun () ->
-                        printfn $"strPong sent: %A{v}"
-                        End()))))
+                End()))
 
-    let rec strPingInf chanStr =
+    let rec strPingInf chan =
         let x = ""
-        Send(x, chanStr, fun () ->
+        Send(x, chan, fun () ->
             printfn $"strPing sent: %A{x}"
-            Receive(chanStr, fun y ->
+            Receive(chan, fun y ->
                 printfn $"strPing received: %A{y}"
-                strPingInf chanStr))
+                strPingInf chan))
     
-    let rec strPingInfInc chanStr value =
-        Send(value, chanStr, fun () ->
-            printfn $"strPing sent: %A{value}"
-            Receive(chanStr, fun y ->
+    let rec strPingInfInc chan x =
+        Send(x, chan, fun () ->
+            printfn $"strPing sent: %A{x}"
+            Receive(chan, fun y ->
                 printfn $"strPing received: %A{y}"
-                strPingInfInc chanStr y))
+                strPingInfInc chan y))
     
-    let rec strPongInf chanStr =
-        Receive(chanStr, fun x ->
+    let rec strPongInf chan =
+        Receive(chan, fun x ->
             printfn $"strPong received: %A{x}"
             let y = x + "a"
-            Send(y, chanStr, fun () ->
+            Send(y, chan, fun () ->
                 printfn $"strPong sent: %A{y}"
-                Receive(chanStr, fun z ->
+                Receive(chan, fun z ->
                     printfn $"strPong received: %A{z}"
                     let v = z + "b"
-                    Send(v, chanStr, fun () ->
+                    Send(v, chan, fun () ->
                         printfn $"strPong sent: %A{v}"
-                        strPongInf chanStr))))
+                        strPongInf chan))))
 
-    let intPingpong chanInt =
-        Parallel(intPing chanInt, intPong chanInt, fun _ -> End())
+    let intPingpong chan =
+        Parallel(intPing chan, intPong chan, fun _ -> End())
 
-    let intPingpongInf chanInt =
-        Parallel(intPingInf chanInt, intPongInf chanInt, fun _ -> End())
+    let intPingpongInf chan =
+        Parallel(intPingInf chan, intPongInf chan, fun _ -> End())
     
-    let intPingpongInfInc chanInt =
-        Parallel(intPingInfInc chanInt 0, intPongInf chanInt, fun _ -> End())
+    let intPingpongInfInc chan =
+        Parallel(intPingInfInc chan 0, intPongInf chan, fun _ -> End())
     
-    let strPingpong chanStr =
-        Parallel(strPing chanStr, strPong chanStr, fun _ -> End())
+    let strPingpong chan =
+        Parallel(strPing chan, strPong chan, fun _ -> End())
 
-    let strPingpongInf chanStr =
-        Parallel(strPingInf chanStr, strPongInf chanStr, fun _ -> End())
+    let strPingpongInf chan =
+        Parallel(strPingInf chan, strPongInf chan, fun _ -> End())
     
-    let strPingpongInfInc chanStr =
-        Parallel(strPingInfInc chanStr "a", strPongInf chanStr, fun _ -> End())
+    let strPingpongInfInc chan =
+        Parallel(strPingInfInc chan "", strPongInf chan, fun _ -> End())
     
     let intStrPingpong chanInt chanStr =
         Parallel(intPingpong chanInt, strPingpong chanStr, fun _ -> End())
