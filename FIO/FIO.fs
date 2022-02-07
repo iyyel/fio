@@ -64,9 +64,9 @@ and Fail<'Error>(value : 'Error) =
 
 let Send<'Msg, 'Error, 'Result>
     (value : 'Msg,
-     chan : Channel<'Msg>,
-     cont : unit -> FIO<'Error, 'Result>)
-     : Output<'Msg, 'Error, 'Result> =
+      chan : Channel<'Msg>,
+      cont : unit -> FIO<'Error, 'Result>)
+           : Output<'Msg, 'Error, 'Result> =
     Output(value, chan, cont)
 
 let Receive<'Msg, 'Error, 'Result>
