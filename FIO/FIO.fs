@@ -62,15 +62,32 @@ and Fail<'Error>(value : 'Error) =
     override this.Accept<'Error, 'Result>(visitor) =
         Left (visitor.VisitFail<'Error>(this))
 
-let Send<'Msg, 'Error, 'Result>(value : 'Msg, chan : Channel<'Msg>, cont : unit -> FIO<'Error, 'Result>) : Output<'Msg, 'Error, 'Result> = Output(value, chan, cont)
-let Receive<'Msg, 'Error, 'Result>(chan : Channel<'Msg>, cont : 'Msg -> FIO<'Error, 'Result>) : Input<'Msg, 'Error, 'Result> = Input(chan, cont)
-let Parallel<'ErrorA, 'ErrorB, 'ErrorC, 'ResultA, 'ResultB, 'ResultC>(effA : FIO<'ErrorA, 'ResultA>, effB : FIO<'ErrorB, 'ResultB>, cont : Either<'ErrorA, 'ResultA> * Either<'ErrorB, 'ResultB> -> FIO<'ErrorC, 'ResultC>) : Concurrent<'ErrorA, 'ResultA, 'ErrorC, 'ResultC> =
+let Send<'Msg, 'Error, 'Result>(
+    value : 'Msg,
+    chan : Channel<'Msg>,
+    cont : unit -> FIO<'Error, 'Result>)
+    : Output<'Msg, 'Error, 'Result> =
+    Output(value, chan, cont)
+
+let Receive<'Msg, 'Error, 'Result>(
+    chan : Channel<'Msg>,
+    cont : 'Msg -> FIO<'Error, 'Result>)
+         : Input<'Msg, 'Error, 'Result> =
+    Input(chan, cont)
+
+let Parallel<'ErrorA, 'ResultA, 'ErrorB, 'ResultB, 'ErrorC, 'ResultC>(
+    effA : FIO<'ErrorA, 'ResultA>,
+    effB : FIO<'ErrorB, 'ResultB>,
+    cont : Either<'ErrorA, 'ResultA> * Either<'ErrorB, 'ResultB> -> FIO<'ErrorC, 'ResultC>)
+         : Concurrent<'ErrorA, 'ResultA, 'ErrorC, 'ResultC> =
     Concurrent(effA, fun taskA ->
         Concurrent(effB, fun taskB ->
             Await(taskA, fun resA ->
                 Await(taskB, fun resB ->
                     cont (resA, resB)))))
-let End() : Succeed<unit> = Succeed ()
+
+let End() : Succeed<unit> =
+    Succeed ()
 
 module Runtime =
 
