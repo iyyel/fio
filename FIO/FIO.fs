@@ -17,7 +17,7 @@ type FIOVisitor =
     abstract VisitInput<'Msg, 'Error, 'Result>                         : Input<'Msg, 'Error, 'Result> -> 'Result
     abstract VisitOutput<'Msg, 'Error, 'Result>                        : Output<'Msg, 'Error, 'Result> -> 'Result
     abstract VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result> : Concurrent<'TaskError, 'TaskResult, 'Error, 'Result> -> 'Result
-    abstract VisitAwait<'TaskError, 'TaskResult, 'Error, 'Result>      : Await<'TaskError, 'TaskResult, 'Error, 'Result> -> 'Result
+    abstract VisitAwait<'TaskResult, 'Error, 'Result>                  : Await<'TaskResult, 'Error, 'Result> -> 'Result
     abstract VisitSucceed<'Result>                                     : Succeed<'Result> -> 'Result
 and [<AbstractClass>] FIO<'Error, 'Result>() =
     abstract Accept<'Error, 'Result> : FIOVisitor -> 'Result
@@ -47,14 +47,14 @@ and Concurrent<'TaskError, 'TaskResult, 'Error, 'Result>
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
         visitor.VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result>(this)
-and Await<'TaskError, 'TaskResult, 'Error, 'Result>
+and Await<'TaskResult, 'Error, 'Result>
         (task : Task<'TaskResult>,
          cont : 'TaskResult -> FIO<'Error, 'Result>) =
     inherit FIO<'Error, 'Result>()
     member internal _.Task = task
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
-        visitor.VisitAwait<'TaskError, 'TaskResult, 'Error, 'Result>(this)
+        visitor.VisitAwait<'TaskResult, 'Error, 'Result>(this)
 and Succeed<'Result>(value : 'Result) =
     inherit FIO<unit, 'Result>()
     member internal _.Value = value
@@ -104,7 +104,7 @@ module Runtime =
                     member _.VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result>(con : Concurrent<'TaskError, 'TaskResult, 'Error, 'Result>) =
                         let task = Task.Factory.StartNew(fun () -> Naive.Run con.Eff)
                         Naive.Run <| con.Cont task
-                    member _.VisitAwait<'TaskError, 'TaskResult, 'Error, 'Result>(await : Await<'TaskError, 'TaskResult, 'Error, 'Result>) =
+                    member _.VisitAwait<'TaskResult, 'Error, 'Result>(await : Await<'TaskResult, 'Error, 'Result>) =
                         Naive.Run <| await.Cont await.Task.Result
                     member _.VisitSucceed<'Result>(res : Succeed<'Result>) =
                         res.Value
