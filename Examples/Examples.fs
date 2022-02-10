@@ -192,19 +192,19 @@ module FSharpRing =
     let private createProcess (chanRecv : Channel<int>) (chanSend : Channel<int>) name first m =
         let rec create n =
             match n with
-            | 1 when first -> let x = chanRecv.Receive
+            | 1 when first -> let x = chanRecv.Receive()
                               printfn $"%s{name} received: %A{x}"
                               let y = x + 10
                               chanSend.Send y
                               printfn $"%s{name} sent: %A{y}"
-                              let z = chanRecv.Receive
+                              let z = chanRecv.Receive()
                               printfn $"%s{name} received: %A{z}"
-            | 1            -> let x = chanRecv.Receive
+            | 1            -> let x = chanRecv.Receive()
                               printfn $"%s{name} received: %A{x}"
                               let y = x + 10
                               chanSend.Send y
                               printfn $"%s{name} sent: %A{y}"
-            | _            -> let recv = chanRecv.Receive
+            | _            -> let recv = chanRecv.Receive()
                               printfn $"%s{name} received: %A{recv}"
                               let value = recv + 10
                               chanSend.Send value

@@ -11,7 +11,7 @@ open System.Threading
 type Channel<'Msg>() =
     let bc = new BlockingCollection<'Msg>()
     member this.Send value = bc.Add value
-    member this.Receive = bc.Take()
+    member this.Receive() = bc.Take()
 
 type FIOVisitor =
     abstract VisitInput<'Msg, 'Error, 'Result>                         : Input<'Msg, 'Error, 'Result> -> 'Result
@@ -96,7 +96,7 @@ module Runtime =
             eff.Accept({ 
                 new FIOVisitor with
                     member _.VisitInput<'Msg, 'Error, 'Result>(input : Input<'Msg, 'Error, 'Result>) =
-                        let value = input.Chan.Receive
+                        let value = input.Chan.Receive()
                         Naive.Run <| input.Cont value
                     member _.VisitOutput<'Msg, 'Error, 'Result>(output : Output<'Msg, 'Error, 'Result>) =
                         output.Chan.Send output.Value
