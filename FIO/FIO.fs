@@ -6,21 +6,28 @@ module FSharp.FIO
 
 open System.Collections.Concurrent
 open System.Threading.Tasks
-open System.Threading
 
 type Channel<'Msg>() =
     let bc = new BlockingCollection<'Msg>()
-    member this.Send value = bc.Add value
-    member this.Receive() = bc.Take()
+    member _.Send value = bc.Add value
+    member _.Receive() = bc.Take()
 
-type FIOVisitor =
-    abstract VisitInput<'Msg, 'Error, 'Result>                         : Input<'Msg, 'Error, 'Result> -> 'Result
-    abstract VisitOutput<'Msg, 'Error, 'Result>                        : Output<'Msg, 'Error, 'Result> -> 'Result
-    abstract VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result> : Concurrent<'TaskError, 'TaskResult, 'Error, 'Result> -> 'Result
-    abstract VisitAwait<'TaskResult, 'Error, 'Result>                  : Await<'TaskResult, 'Error, 'Result> -> 'Result
-    abstract VisitSucceed<'Result>                                     : Succeed<'Result> -> 'Result
+type Fiber<'Error, 'Result>(work : 'Result) =
+    let task = Task.Factory.StartNew(fun () -> work)
+    member _.Await() = task.Result
+    member _.OrElse(effA : FIO<'ErrorA, 'ResultA>) = () // try this effect (Eff), however, if it fails, then try another one (EffA).
+    member _.CatchAll(cont : 'Error -> FIO<'ErrorA, 'ResultA>) = () // catch all errors and recover from it effectfully. 
+
+and FIOVisitor =
+    abstract VisitInput<'Msg, 'Error, 'Result>                           : Input<'Msg, 'Error, 'Result> -> 'Result
+    abstract VisitOutput<'Msg, 'Error, 'Result>                          : Output<'Msg, 'Error, 'Result> -> 'Result
+    abstract VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result> : Concurrent<'FiberError, 'FiberResult, 'Error, 'Result> -> 'Result
+    abstract VisitAwait<'FiberError, 'FiberResult, 'Error, 'Result>      : Await<'FiberError, 'FiberResult, 'Error, 'Result> -> 'Result
+    abstract VisitSucceed<'Error, 'Result>                               : Succeed<'Error, 'Result> -> 'Result
+
 and [<AbstractClass>] FIO<'Error, 'Result>() =
     abstract Accept<'Error, 'Result> : FIOVisitor -> 'Result
+
 and Input<'Msg, 'Error, 'Result>
         (chan : Channel<'Msg>,
          cont : 'Msg -> FIO<'Error, 'Result>) =
@@ -29,6 +36,7 @@ and Input<'Msg, 'Error, 'Result>
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
         visitor.VisitInput<'Msg, 'Error, 'Result>(this)
+
 and Output<'Msg, 'Error, 'Result>
         (value : 'Msg,
           chan : Channel<'Msg>,
@@ -39,27 +47,61 @@ and Output<'Msg, 'Error, 'Result>
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
         visitor.VisitOutput<'Msg, 'Error, 'Result>(this)
-and Concurrent<'TaskError, 'TaskResult, 'Error, 'Result>
-        (eff : FIO<'TaskError, 'TaskResult>,
-        cont : Task<'TaskResult> -> FIO<'Error, 'Result>) =
+
+and Concurrent<'FiberError, 'FiberResult, 'Error, 'Result>
+        (eff : FIO<'FiberError, 'FiberResult>,
+        cont : Fiber<'FiberError, 'FiberResult> -> FIO<'Error, 'Result>) =
     inherit FIO<'Error, 'Result>()
     member internal _.Eff = eff
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
-        visitor.VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result>(this)
-and Await<'TaskResult, 'Error, 'Result>
-        (task : Task<'TaskResult>,
-         cont : 'TaskResult -> FIO<'Error, 'Result>) =
+        visitor.VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result>(this)
+
+and Await<'FiberError, 'FiberResult, 'Error, 'Result>
+        (fiber : Fiber<'FiberError, 'FiberResult>,
+          cont : 'FiberResult -> FIO<'Error, 'Result>) =
     inherit FIO<'Error, 'Result>()
-    member internal _.Task = task
+    member internal _.Fiber = fiber
     member internal _.Cont = cont
     override this.Accept<'Error, 'Result>(visitor) =
-        visitor.VisitAwait<'TaskResult, 'Error, 'Result>(this)
-and Succeed<'Result>(value : 'Result) =
-    inherit FIO<unit, 'Result>()
+        visitor.VisitAwait<'FiberError, 'FiberResult, 'Error, 'Result>(this)
+
+and Succeed<'Error, 'Result>(value : 'Result) =
+    inherit FIO<'Error, 'Result>()
     member internal _.Value = value
     override this.Accept<'Error, 'Result>(visitor) =
-        visitor.VisitSucceed<'Result>(this)
+        visitor.VisitSucceed<'Error, 'Result>(this)
+
+and [<AbstractClass>] Runtime() =
+    abstract Run<'Error, 'Result> : FIO<'Error, 'Result> -> Fiber<'Error, 'Result>
+    abstract Interpret<'Error, 'Result> : FIO<'Error, 'Result> -> 'Result
+
+and [<AbstractClass; Sealed>] Naive<'Error, 'Result> private () =
+     inherit Runtime()
+     static member Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
+        new Fiber<'Error, 'Result>(Naive.Interpret eff)
+
+     static member Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : 'Result =
+         eff.Accept({ 
+             new FIOVisitor with
+                 member _.VisitInput<'Msg, 'Error, 'Result>(input : Input<'Msg, 'Error, 'Result>) =
+                     let value = input.Chan.Receive()
+                     Naive.Interpret <| input.Cont value
+                 member _.VisitOutput<'Msg, 'Error, 'Result>(output : Output<'Msg, 'Error, 'Result>) =
+                     output.Chan.Send output.Value
+                     Naive.Interpret <| output.Cont ()
+                 member _.VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result>(con : Concurrent<'FiberError, 'FiberResult, 'Error, 'Result>) = 
+                     let fiber = new Fiber<'FiberError, 'FiberResult>(Naive.Interpret con.Eff)
+                     printfn "in concurrent"
+                     Naive.Interpret <| con.Cont fiber
+                 member _.VisitAwait<'FiberError, 'FiberResult, 'Error, 'Result>(await : Await<'FiberError, 'FiberResult, 'Error, 'Result>) =
+                     printfn "in await"
+                     Naive.Interpret <| await.Cont (await.Fiber.Await())
+                 member _.VisitSucceed<'Error, 'Result>(succ : Succeed<'Error, 'Result>) =
+                     succ.Value
+         })
+
+and Default<'Error, 'Result> = Naive<'Error, 'Result>
 
 let Send<'Msg, 'Error, 'Result>
     (value : 'Msg,
@@ -77,53 +119,12 @@ let Receive<'Msg, 'Error, 'Result>
 let Parallel<'ErrorA, 'ResultA, 'ErrorB, 'ResultB, 'ErrorC, 'ResultC>
     (effA : FIO<'ErrorA, 'ResultA>,
      effB : FIO<'ErrorB, 'ResultB>,
-     cont : 'ResultA * 'ResultB -> FIO<'ErrorC, 'ResultC>)
-          : Concurrent<'ErrorA, 'ResultA, 'ErrorC, 'ResultC> =
+     cont : 'ResultA * 'ResultB -> FIO<'ErrorC, 'ResultC>) =
     Concurrent(effA, fun taskA ->
         Concurrent(effB, fun taskB ->
             Await(taskA, fun resA ->
                 Await(taskB, fun resB ->
                     cont (resA, resB)))))
 
-let End() : Succeed<unit> =
+let End() : Succeed<unit, unit> =
     Succeed ()
-
-module Runtime =
-
-    [<AbstractClass; Sealed>]
-    type Naive private () =
-         static member Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : 'Result =
-            eff.Accept({ 
-                new FIOVisitor with
-                    member _.VisitInput<'Msg, 'Error, 'Result>(input : Input<'Msg, 'Error, 'Result>) =
-                        let value = input.Chan.Receive()
-                        Naive.Run <| input.Cont value
-                    member _.VisitOutput<'Msg, 'Error, 'Result>(output : Output<'Msg, 'Error, 'Result>) =
-                        output.Chan.Send output.Value
-                        Naive.Run <| output.Cont ()
-                    member _.VisitConcurrent<'TaskError, 'TaskResult, 'Error, 'Result>(con : Concurrent<'TaskError, 'TaskResult, 'Error, 'Result>) =
-                        let task = Task.Factory.StartNew(fun () -> Naive.Run con.Eff)
-                        Naive.Run <| con.Cont task
-                    member _.VisitAwait<'TaskResult, 'Error, 'Result>(await : Await<'TaskResult, 'Error, 'Result>) =
-                        Naive.Run <| await.Cont await.Task.Result
-                    member _.VisitSucceed<'Result>(res : Succeed<'Result>) =
-                        res.Value
-            })
-
-    let PrintThreadPoolInfo() =
-        let maxWorkerThreads = ref 0;
-        let maxCompletePortThreads = ref 0;
-        let minWorkerThreads = ref 0;
-        let minCompletePortThreads = ref 0;
-        let avlWorkerThreads = ref 0;
-        let avlIoThreads = ref 0;
-        ThreadPool.GetMaxThreads(maxWorkerThreads, maxCompletePortThreads)
-        ThreadPool.GetMinThreads(minWorkerThreads, minCompletePortThreads)
-        ThreadPool.GetAvailableThreads(avlWorkerThreads, avlIoThreads);
-        printfn $"Thread pool information: "
-        printfn $"Maximum worker threads: %A{maxWorkerThreads}"
-        printfn $"Maximum completion port threads %A{maxCompletePortThreads}"
-        printfn $"Minimum worker threads: %A{minWorkerThreads}"
-        printfn $"Minimum completion port threads %A{minCompletePortThreads}"
-        printfn $"Available worker threads: %A{avlWorkerThreads}"
-        printfn $"Available I/O threads: %A{avlIoThreads}"
