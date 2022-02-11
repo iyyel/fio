@@ -7,17 +7,35 @@ module FSharp.FIO
 open System.Collections.Concurrent
 open System.Threading.Tasks
 
+
+(*************************************************************)
+(*                                                           *)
+(* FIO Channel type                                          *)
+(*                                                           *)
+(*************************************************************)
 type Channel<'Msg>() =
     let bc = new BlockingCollection<'Msg>()
     member _.Send value = bc.Add value
     member _.Receive() = bc.Take()
 
+
+(*************************************************************)
+(*                                                           *)
+(* FIO Fiber type                                            *)
+(*                                                           *)
+(*************************************************************)
 type Fiber<'Error, 'Result>(work : 'Result) =
     let task = Task.Factory.StartNew(fun () -> work)
     member _.Await() = task.Result
     member _.OrElse(effA : FIO<'ErrorA, 'ResultA>) = () // try this effect (Eff), however, if it fails, then try another one (EffA).
     member _.CatchAll(cont : 'Error -> FIO<'ErrorA, 'ResultA>) = () // catch all errors and recover from it effectfully. 
 
+
+(*************************************************************)
+(*                                                           *)
+(* FIO Effect types (opcodes)                                *)
+(*                                                           *)
+(*************************************************************)
 and FIOVisitor =
     abstract VisitInput<'Msg, 'Error, 'Result>                           : Input<'Msg, 'Error, 'Result> -> 'Result
     abstract VisitOutput<'Msg, 'Error, 'Result>                          : Output<'Msg, 'Error, 'Result> -> 'Result
@@ -72,6 +90,12 @@ and Succeed<'Error, 'Result>(value : 'Result) =
     override this.Accept<'Error, 'Result>(visitor) =
         visitor.VisitSucceed<'Error, 'Result>(this)
 
+
+(*************************************************************)
+(*                                                           *)
+(* FIO Runtime types                                         *)
+(*                                                           *)
+(*************************************************************)
 and [<AbstractClass>] Runtime() =
     abstract Run<'Error, 'Result> : FIO<'Error, 'Result> -> Fiber<'Error, 'Result>
     abstract Interpret<'Error, 'Result> : FIO<'Error, 'Result> -> 'Result
@@ -103,6 +127,12 @@ and [<AbstractClass; Sealed>] Naive<'Error, 'Result> private () =
 
 and Default<'Error, 'Result> = Naive<'Error, 'Result>
 
+
+(*************************************************************)
+(*                                                           *)
+(* FIO library functions (?)                                 *)
+(*                                                           *)
+(*************************************************************)
 let Send<'Msg, 'Error, 'Result>
     (value : 'Msg,
       chan : Channel<'Msg>,
