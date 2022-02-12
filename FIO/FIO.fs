@@ -24,8 +24,8 @@ type Channel<'Msg>() =
 (* FIO Fiber type                                            *)
 (*                                                           *)
 (*************************************************************)
-type Fiber<'Error, 'Result>(work : 'Result) =
-    let task = Task.Factory.StartNew(fun () -> work)
+type Fiber<'Error, 'Result>(eff : FIO<'Error, 'Result>, interpret : FIO<'Error, 'Result> -> 'Result) =
+    let task = Task.Factory.StartNew(fun () -> interpret eff)
     member _.Await() = task.Result
     member _.OrElse(effA : FIO<'ErrorA, 'ResultA>) = () // try this effect (Eff), however, if it fails, then try another one (EffA).
     member _.CatchAll(cont : 'Error -> FIO<'ErrorA, 'ResultA>) = () // catch all errors and recover from it effectfully. 
@@ -103,9 +103,9 @@ and [<AbstractClass>] Runtime() =
 and [<AbstractClass; Sealed>] Naive<'Error, 'Result> private () =
      inherit Runtime()
      static member Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
-        new Fiber<'Error, 'Result>(Naive.Interpret eff)
+        new Fiber<'Error, 'Result>(eff, Naive.Interpret)
 
-     static member Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : 'Result =
+     static member internal Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : 'Result =
          eff.Accept({ 
              new FIOVisitor with
                  member _.VisitInput<'Msg, 'Error, 'Result>(input : Input<'Msg, 'Error, 'Result>) =
@@ -115,11 +115,9 @@ and [<AbstractClass; Sealed>] Naive<'Error, 'Result> private () =
                      output.Chan.Send output.Value
                      Naive.Interpret <| output.Cont ()
                  member _.VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result>(con : Concurrent<'FiberError, 'FiberResult, 'Error, 'Result>) = 
-                     let fiber = new Fiber<'FiberError, 'FiberResult>(Naive.Interpret con.Eff)
-                     printfn "in concurrent"
+                     let fiber = new Fiber<'FiberError, 'FiberResult>(con.Eff, Naive.Interpret)
                      Naive.Interpret <| con.Cont fiber
                  member _.VisitAwait<'FiberError, 'FiberResult, 'Error, 'Result>(await : Await<'FiberError, 'FiberResult, 'Error, 'Result>) =
-                     printfn "in await"
                      Naive.Interpret <| await.Cont (await.Fiber.Await())
                  member _.VisitSucceed<'Error, 'Result>(succ : Succeed<'Error, 'Result>) =
                      succ.Value
