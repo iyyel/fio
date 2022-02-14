@@ -13,7 +13,7 @@ ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 [<EntryPoint>]
 let main _ =
-    let fiber = Naive.Run <| Ring.processRing 10 10
+    let fiber = Naive.Run <| Ring.processRing 10000 10000
     printfn $"Result: %A{fiber.Await()}"
 
     0
