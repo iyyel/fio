@@ -15,8 +15,8 @@ module FIO =
         member _.Receive() = bc.Take()
 
     type Try<'Error, 'Result> =
-        | Error of 'Error
         | Success of 'Result
+        | Error of 'Error
 
     type Fiber<'Error, 'Result>(eff : FIO<'Error, 'Result>, interpret : FIO<'Error, 'Result> -> Try<'Error, 'Result>) =
         let task = Task.Factory.StartNew(fun () -> interpret eff)
@@ -95,7 +95,8 @@ module FIO =
         override this.Accept<'Error, 'Result>(visitor) =
             visitor.VisitFail<'Error, 'Result>(this)
 
-    let (>>=) (eff : FIO<'Error, 'FIOResult>) (cont : 'FIOResult -> FIO<'Error, 'Result>) = Sequence(eff, cont)
+    let (>>=) (eff : FIO<'Error, 'FIOResult>) (cont : 'FIOResult -> FIO<'Error, 'Result>) =
+        Sequence(eff, cont)
 
     let Send<'Error, 'Result>(value : 'Result, chan : Channel<'Result>) =
         Output(value, chan)
