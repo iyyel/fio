@@ -4,156 +4,156 @@
 
 namespace Examples
 
-open FSharp.FIO
+open FSharp.FIO.FIO
 open System.Threading
 
 module Pingpong =
 
     let intPing chan =
         let x = 0
-        FIO.Send(x, chan, fun () ->
-            printfn $"intPing sent: %A{x}"
-            FIO.Receive(chan, fun y ->
-                printfn $"intPing received: %A{y}"
-                FIO.End()))
+        Send(x, chan) >>= fun _ -> 
+        printfn $"intPing sent: %A{x}"
+        Receive(chan) >>= fun y ->
+        printfn $"intPing received: %A{y}"
+        End()
 
     let intPong chan =
-        FIO.Receive(chan, fun x ->
-            printfn $"intPong received: %A{x}"
-            let y = x + 10
-            FIO.Send(y, chan, fun () ->
-                printfn $"intPong sent: %A{y}"
-                FIO.End()))
+        Receive(chan) >>= fun x ->
+        printfn $"intPong received: %A{x}"
+        let y = x + 10
+        Send(y, chan) >>= fun _ ->
+        printfn $"intPong sent: %A{y}"
+        End()
 
     let rec intPingInf chan =
         let x = 0
-        FIO.Send(x, chan, fun () ->
-            printfn $"intPing sent: %A{x}"
-            FIO.Receive(chan, fun y ->
-                printfn $"intPing received: %A{y}"
-                intPingInf chan))
+        Send(x, chan) >>= fun _ ->
+        printfn $"intPing sent: %A{x}"
+        Receive(chan) >>= fun y ->
+        printfn $"intPing received: %A{y}"
+        intPingInf chan
 
     let rec intPingInfInc chan x =
-        FIO.Send(x, chan, fun () ->
-            printfn $"intPing sent: %A{x}"
-            FIO.Receive(chan, fun y ->
-                printfn $"intPing received: %A{y}"
-                intPingInfInc chan y))
+        Send(x, chan) >>= fun _ ->
+        printfn $"intPing sent: %A{x}"
+        Receive(chan) >>= fun y ->
+        printfn $"intPing received: %A{y}"
+        intPingInfInc chan y
     
     let rec intPongInf chan =
-        FIO.Receive(chan, fun x ->
-            printfn $"intPong received: %A{x}"
-            let y = x + 10
-            FIO.Send(y, chan, fun () ->
-                printfn $"intPong sent: %A{y}"
-                intPongInf chan))
+        Receive(chan) >>= fun x ->
+        printfn $"intPong received: %A{x}"
+        let y = x + 10
+        Send(y, chan) >>= fun _ ->
+        printfn $"intPong sent: %A{y}"
+        intPongInf chan
 
     let strPing chan =
         let x = ""
-        FIO.Send(x, chan, fun () ->
-            printfn $"strPing sent: %A{x}"
-            FIO.Receive(chan, fun y ->
-                printfn $"strPing received: %A{y}"
-                FIO.End()))
-    
+        Send(x, chan) >>= fun _ ->
+        printfn $"strPing sent: %A{x}"
+        Receive(chan) >>= fun y ->
+        printfn $"strPing received: %A{y}"
+        End()
+
     let strPong chan =
-        FIO.Receive(chan, fun x ->
-            printfn $"strPong received: %A{x}"
-            let y = x + "a"
-            FIO.Send(y, chan, fun () ->
-                printfn $"strPong sent: %A{y}"
-                FIO.End()))
+        Receive(chan) >>= fun x ->
+        printfn $"strPong received: %A{x}"
+        let y = x + "a"
+        Send(y, chan) >>= fun _ ->
+        printfn $"strPong sent: %A{y}"
+        End()
 
     let rec strPingInf chan =
         let x = ""
-        FIO.Send(x, chan, fun () ->
-            printfn $"strPing sent: %A{x}"
-            FIO.Receive(chan, fun y ->
-                printfn $"strPing received: %A{y}"
-                strPingInf chan))
-    
+        Send(x, chan) >>= fun _ ->
+        printfn $"strPing sent: %A{x}"
+        Receive(chan) >>= fun y ->
+        printfn $"strPing received: %A{y}"
+        strPingInf chan
+
     let rec strPingInfInc chan x =
-        FIO.Send(x, chan, fun () ->
-            printfn $"strPing sent: %A{x}"
-            FIO.Receive(chan, fun y ->
-                printfn $"strPing received: %A{y}"
-                strPingInfInc chan y))
-    
+        Send(x, chan) >>= fun _ ->
+        printfn $"strPing sent: %A{x}"
+        Receive(chan) >>= fun y ->
+        printfn $"strPing received: %A{y}"
+        strPingInfInc chan y
+
     let rec strPongInf chan =
-        FIO.Receive(chan, fun x ->
-            printfn $"strPong received: %A{x}"
-            let y = x + "a"
-            FIO.Send(y, chan, fun () ->
-                printfn $"strPong sent: %A{y}"
-                FIO.Receive(chan, fun z ->
-                    printfn $"strPong received: %A{z}"
-                    let v = z + "b"
-                    FIO.Send(v, chan, fun () ->
-                        printfn $"strPong sent: %A{v}"
-                        strPongInf chan))))
+        Receive(chan) >>= fun x ->
+        printfn $"strPong received: %A{x}"
+        let y = x + "a"
+        Send(x, chan) >>= fun _ ->
+        printfn $"strPong sent: %A{y}"
+        Receive(chan) >>= fun z ->
+        printfn $"strPong received: %A{z}"
+        let v = z + "b"
+        Send(v, chan) >>= fun _ ->
+        printfn $"strPong sent: %A{v}"
+        strPongInf chan
 
     let intPingpong chan =
-        FIO.Parallel(intPing chan, intPong chan, fun _ -> FIO.End())
+        Parallel(intPing chan, intPong chan) >>= fun _ -> End()
 
     let intPingpongInf chan =
-        FIO.Parallel(intPingInf chan, intPongInf chan, fun _ -> FIO.End())
+        Parallel(intPingInf chan, intPongInf chan) >>= fun _ -> End()
     
     let intPingpongInfInc chan =
-        FIO.Parallel(intPingInfInc chan 0, intPongInf chan, fun _ -> FIO.End())
+        Parallel(intPingInfInc chan 0, intPongInf chan) >>= fun _ -> End()
     
     let strPingpong chan =
-        FIO.Parallel(strPing chan, strPong chan, fun _ -> FIO.End())
+        Parallel(strPing chan, strPong chan) >>= fun _ -> End()
 
     let strPingpongInf chan =
-        FIO.Parallel(strPingInf chan, strPongInf chan, fun _ -> FIO.End())
+        Parallel(strPingInf chan, strPongInf chan) >>= fun _ -> End()
     
     let strPingpongInfInc chan =
-        FIO.Parallel(strPingInfInc chan "", strPongInf chan, fun _ -> FIO.End())
+        Parallel(strPingInfInc chan "", strPongInf chan) >>= fun _ -> End()
     
     let intStrPingpong chanInt chanStr =
-        FIO.Parallel(intPingpong chanInt, strPingpong chanStr, fun _ -> FIO.End())
+        Parallel(intPingpong chanInt, strPingpong chanStr) >>= fun _ -> End()
 
     let intStrPingpongInf chanInt chanStr =
-        FIO.Parallel(intPingpongInf chanInt, strPingpongInf chanStr, fun _ -> FIO.End())
+        Parallel(intPingpongInf chanInt, strPingpongInf chanStr) >>= fun _ -> End()
     
     let intStrPingpongInfInc chanInt chanStr =
-        FIO.Parallel(intPingpongInfInc chanInt, strPingpongInfInc chanStr, fun _ -> FIO.End())
+        Parallel(intPingpongInfInc chanInt, strPingpongInfInc chanStr) >>= fun _ -> End()
 
 module Ring = 
 
     type private Process =
         { Name: string
-          ChanSend: FIO.Channel<int>
-          ChanRecv: FIO.Channel<int>
+          ChanSend: Channel<int>
+          ChanRecv: Channel<int>
         }
 
     let private createProcess chanRecv chanSend name first m =
         let rec create n =
             match n with
-            | 1 when first -> FIO.Receive(chanRecv, fun x ->
-                                  printfn $"%s{name} received: %A{x}"
-                                  let y = x + 10
-                                  FIO.Send(y, chanSend, fun () ->
-                                      printfn $"%s{name} sent: %A{y}"
-                                      FIO.Receive(chanRecv, fun z -> 
-                                          printfn $"%s{name} received: %A{z}"
-                                          FIO.End())))
-            | 1            -> FIO.Receive(chanRecv, fun v ->
-                                  printfn $"%s{name} received: %A{v}"
-                                  let value = v + 10
-                                  FIO.Send(value, chanSend, fun () ->
-                                      printfn $"%s{name} sent: %A{value}"
-                                      FIO.End()))
-            | _            -> FIO.Receive(chanRecv, fun v ->
-                                  printfn $"%s{name} received: %A{v}"
-                                  let value = v + 10
-                                  FIO.Send(value, chanSend, fun () ->
-                                      printfn $"%s{name} sent: %A{value}"
-                                      create (n - 1)))
+            | 1 when first -> Receive(chanRecv) >>= fun x ->
+                              printfn $"%s{name} received: %A{x}"
+                              let y = x + 10
+                              Send(y, chanSend) >>= fun _ ->
+                              printfn $"%s{name} sent: %A{y}"
+                              Receive(chanRecv) >>= fun z -> 
+                              printfn $"%s{name} received: %A{z}"
+                              End()
+            | 1            -> Receive(chanRecv) >>= fun x ->
+                              printfn $"%s{name} received: %A{x}"
+                              let y = x + 10
+                              Send(y, chanSend) >>= fun _ ->
+                              printfn $"%s{name} sent: %A{y}"
+                              End()
+            | _            -> Receive(chanRecv) >>= fun x ->
+                              printfn $"%s{name} received: %A{x}"
+                              let y = x + 10
+                              Send(y, chanSend) >>= fun _ ->
+                              printfn $"%s{name} sent: %A{y}"
+                              create (n - 1)
         create m
 
     let processRing processCount roundCount =
-        let getRecvChan index (chans : FIO.Channel<int> list) =
+        let getRecvChan index (chans : Channel<int> list) =
             match index with
             | i when i - 1 < 0 -> chans.Item (List.length chans - 1)
             | i                -> chans.Item (i - 1)
@@ -166,14 +166,16 @@ module Ring =
 
         let rec createProcessRing procs roundCount first =
             match procs with
-            | pa::pb::[] -> FIO.Parallel(createProcess pa.ChanRecv pa.ChanSend pa.Name first roundCount, createProcess pb.ChanRecv pb.ChanSend pb.Name false roundCount, fun _ -> FIO.End())
-            | p::ps      -> FIO.Parallel(createProcess p.ChanRecv p.ChanSend p.Name first roundCount, createProcessRing ps roundCount false, fun _ -> FIO.End())
+            | pa::pb::[] -> Parallel(createProcess pa.ChanRecv pa.ChanSend pa.Name first roundCount, createProcess pb.ChanRecv pb.ChanSend pb.Name false roundCount)
+                            >>= fun _ -> End()
+            | p::ps      -> Parallel(createProcess p.ChanRecv p.ChanSend p.Name first roundCount, createProcessRing ps roundCount false)
+                            >>= fun _ -> End()
             | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{roundCount}"
 
         let injectMessage p startMsg =
             p.ChanRecv.Send startMsg
 
-        let chans = [for _ in 1..processCount -> FIO.Channel<int>()]
+        let chans = [for _ in 1..processCount -> Channel<int>()]
 
         let procs = createProcesses chans chans 0 []
 
@@ -185,11 +187,11 @@ module FSharpRing =
 
     type private Process =
         { Name: string
-          ChanSend: FIO.Channel<int>
-          ChanRecv: FIO.Channel<int>
+          ChanSend: Channel<int>
+          ChanRecv: Channel<int>
         }
 
-    let private createProcess (chanRecv : FIO.Channel<int>) (chanSend : FIO.Channel<int>) name first m =
+    let private createProcess (chanRecv : Channel<int>) (chanSend : Channel<int>) name first m =
         let rec create n =
             match n with
             | 1 when first -> let x = chanRecv.Receive()
@@ -213,7 +215,7 @@ module FSharpRing =
         create m
 
     let processRing processCount roundCount =
-        let getRecvChan index (chans : FIO.Channel<int> list) =
+        let getRecvChan index (chans : Channel<int> list) =
             match index with
             | i when i - 1 < 0 -> chans.Item (List.length chans - 1)
             | i                -> chans.Item (i - 1)
@@ -238,7 +240,7 @@ module FSharpRing =
         let injectMessage p startMsg =
             p.ChanRecv.Send startMsg
 
-        let chans = [for _ in 1..processCount -> FIO.Channel<int>()]
+        let chans = [for _ in 1..processCount -> Channel<int>()]
 
         let processes = createProcesses chans chans 0 []
 
