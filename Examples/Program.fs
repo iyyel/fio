@@ -4,7 +4,7 @@
 
 module Program
 
-open FSharp.FIO
+open FSharp.FIO.Runtime
 open Examples
 open System.Threading
 
