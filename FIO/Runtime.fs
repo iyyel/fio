@@ -36,6 +36,20 @@ module Runtime =
                          match result with
                          | Success res -> Naive.Interpret <| seq.Cont res
                          | Error err   -> Error err
+                     member _.VisitOrElse<'Error, 'Result>(orElse : OrElse<'Error, 'Result>) =
+                         let fiber = new Fiber<'Error, 'Result>(orElse.Eff, Naive.Interpret)
+                         let result = fiber.Await()
+                         match result with
+                         | Success res -> Success res
+                         | Error _     -> let fiber = new Fiber<'Error, 'Result>(orElse.ElseEff, Naive.Interpret)
+                                          fiber.Await()
+                     member _.VisitOnError<'FIOError, 'Error, 'Result>(catchAll : OnError<'FIOError, 'Error, 'Result>) =
+                        let fiber = new Fiber<'FIOError, 'Result>(catchAll.Eff, Naive.Interpret)
+                        let result = fiber.Await()
+                        match result with
+                        | Success res -> Success res
+                        | Error err   -> let fiber = new Fiber<'Error, 'Result>(catchAll.Cont err, Naive.Interpret)
+                                         fiber.Await()
                      member _.VisitSucceed<'Error, 'Result>(succ : Succeed<'Error, 'Result>) =
                          Success succ.Value
                      member _.VisitFail<'Error, 'Result>(fail : Fail<'Error, 'Result>) =

@@ -20,9 +20,8 @@ module FIO =
 
     type Fiber<'Error, 'Result>(eff : FIO<'Error, 'Result>, interpret : FIO<'Error, 'Result> -> Try<'Error, 'Result>) =
         let task = Task.Factory.StartNew(fun () -> interpret eff)
-        member _.Await() = task.Result
-        //member _.OrElse(effA : FIO<'ErrorA, 'ResultA>) = () // try this effect (Eff), however, if it fails, then try another one (EffA).
-        //member _.CatchAll(cont : 'Error -> FIO<'ErrorA, 'ResultA>) = () // catch all errors and recover from it effectfully. 
+        member _.Await() = task.Result 
+        // Current problems: Check if OrElse and OnError are generic enough.
         //member _.Race(effA : FIO<'ErrorA, 'ResultA>) = () // return the result of whichever effect completes first
         //member _.Try(contError : 'Error -> FIO<'ErrorA, 'ResultA>, contSuccess : 'Result -> FIO<'ErrorB, 'ResultB>) = () // continuation for error and success, will be executed depending on the current effects (Eff) result (i.e. error or result).
         member _.IsCompleted() = task.IsCompleted
@@ -35,6 +34,8 @@ module FIO =
         abstract VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result> : Concurrent<'FiberError, 'FiberResult, 'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitAwait<'FiberError, 'FiberResult, 'Error, 'Result>      : Await<'FiberError, 'FiberResult, 'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitSequence<'FIOResult, 'Error, 'Result>                  : Sequence<'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result> 
+        abstract VisitOrElse<'Error, 'Result>                                : OrElse<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitOnError<'FIOError, 'Error, 'Result>                    : OnError<'FIOError, 'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitSucceed<'Error, 'Result>                               : Succeed<'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitFail<'Error, 'Result>                                  : Fail<'Error, 'Result> -> Try<'Error, 'Result>
 
@@ -82,6 +83,24 @@ module FIO =
         member internal _.Cont = cont
         override this.Accept<'Error, 'Result>(visitor) =
             visitor.VisitSequence<'FIOResult, 'Error, 'Result>(this)
+
+    and OrElse<'Error, 'Result>
+            (eff : FIO<'Error, 'Result>,
+         elseEff : FIO<'Error, 'Result>) =
+         inherit FIO<'Error, 'Result>()
+         member internal _.Eff = eff
+         member internal _.ElseEff = elseEff
+         override this.Accept<'Error, 'Result>(visitor) =
+            visitor.VisitOrElse<'Error, 'Result>(this)
+
+    and OnError<'FIOError, 'Error, 'Result>
+            (eff : FIO<'FIOError, 'Result>,
+            cont : 'FIOError -> FIO<'Error, 'Result>) =
+        inherit FIO<'Error, 'Result>()
+        member internal _.Eff = eff
+        member internal _.Cont = cont
+        override this.Accept<'Error, 'Result>(visitor) =
+            visitor.VisitOnError<'FIOError, 'Error, 'Result>(this)
 
     and Succeed<'Error, 'Result>(value : 'Result) =
         inherit FIO<'Error, 'Result>()
