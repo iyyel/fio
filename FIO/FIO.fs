@@ -21,8 +21,6 @@ module FIO =
     type Fiber<'Error, 'Result>(eff : FIO<'Error, 'Result>, interpret : FIO<'Error, 'Result> -> Try<'Error, 'Result>) =
         let task = Task.Factory.StartNew(fun () -> interpret eff)
         member _.Await() = task.Result 
-        // Current problems: Check if OrElse and OnError are generic enough.
-        //member _.Race(effA : FIO<'ErrorA, 'ResultA>) = () // return the result of whichever effect completes first
         //member _.Try(contError : 'Error -> FIO<'ErrorA, 'ResultA>, contSuccess : 'Result -> FIO<'ErrorB, 'ResultB>) = () // continuation for error and success, will be executed depending on the current effects (Eff) result (i.e. error or result).
         member _.IsCompleted() = task.IsCompleted
         member _.IsCompletedSuccessfully() = task.IsCompletedSuccessfully
@@ -36,6 +34,8 @@ module FIO =
         abstract VisitSequence<'FIOResult, 'Error, 'Result>                  : Sequence<'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result> 
         abstract VisitOrElse<'Error, 'Result>                                : OrElse<'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitOnError<'FIOError, 'Error, 'Result>                    : OnError<'FIOError, 'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitRace<'Error, 'Result>                                  : Race<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitAttempt<'FIOError, 'FIOResult, 'Error, 'Result>        : Attempt<'FIOError, 'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitSucceed<'Error, 'Result>                               : Succeed<'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitFail<'Error, 'Result>                                  : Fail<'Error, 'Result> -> Try<'Error, 'Result>
 
@@ -50,7 +50,7 @@ module FIO =
 
     and Output<'Error, 'Msg>
             (msg : 'Msg,
-            chan : Channel<'Msg>) =
+             chan : Channel<'Msg>) =
         inherit FIO<'Error, unit>()
         member internal _.Msg = msg
         member internal _.Chan = chan
@@ -59,7 +59,7 @@ module FIO =
 
     and Concurrent<'FiberError, 'FiberResult, 'Error, 'Result>
             (eff : FIO<'FiberError, 'FiberResult>,
-            cont : Fiber<'FiberError, 'FiberResult> -> FIO<'Error, 'Result>) =
+             cont : Fiber<'FiberError, 'FiberResult> -> FIO<'Error, 'Result>) =
         inherit FIO<'Error, 'Result>()
         member internal _.Eff = eff
         member internal _.Cont = cont
@@ -68,7 +68,7 @@ module FIO =
 
     and Await<'FiberError, 'FiberResult, 'Error, 'Result>
             (fiber : Fiber<'FiberError, 'FiberResult>,
-              cont : Try<'FiberError, 'FiberResult> -> FIO<'Error, 'Result>) =
+             cont : Try<'FiberError, 'FiberResult> -> FIO<'Error, 'Result>) =
         inherit FIO<'Error, 'Result>()
         member internal _.Fiber = fiber
         member internal _.Cont = cont
@@ -77,7 +77,7 @@ module FIO =
 
     and Sequence<'FIOResult, 'Error, 'Result>
             (eff : FIO<'Error, 'FIOResult>,
-            cont : 'FIOResult -> FIO<'Error, 'Result>) =
+             cont : 'FIOResult -> FIO<'Error, 'Result>) =
         inherit FIO<'Error, 'Result>()
         member internal _.Eff = eff
         member internal _.Cont = cont
@@ -86,21 +86,41 @@ module FIO =
 
     and OrElse<'Error, 'Result>
             (eff : FIO<'Error, 'Result>,
-         elseEff : FIO<'Error, 'Result>) =
-         inherit FIO<'Error, 'Result>()
-         member internal _.Eff = eff
-         member internal _.ElseEff = elseEff
-         override this.Accept<'Error, 'Result>(visitor) =
+             elseEff : FIO<'Error, 'Result>) =
+        inherit FIO<'Error, 'Result>()
+        member internal _.Eff = eff
+        member internal _.ElseEff = elseEff
+        override this.Accept<'Error, 'Result>(visitor) =
             visitor.VisitOrElse<'Error, 'Result>(this)
 
     and OnError<'FIOError, 'Error, 'Result>
             (eff : FIO<'FIOError, 'Result>,
-            cont : 'FIOError -> FIO<'Error, 'Result>) =
+             cont : 'FIOError -> FIO<'Error, 'Result>) =
         inherit FIO<'Error, 'Result>()
         member internal _.Eff = eff
         member internal _.Cont = cont
         override this.Accept<'Error, 'Result>(visitor) =
             visitor.VisitOnError<'FIOError, 'Error, 'Result>(this)
+
+    and Race<'Error, 'Result>
+            (effA : FIO<'Error, 'Result>,
+             effB : FIO<'Error, 'Result>) =
+        inherit FIO<'Error, 'Result>()
+        member internal _.EffA = effA
+        member internal _.EffB = effB
+        override this.Accept<'Error, 'Result>(visitor) =
+            visitor.VisitRace<'Error, 'Result>(this)
+
+    and Attempt<'FIOError, 'FIOResult, 'Error, 'Result>
+            (eff : FIO<'FIOError, 'FIOResult>,
+             contSuccess : 'FIOResult -> FIO<'Error, 'Result>,
+             contError : 'FIOError -> FIO<'Error, 'Result>) =
+        inherit FIO<'Error, 'Result>()
+        member internal _.Eff = eff
+        member internal _.ContSuccess = contSuccess
+        member internal _.ContError = contError
+        override this.Accept<'Error, 'Result>(visitor) =
+            visitor.VisitAttempt<'FIOError, 'FIOResult, 'Error, 'Result>(this)
 
     and Succeed<'Error, 'Result>(value : 'Result) =
         inherit FIO<'Error, 'Result>()
@@ -125,12 +145,12 @@ module FIO =
 
     let Parallel<'ErrorA, 'ResultA, 'ErrorB, 'ResultB, 'ErrorC, 'ResultC>
         (effA : FIO<'ErrorA, 'ResultA>,
-         effB : FIO<'ErrorB, 'ResultB>) =
+            effB : FIO<'ErrorB, 'ResultB>) =
         Concurrent(effA, fun fiberA ->
             Concurrent(effB, fun fiberB ->
                 Await(fiberA, fun resA ->
                     Await(fiberB, fun resB -> 
                         Succeed ((resA, resB))))))
 
-    let End() : Succeed<obj, obj> =
+    let End() : Succeed<'Error, unit> =
         Succeed ()

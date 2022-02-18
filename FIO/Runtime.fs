@@ -21,39 +21,70 @@ module Runtime =
              eff.Accept({ 
                  new FIOVisitor with
                      member _.VisitInput<'Error, 'Result>(input : Input<'Error, 'Result>) =
-                         Success <| input.Chan.Receive()
+                        Success <| input.Chan.Receive()
+
                      member _.VisitOutput<'Error, 'Msg>(output : Output<'Error, 'Msg>) =
-                         output.Chan.Send output.Msg
-                         Success ()
+                        output.Chan.Send output.Msg
+                        Success ()
+
                      member _.VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result>(con : Concurrent<'FiberError, 'FiberResult, 'Error, 'Result>) = 
-                         let fiber = new Fiber<'FiberError, 'FiberResult>(con.Eff, Naive.Interpret)
-                         Naive.Interpret <| con.Cont fiber
+                        let fiber = new Fiber<'FiberError, 'FiberResult>(con.Eff, Naive.Interpret)
+                        Naive.Interpret <| con.Cont fiber
+
                      member _.VisitAwait<'FiberError, 'FiberResult, 'Error, 'Result>(await : Await<'FiberError, 'FiberResult, 'Error, 'Result>) =
-                         Naive.Interpret <| (await.Cont <| await.Fiber.Await())
+                        Naive.Interpret <| (await.Cont <| await.Fiber.Await())
+
                      member _.VisitSequence<'FIOResult, 'Error, 'Result>(seq : Sequence<'FIOResult, 'Error, 'Result>) =
-                         let fiber = new Fiber<'Error, 'FIOResult>(seq.Eff, Naive.Interpret)
-                         let result = fiber.Await()
-                         match result with
-                         | Success res -> Naive.Interpret <| seq.Cont res
-                         | Error err   -> Error err
+                        let fiber = new Fiber<'Error, 'FIOResult>(seq.Eff, Naive.Interpret)
+                        let result = fiber.Await()
+                        match result with
+                        | Success res -> Naive.Interpret <| seq.Cont res
+                        | Error err   -> Error err
+
                      member _.VisitOrElse<'Error, 'Result>(orElse : OrElse<'Error, 'Result>) =
-                         let fiber = new Fiber<'Error, 'Result>(orElse.Eff, Naive.Interpret)
-                         let result = fiber.Await()
-                         match result with
-                         | Success res -> Success res
-                         | Error _     -> let fiber = new Fiber<'Error, 'Result>(orElse.ElseEff, Naive.Interpret)
-                                          fiber.Await()
-                     member _.VisitOnError<'FIOError, 'Error, 'Result>(catchAll : OnError<'FIOError, 'Error, 'Result>) =
-                        let fiber = new Fiber<'FIOError, 'Result>(catchAll.Eff, Naive.Interpret)
+                        let fiber = new Fiber<'Error, 'Result>(orElse.Eff, Naive.Interpret)
                         let result = fiber.Await()
                         match result with
                         | Success res -> Success res
-                        | Error err   -> let fiber = new Fiber<'Error, 'Result>(catchAll.Cont err, Naive.Interpret)
+                        | Error _     -> let fiber = new Fiber<'Error, 'Result>(orElse.ElseEff, Naive.Interpret)
                                          fiber.Await()
+
+                     member _.VisitOnError<'FIOError, 'Error, 'Result>(onError : OnError<'FIOError, 'Error, 'Result>) =
+                        let fiber = new Fiber<'FIOError, 'Result>(onError.Eff, Naive.Interpret)
+                        let result = fiber.Await()
+                        match result with
+                        | Success res -> Success res
+                        | Error err   -> let fiber = new Fiber<'Error, 'Result>(onError.Cont err, Naive.Interpret)
+                                         fiber.Await()
+
+                     member _.VisitRace<'Error, 'Result>(race : Race<'Error, 'Result>) =
+                        let fiberA = new Fiber<'Error, 'Result>(race.EffA, Naive.Interpret)
+                        let fiberB = new Fiber<'Error, 'Result>(race.EffB, Naive.Interpret)
+                        let rec loop() = 
+                            if fiberA.IsCompleted() then
+                                // cancel and dispose of fiber B?
+                                fiberA.Await()
+                            else if fiberB.IsCompleted() then
+                                // cancel and dispose of fiber A?
+                                fiberB.Await()
+                            else 
+                                loop()
+                        loop()
+
+                     member _.VisitAttempt<'FIOError, 'FIOResult, 'Error, 'Result>(attempt : Attempt<'FIOError, 'FIOResult, 'Error, 'Result>) =
+                        let fiber = new Fiber<'FIOError, 'FIOResult>(attempt.Eff, Naive.Interpret)
+                        let result = fiber.Await()
+                        match result with
+                        | Success res -> let fiber = new Fiber<'Error, 'Result>(attempt.ContSuccess res, Naive.Interpret)
+                                         fiber.Await()
+                        | Error err   -> let fiber = new Fiber<'Error, 'Result>(attempt.ContError err, Naive.Interpret)
+                                         fiber.Await()
+
                      member _.VisitSucceed<'Error, 'Result>(succ : Succeed<'Error, 'Result>) =
-                         Success succ.Value
+                        Success succ.Value
+
                      member _.VisitFail<'Error, 'Result>(fail : Fail<'Error, 'Result>) =
-                         Error fail.Error
+                        Error fail.Error
              })
 
     and Default<'Error, 'Result> = Naive<'Error, 'Result>
