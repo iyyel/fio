@@ -4,8 +4,7 @@
 
 module Program
 
-open FSharp.FIO.Runtime
-open FSharp.FIO.FIO
+open FSharp.FIO
 open Examples
 open System.Threading
 
@@ -14,7 +13,8 @@ ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 [<EntryPoint>]
 let main _ =
-    let fiber = Naive.Run <| Ring.processRing 10 2
+    let naive = new Runtime.Naive()
+    let fiber = naive.Run <| Ring.processRing 10 2
     printfn $"Result: %A{fiber.Await()}"
 
     0
