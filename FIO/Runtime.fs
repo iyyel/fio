@@ -23,9 +23,8 @@ module Runtime =
                     member _.VisitInput<'Error, 'Result>(input : Input<'Error, 'Result>) =
                         Success <| input.Chan.Receive()
 
-                    member _.VisitOutput<'Error, 'Msg>(output : Output<'Error, 'Msg>) =
-                        output.Chan.Send output.Msg
-                        Success ()
+                    member _.VisitAction<'Error, 'Result>(action : Action<'Error, 'Result>) =
+                        Success <| action.Func ()
 
                     member _.VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result>(con : Concurrent<'FiberError, 'FiberResult, 'Error, 'Result>) = 
                         let fiber = new Fiber<'FiberError, 'FiberResult>(con.Eff, this.Interpret)
