@@ -19,42 +19,37 @@ module Runtime =
 
         override this.Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
             eff.Accept({ 
-                new FIOVisitor with
+                new Visitor with
                     member _.VisitInput<'Error, 'Result>(input : Input<'Error, 'Result>) =
                         Success <| input.Chan.Receive()
 
                     member _.VisitAction<'Error, 'Result>(action : Action<'Error, 'Result>) =
                         Success <| action.Func ()
 
-                    member _.VisitConcurrent<'FiberError, 'FiberResult, 'Error, 'Result>(con : Concurrent<'FiberError, 'FiberResult, 'Error, 'Result>) = 
-                        let fiber = new Fiber<'FiberError, 'FiberResult>(con.Eff, this.Interpret)
+                    member _.VisitConcurrent<'FIOError, 'FIOResult, 'Error, 'Result>(con : Concurrent<'FIOError, 'FIOResult, 'Error, 'Result>) = 
+                        let fiber = new Fiber<'FIOError, 'FIOResult>(con.Eff, this.Interpret)
                         this.Interpret <| con.Cont fiber
 
-                    member _.VisitAwait<'FiberError, 'FiberResult, 'Error, 'Result>(await : Await<'FiberError, 'FiberResult, 'Error, 'Result>) =
+                    member _.VisitAwait<'FIOError, 'FIOResult, 'Error, 'Result>(await : Await<'FIOError, 'FIOResult, 'Error, 'Result>) =
                         this.Interpret <| (await.Cont <| await.Fiber.Await())
 
                     member _.VisitSequence<'FIOResult, 'Error, 'Result>(seq : Sequence<'FIOResult, 'Error, 'Result>) =
-                        let fiber = new Fiber<'Error, 'FIOResult>(seq.Eff, this.Interpret)
-                        let result = fiber.Await()
+                        let result = this.Interpret <| seq.Eff
                         match result with
                         | Success res -> this.Interpret <| seq.Cont res
                         | Error error -> Error error
 
                     member _.VisitOrElse<'Error, 'Result>(orElse : OrElse<'Error, 'Result>) =
-                        let fiber = new Fiber<'Error, 'Result>(orElse.Eff, this.Interpret)
-                        let result = fiber.Await()
+                        let result = this.Interpret <| orElse.Eff
                         match result with
                         | Success res -> Success res
-                        | Error _     -> let fiber = new Fiber<'Error, 'Result>(orElse.ElseEff, this.Interpret)
-                                         fiber.Await()
+                        | Error _     -> this.Interpret <| orElse.ElseEff
 
                     member _.VisitOnError<'FIOError, 'Error, 'Result>(onError : OnError<'FIOError, 'Error, 'Result>) =
-                        let fiber = new Fiber<'FIOError, 'Result>(onError.Eff, this.Interpret)
-                        let result = fiber.Await()
+                        let result = this.Interpret <| onError.Eff
                         match result with
                         | Success res -> Success res
-                        | Error error -> let fiber = new Fiber<'Error, 'Result>(onError.Cont error, this.Interpret)
-                                         fiber.Await()
+                        | Error error -> this.Interpret <| onError.Cont error
 
                     member _.VisitRace<'Error, 'Result>(race : Race<'Error, 'Result>) =
                         let fiberA = new Fiber<'Error, 'Result>(race.EffA, this.Interpret)
@@ -71,13 +66,10 @@ module Runtime =
                         loop()
 
                     member _.VisitAttempt<'FIOError, 'FIOResult, 'Error, 'Result>(attempt : Attempt<'FIOError, 'FIOResult, 'Error, 'Result>) =
-                        let fiber = new Fiber<'FIOError, 'FIOResult>(attempt.Eff, this.Interpret)
-                        let result = fiber.Await()
+                        let result = this.Interpret <| attempt.Eff
                         match result with
-                        | Success res -> let fiber = new Fiber<'Error, 'Result>(attempt.ContSuccess res, this.Interpret)
-                                         fiber.Await()
-                        | Error error -> let fiber = new Fiber<'Error, 'Result>(attempt.ContError error, this.Interpret)
-                                         fiber.Await()
+                        | Success res -> this.Interpret <| attempt.ContSuccess res
+                        | Error error -> this.Interpret <| attempt.ContError error
 
                     member _.VisitSucceed<'Error, 'Result>(succ : Succeed<'Error, 'Result>) =
                         Success succ.Result
