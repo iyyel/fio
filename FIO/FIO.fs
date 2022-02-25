@@ -22,23 +22,39 @@ module FIO =
             (eff : FIO<'Error, 'Result>,
              interpret : FIO<'Error, 'Result> -> Try<'Error, 'Result>) =
         let task = Task.Factory.StartNew(fun () -> interpret eff)
-        member _.Await() = task.Result
-        member _.IsCompleted() = task.IsCompleted
-        member _.IsCompletedSuccessfully() = task.IsCompletedSuccessfully
-        member _.IsFaulted() = task.IsFaulted
+
+        member _.Await() = 
+            task.Result
+
+        member _.IsCompleted() =
+            task.IsCompleted
+
+        member _.IsCompletedSuccessfully() =
+            task.IsCompletedSuccessfully
+
+        member _.IsFaulted() =
+            task.IsFaulted
+
+        member internal _.Task() =
+            task
+
+        member internal _.Race(fiber : Fiber<'Error, 'Result>) = 
+            let tasks = [task; fiber.Task()]
+            let task = Task.WhenAny(tasks)
+            task.Result.Result
 
     and Visitor =
-        abstract VisitInput<'Error, 'Result>                                 : Input<'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitAction<'Error, 'Result>                                : Action<'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitConcurrent<'FIOError, 'FIOResult, 'Error, 'Result>     : Concurrent<'FIOError, 'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitAwait<'FIOError, 'FIOResult, 'Error, 'Result>          : Await<'FIOError, 'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitSequence<'FIOResult, 'Error, 'Result>                  : Sequence<'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitOrElse<'Error, 'Result>                                : OrElse<'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitOnError<'FIOError, 'Error, 'Result>                    : OnError<'FIOError, 'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitRace<'Error, 'Result>                                  : Race<'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitAttempt<'FIOError, 'FIOResult, 'Error, 'Result>        : Attempt<'FIOError, 'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitSucceed<'Error, 'Result>                               : Succeed<'Error, 'Result> -> Try<'Error, 'Result>
-        abstract VisitFail<'Error, 'Result>                                  : Fail<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitInput<'Error, 'Result>                             : Input<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitAction<'Error, 'Result>                            : Action<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitConcurrent<'FIOError, 'FIOResult, 'Error, 'Result> : Concurrent<'FIOError, 'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitAwait<'FIOError, 'FIOResult, 'Error, 'Result>      : Await<'FIOError, 'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitSequence<'FIOResult, 'Error, 'Result>              : Sequence<'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitOrElse<'Error, 'Result>                            : OrElse<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitOnError<'FIOError, 'Error, 'Result>                : OnError<'FIOError, 'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitRace<'Error, 'Result>                              : Race<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitAttempt<'FIOError, 'FIOResult, 'Error, 'Result>    : Attempt<'FIOError, 'FIOResult, 'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitSucceed<'Error, 'Result>                           : Succeed<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract VisitFail<'Error, 'Result>                              : Fail<'Error, 'Result> -> Try<'Error, 'Result>
 
     and [<AbstractClass>] FIO<'Error, 'Result>() =
         abstract Accept<'Error, 'Result> : Visitor -> Try<'Error, 'Result>

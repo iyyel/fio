@@ -228,14 +228,14 @@ module FSharpRing =
 
         let rec createProcessRing procs m first =
             match procs with
-            | pa::pb::[] -> let task1 = Tasks.Task.Factory.StartNew(fun () -> createProcess pa.ChanRecv pa.ChanSend pa.Name first m)
-                            let task2 = Tasks.Task.Factory.StartNew(fun () -> createProcess pb.ChanRecv pb.ChanSend pb.Name false m)
-                            task1.Wait()
-                            task2.Wait()
-            | p::ps      -> let task = Tasks.Task.Factory.StartNew(fun () -> createProcess p.ChanRecv p.ChanSend p.Name first m)
-                            createProcessRing ps m false
-                            task.Wait()
-            | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
+            | pa::[pb] -> let task1 = Tasks.Task.Factory.StartNew(fun () -> createProcess pa.ChanRecv pa.ChanSend pa.Name first m)
+                          let task2 = Tasks.Task.Factory.StartNew(fun () -> createProcess pb.ChanRecv pb.ChanSend pb.Name false m)
+                          task1.Wait()
+                          task2.Wait()
+            | p::ps    -> let task = Tasks.Task.Factory.StartNew(fun () -> createProcess p.ChanRecv p.ChanSend p.Name first m)
+                          createProcessRing ps m false
+                          task.Wait()
+            | _        -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
 
         let injectMessage p startMsg =
             p.ChanRecv.Send startMsg

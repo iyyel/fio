@@ -3,12 +3,10 @@
 // All rights reserved.
 
 open FsCheck
-open FSharp.FIO
+open FSharp.FIO.Runtime
 open FSharp.FIO.FIO
 
-let runtime = new Runtime.Naive()
-
-let succeedIsAlwaysTheSame (result : int) = (runtime.Run <| Succeed result).Await() = Success result
+let succeedIsAlwaysTheSame (result : int) = (Default.Run <| Succeed result).Await() = Success result
 
 [<EntryPoint>]
 let main _ =
