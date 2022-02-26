@@ -5,6 +5,7 @@
 namespace FSharp.FIO
 
 open FSharp.FIO.FIO
+open System.Threading.Tasks
 
 module Runtime =
 
@@ -54,7 +55,8 @@ module Runtime =
                     member _.VisitRace<'Error, 'Result>(race : Race<'Error, 'Result>) =
                         let fiberA = new Fiber<'Error, 'Result>(race.EffA, Naive.Interpret)
                         let fiberB = new Fiber<'Error, 'Result>(race.EffB, Naive.Interpret)
-                        fiberA.Race(fiberB)
+                        let task = Task.WhenAny([fiberA.Task(); fiberB.Task()])
+                        task.Result.Result
 
                     member _.VisitAttempt<'FIOError, 'FIOResult, 'Error, 'Result>
                             (attempt : Attempt<'FIOError, 'FIOResult, 'Error, 'Result>) =

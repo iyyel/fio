@@ -38,11 +38,6 @@ module FIO =
         member internal _.Task() =
             task
 
-        member internal _.Race(fiber : Fiber<'Error, 'Result>) = 
-            let tasks = [task; fiber.Task()]
-            let task = Task.WhenAny(tasks)
-            task.Result.Result
-
     and Visitor =
         abstract VisitInput<'Error, 'Result>                             : Input<'Error, 'Result> -> Try<'Error, 'Result>
         abstract VisitAction<'Error, 'Result>                            : Action<'Error, 'Result> -> Try<'Error, 'Result>
