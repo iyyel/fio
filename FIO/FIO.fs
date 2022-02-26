@@ -11,8 +11,9 @@ module FIO =
 
     type Channel<'Msg>() =
         let bc = new BlockingCollection<'Msg>()
-        member _.Send msg = bc.Add msg
+        member _.Send(msg) = bc.Add msg
         member _.Receive() = bc.Take()
+        member _.Size() = bc.Count
 
     type Try<'Error, 'Result> =
         | Success of 'Result
@@ -144,7 +145,7 @@ module FIO =
             visitor.VisitFail(this)
 
     let Send<'Error, 'Result>(result : 'Result, chan : Channel<'Result>) =
-        Action<'Error, unit>(fun () -> chan.Send result)
+        Action<'Error, unit>(fun () -> chan.Send(result))
 
     let Receive<'Error, 'Result>(chan : Channel<'Result>) =
         Input<'Error, 'Result>(chan)
