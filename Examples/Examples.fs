@@ -7,6 +7,11 @@ namespace Examples
 open FSharp.FIO.FIO
 open System.Threading
 
+module Utils =
+    
+    let createChannels<'Msg> n =
+        [for _ in 1..n -> Channel<'Msg>()]
+
 module Pingpong =
 
     let intPing chan =
@@ -127,32 +132,55 @@ module Ring =
           ChanRecv: Channel<int>
         }
 
-    let private createProcess chanRecv chanSend name first m =
+    let private createFIOProcess p first m =
         let rec create n =
             match n with
-            | 1 when first -> Receive(chanRecv) >>= fun x ->
-                              printfn $"%s{name} received: %A{x}"
+            | 1 when first -> Receive(p.ChanRecv) >>= fun x ->
+                              printfn $"%s{p.Name} received: %A{x}"
                               let y = x + 10
-                              Send(y, chanSend) >>= fun _ ->
-                              printfn $"%s{name} sent: %A{y}"
-                              Receive(chanRecv) >>= fun z -> 
-                              printfn $"%s{name} received: %A{z}"
+                              Send(y, p.ChanSend) >>= fun _ ->
+                              printfn $"%s{p.Name} sent: %A{y}"
+                              Receive(p.ChanRecv) >>= fun z -> 
+                              printfn $"%s{p.Name} received: %A{z}"
                               End()
-            | 1            -> Receive(chanRecv) >>= fun x ->
-                              printfn $"%s{name} received: %A{x}"
+            | 1            -> Receive(p.ChanRecv) >>= fun x ->
+                              printfn $"%s{p.Name} received: %A{x}"
                               let y = x + 10
-                              Send(y, chanSend) >>= fun _ ->
-                              printfn $"%s{name} sent: %A{y}"
+                              Send(y, p.ChanSend) >>= fun _ ->
+                              printfn $"%s{p.Name} sent: %A{y}"
                               End()
-            | _            -> Receive(chanRecv) >>= fun x ->
-                              printfn $"%s{name} received: %A{x}"
+            | _            -> Receive(p.ChanRecv) >>= fun x ->
+                              printfn $"%s{p.Name} received: %A{x}"
                               let y = x + 10
-                              Send(y, chanSend) >>= fun _ ->
-                              printfn $"%s{name} sent: %A{y}"
+                              Send(y, p.ChanSend) >>= fun _ ->
+                              printfn $"%s{p.Name} sent: %A{y}"
                               create (n - 1)
         create m
 
-    let processRing processCount roundCount =
+    let private createFSProcess p first m =
+        let rec create n =
+            match n with
+            | 1 when first -> let x = p.ChanRecv.Receive()
+                              printfn $"%s{p.Name} received: %A{x}"
+                              let y = x + 10
+                              p.ChanSend.Send y
+                              printfn $"%s{p.Name} sent: %A{y}"
+                              let z = p.ChanRecv.Receive()
+                              printfn $"%s{p.Name} received: %A{z}"
+            | 1            -> let x = p.ChanRecv.Receive()
+                              printfn $"%s{p.Name} received: %A{x}"
+                              let y = x + 10
+                              p.ChanSend.Send y
+                              printfn $"%s{p.Name} sent: %A{y}"
+            | _            -> let recv = p.ChanRecv.Receive()
+                              printfn $"%s{p.Name} received: %A{recv}"
+                              let value = recv + 10
+                              p.ChanSend.Send value
+                              printfn $"%s{p.Name} sent: %A{value}"
+                              create (n - 1)
+        create m
+
+    let fioBenchmark processCount roundCount =
         let getRecvChan index (chans : Channel<int> list) =
             match index with
             | i when i - 1 < 0 -> chans.Item (List.length chans - 1)
@@ -166,16 +194,16 @@ module Ring =
 
         let rec createProcessRing procs roundCount first =
             match procs with
-            | pa::pb::[] -> Parallel(createProcess pa.ChanRecv pa.ChanSend pa.Name first roundCount, createProcess pb.ChanRecv pb.ChanSend pb.Name false roundCount)
-                            >>= fun _ -> End()
-            | p::ps      -> Parallel(createProcess p.ChanRecv p.ChanSend p.Name first roundCount, createProcessRing ps roundCount false)
-                            >>= fun _ -> End()
-            | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{roundCount}"
+            | pa::[pb] -> Parallel(createFIOProcess pa first roundCount, createFIOProcess pb false roundCount)
+                          >>= fun _ -> End()
+            | p::ps    -> Parallel(createFIOProcess p first roundCount, createProcessRing ps roundCount false)
+                          >>= fun _ -> End()
+            | _        -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{roundCount}"
 
         let injectMessage p startMsg =
             p.ChanRecv.Send startMsg
 
-        let chans = [for _ in 1..processCount -> Channel<int>()]
+        let chans = Utils.createChannels<int> processCount
 
         let procs = createProcesses chans chans 0 []
 
@@ -183,38 +211,7 @@ module Ring =
 
         createProcessRing procs roundCount true
 
-module FSharpRing = 
-
-    type private Process =
-        { Name: string
-          ChanSend: Channel<int>
-          ChanRecv: Channel<int>
-        }
-
-    let private createProcess (chanRecv : Channel<int>) (chanSend : Channel<int>) name first m =
-        let rec create n =
-            match n with
-            | 1 when first -> let x = chanRecv.Receive()
-                              printfn $"%s{name} received: %A{x}"
-                              let y = x + 10
-                              chanSend.Send y
-                              printfn $"%s{name} sent: %A{y}"
-                              let z = chanRecv.Receive()
-                              printfn $"%s{name} received: %A{z}"
-            | 1            -> let x = chanRecv.Receive()
-                              printfn $"%s{name} received: %A{x}"
-                              let y = x + 10
-                              chanSend.Send y
-                              printfn $"%s{name} sent: %A{y}"
-            | _            -> let recv = chanRecv.Receive()
-                              printfn $"%s{name} received: %A{recv}"
-                              let value = recv + 10
-                              chanSend.Send value
-                              printfn $"%s{name} sent: %A{value}"
-                              create (n - 1)
-        create m
-
-    let processRing processCount roundCount =
+    let fsBenchmark processCount roundCount =
         let getRecvChan index (chans : Channel<int> list) =
             match index with
             | i when i - 1 < 0 -> chans.Item (List.length chans - 1)
@@ -228,11 +225,11 @@ module FSharpRing =
 
         let rec createProcessRing procs m first =
             match procs with
-            | pa::[pb] -> let task1 = Tasks.Task.Factory.StartNew(fun () -> createProcess pa.ChanRecv pa.ChanSend pa.Name first m)
-                          let task2 = Tasks.Task.Factory.StartNew(fun () -> createProcess pb.ChanRecv pb.ChanSend pb.Name false m)
+            | pa::[pb] -> let task1 = Tasks.Task.Factory.StartNew(fun () -> createFSProcess pa first m)
+                          let task2 = Tasks.Task.Factory.StartNew(fun () -> createFSProcess pb false m)
                           task1.Wait()
                           task2.Wait()
-            | p::ps    -> let task = Tasks.Task.Factory.StartNew(fun () -> createProcess p.ChanRecv p.ChanSend p.Name first m)
+            | p::ps    -> let task = Tasks.Task.Factory.StartNew(fun () -> createFSProcess p first m)
                           createProcessRing ps m false
                           task.Wait()
             | _        -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
@@ -240,10 +237,92 @@ module FSharpRing =
         let injectMessage p startMsg =
             p.ChanRecv.Send startMsg
 
-        let chans = [for _ in 1..processCount -> Channel<int>()]
+        let chans = Utils.createChannels<int> processCount
 
         let processes = createProcesses chans chans 0 []
 
         injectMessage (List.item 0 processes) 0
 
         createProcessRing processes roundCount true
+
+// https://dl.acm.org/doi/10.1145/2364489.2364495
+// Big benchmark
+module Big =
+    
+    type private Process =
+        { Name: string
+          Chans: Channel<int> list
+        }
+
+    let private createProcess proc =
+        let rec createRecvResp proc chans =
+            match chans with
+            | []    -> createRecvResp proc proc.Chans
+            | c::cs -> Receive(c) >>= fun x ->
+                       printfn $"%s{proc.Name} received: %A{x}"
+                       let y = x + 10
+                       Send(y, c) >>= fun _ ->
+                       printfn $"%s{proc.Name} sent: %A{y}"
+                       createRecvResp proc cs
+        and createSend proc chans (x : int) =
+            match chans with
+            | []    -> failwith "createSend: Empty list not supported!"
+            | c::[] -> Send(x, c) >>= fun _ ->
+                       printfn $"%s{proc.Name} sent: %A{x}"
+                       createRecvResp proc proc.Chans
+            | c::cs -> Send(x, c) >>= fun _ ->
+                       printfn $"%s{proc.Name} sent: %A{x}"
+                       createSend proc cs x
+        createSend proc proc.Chans 0
+
+    let benchmark processCount =
+        let rec createProcessNames processCount acc =
+            match processCount with
+            | 0 -> acc
+            | n -> createProcessNames (n - 1) ($"p{n - 1}" :: acc)
+
+        let rec createChanMap processNames (chanMap : Map<string, Channel<int>>) =
+            match processNames with
+            | []    -> chanMap
+            | p::ps -> let rec populateMap ps (chanMap : Map<string, Channel<int>>) =
+                           match ps with
+                           | []      -> chanMap
+                           | p'::ps' -> let chanName = p + p'
+                                        let newMap = chanMap.Add(chanName, Channel<int>())
+                                        populateMap ps' newMap
+                       let updatedChanMap = populateMap ps chanMap
+                       createChanMap ps updatedChanMap
+
+        let getProcessChans (name : string) (chanMap : Map<string, Channel<int>>) =
+            let rec loop (keys : string list) (acc : Channel<int> list) = 
+                match keys with
+                | []    -> acc
+                | k::ks -> if k.Contains(name) then
+                               match chanMap.TryFind k with
+                               | Some chan -> loop ks (chan :: acc) 
+                               | _         -> loop ks acc
+                           else 
+                               loop ks acc
+            loop (chanMap.Keys |> Seq.cast |> List.ofSeq) []
+
+        let rec createProcesses processCount chanMap acc =
+            match processCount with
+            | 0     -> acc
+            | index -> let name = $"p{index - 1}"
+                       let processChans = getProcessChans name chanMap
+                       let proc = {Name = name; Chans = processChans;}
+                       createProcesses (index - 1) chanMap (proc :: acc)
+
+        let rec createBig procs =
+            match procs with
+            | pa::[pb] -> Parallel(createProcess pa, createProcess pb) >>= fun _ -> End()
+            | p::ps    -> Parallel(createProcess p, createBig ps) >>= fun _ -> End()
+            | _        -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %A{processCount}"
+  
+        let processNames = createProcessNames processCount []
+
+        let chanMap = createChanMap processNames Map.empty
+        
+        let processes = createProcesses processCount chanMap []
+        
+        createBig processes
