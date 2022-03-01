@@ -6,7 +6,6 @@ module Program
 
 open FSharp.FIO.Runtime
 open FSharp.FIO.FIO
-open Benchmarks
 open System.Threading
 open System.Diagnostics
 
@@ -24,7 +23,7 @@ let timeOperation<'T> (func: unit -> 'T): TimedOperation<'T> =
 
 [<EntryPoint>]
 let main _ =
-    let fiber = Naive.Run <| Big.benchmark 500
+    let fiber = Naive.Run <| Benchmarks.Bang.Run 100 100
     printfn $"Result: %A{fiber.Await()}"
 
     0
