@@ -4,26 +4,24 @@
 
 module Program
 
+open Benchmarks.Benchmark
 open FSharp.FIO.Runtime
 open FSharp.FIO.FIO
 open System.Threading
-open System.Diagnostics
 
 ThreadPool.SetMaxThreads(32767, 32767) |> ignore
 ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
-type TimedOperation<'T> = {millisecondsTaken : int64; returnedValue : 'T}
-
-let timeOperation<'T> (func: unit -> 'T): TimedOperation<'T> =
-    let timer = Stopwatch()
-    timer.Start()
-    let returnValue = func()
-    timer.Stop()
-    {millisecondsTaken = timer.ElapsedMilliseconds; returnedValue = returnValue}
-
 [<EntryPoint>]
 let main _ =
-    let fiber = Naive.Run <| Benchmarks.Bang.Run 100 100
-    printfn $"Result: %A{fiber.Await()}"
 
+    let benchmarkConfig = {
+        Pingpong =   {RoundCount   = 100};
+        Threadring = {ProcessCount = 100;   RoundCount = 2};
+        Big =        {ProcessCount = 100;   RoundCount = 2};
+        Bang =       {SenderCount  = 100; MessageCount = 2};
+    }
+
+    Benchmarks.Benchmark.RunAll <| benchmarkConfig <| 100 <| Naive.Run
+    
     0

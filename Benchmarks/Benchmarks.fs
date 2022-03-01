@@ -5,55 +5,12 @@
 namespace Benchmarks
 
 open FSharp.FIO.FIO
-open System.Threading
+open System.Diagnostics
 
 // Pingpong benchmark
 // Measures: Message delivery overhead
 // Savina benchmark #1 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
 module Pingpong =
-
-    let ping chan =
-        let x = 0
-        Send(x, chan) >>= fun _ ->
-        printfn $"ping sent: %A{x}"
-        Receive(chan) >>= fun y ->
-        printfn $"ping received: %A{y}"
-        End()
-
-    let pong chan =
-        Receive(chan) >>= fun x ->
-        printfn $"pong received: %A{x}"
-        let y = x + 10
-        Send(y, chan) >>= fun _ ->
-        printfn $"pong sent: %A{y}"
-        End()
-
-    let rec pingInf chan =
-        let x = 0
-        Send(x, chan) >>= fun _ ->
-        printfn $"ping sent: %A{x}"
-        Receive(chan) >>= fun y ->
-        printfn $"ping received: %A{y}"
-        pingInf chan
-    
-    let rec pongInf chan =
-        Receive(chan) >>= fun x ->
-        printfn $"pong received: %A{x}"
-        let y = x + 10
-        Send(y, chan) >>= fun _ ->
-        printfn $"pong sent: %A{y}"
-        pongInf chan
-
-    let Run chan inf =
-        if inf then
-            Parallel(pingInf chan, pongInf chan) >>= fun _ -> End()
-        else
-            Parallel(ping chan, pong chan) >>= fun _ -> End()
-
-// ThreadRing benchmark
-// Measures: Message sending; Context switching between actors
-// Savina benchmark #5 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
-module ThreadRing = 
 
     type private Process =
         { Name: string
@@ -61,98 +18,98 @@ module ThreadRing =
           ChanRecv: Channel<int>
         }
 
-    let private createFIOProcess proc first roundCount =
+    let rec private createPingProcess proc msg roundCount =
+        let template fioEnd =
+            Send(msg, proc.ChanSend) >>= fun _ ->
+            printfn $"ping sent: %i{msg}"
+            Receive(proc.ChanRecv) >>= fun x ->
+            printfn $"ping received: %i{x}"
+            fioEnd
+        match roundCount with
+        | 1 -> template (End())
+        | _ -> template (createPingProcess proc msg (roundCount - 1))
+
+    let rec private createPongProcess proc roundCount =
+        let template fioEnd =
+            Receive(proc.ChanRecv) >>= fun x ->
+            printfn $"pong received: %i{x}"
+            let y = x + 10
+            Send(y, proc.ChanSend) >>= fun _ ->
+            printfn $"pong sent: %i{y}"
+            fioEnd
+        match roundCount with
+        | 1 -> template (End())
+        | _ -> template (createPongProcess proc (roundCount - 1))
+
+    let Run roundCount =
+        let pingSendChan = Channel<int>()
+        let pongSendChan = Channel<int>()
+        let pingProc = {Name = "p0"; ChanSend = pingSendChan ; ChanRecv = pongSendChan}
+        let pongProc = {Name = "p1"; ChanSend = pongSendChan; ChanRecv = pingSendChan}
+        Parallel(createPingProcess pingProc 0 roundCount, createPongProcess pongProc roundCount) >>= fun _ -> End()
+
+// ThreadRing benchmark
+// Measures: Message sending; Context switching between actors
+// Savina benchmark #5 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
+module ThreadRing =
+
+    type private Process =
+        { Name: string
+          ChanSend: Channel<int>
+          ChanRecv: Channel<int>
+        }
+
+    let private createSendProcess proc roundCount =
+        let template proc fioEnd =
+            let x = 0
+            Send(x, proc.ChanSend) >>= fun _ ->
+            printfn $"%s{proc.Name} sent: %i{x}"
+            Receive(proc.ChanRecv) >>= fun y ->
+            printfn $"%s{proc.Name} received: %i{y}"
+            fioEnd
         let rec create roundCount =
             match roundCount with
-            | 1 when first -> Receive(proc.ChanRecv) >>= fun x ->
-                              printfn $"%s{proc.Name} received: %A{x}"
-                              let y = x + 10
-                              Send(y, proc.ChanSend) >>= fun _ ->
-                              printfn $"%s{proc.Name} sent: %A{y}"
-                              Receive(proc.ChanRecv) >>= fun z -> 
-                              printfn $"%s{proc.Name} received: %A{z}"
-                              End()
-            | 1            -> Receive(proc.ChanRecv) >>= fun x ->
-                              printfn $"%s{proc.Name} received: %A{x}"
-                              let y = x + 10
-                              Send(y, proc.ChanSend) >>= fun _ ->
-                              printfn $"%s{proc.Name} sent: %A{y}"
-                              End()
-            | _            -> Receive(proc.ChanRecv) >>= fun x ->
-                              printfn $"%s{proc.Name} received: %A{x}"
-                              let y = x + 10
-                              Send(y, proc.ChanSend) >>= fun _ ->
-                              printfn $"%s{proc.Name} sent: %A{y}"
-                              create (roundCount - 1)
+            | 1 -> template proc (End())
+            | _ -> template proc (create (roundCount - 1))
         create roundCount
 
-    let private createFSProcess proc first roundCount =
+    let private createRecvProcess proc roundCount =
+        let template proc fioEnd =
+            Receive(proc.ChanRecv) >>= fun x ->
+            printfn $"%s{proc.Name} received: %i{x}"
+            let y = x + 10
+            Send(y, proc.ChanSend) >>= fun _ ->
+            printfn $"%s{proc.Name} sent: %i{y}"
+            fioEnd
         let rec create roundCount =
             match roundCount with
-            | 1 when first -> let x = proc.ChanRecv.Receive()
-                              printfn $"%s{proc.Name} received: %A{x}"
-                              let y = x + 10
-                              proc.ChanSend.Send y
-                              printfn $"%s{proc.Name} sent: %A{y}"
-                              let z = proc.ChanRecv.Receive()
-                              printfn $"%s{proc.Name} received: %A{z}"
-            | 1            -> let x = proc.ChanRecv.Receive()
-                              printfn $"%s{proc.Name} received: %A{x}"
-                              let y = x + 10
-                              proc.ChanSend.Send y
-                              printfn $"%s{proc.Name} sent: %A{y}"
-            | _            -> let recv = proc.ChanRecv.Receive()
-                              printfn $"%s{proc.Name} received: %A{recv}"
-                              let value = recv + 10
-                              proc.ChanSend.Send value
-                              printfn $"%s{proc.Name} sent: %A{value}"
-                              create (roundCount - 1)
+            | 1 -> template proc (End())
+            | _ -> template proc (create (roundCount - 1))
         create roundCount
 
-    let private getRecvChan index (chans : Channel<int> list) =
-        match index with
-        | index when index - 1 < 0 -> chans.Item (List.length chans - 1)
-        | index                    -> chans.Item (index - 1)
+    let Run processCount roundCount =
+        let getRecvChan index (chans : Channel<int> list) =
+            match index with
+            | index when index - 1 < 0 -> chans.Item (List.length chans - 1)
+            | index                    -> chans.Item (index - 1)
 
-    let rec private createProcesses chans allChans index acc =
-        match chans with
-        | []           -> acc
-        | chan::chans' -> let proc = {Name = $"p{index}"; ChanSend = chan; ChanRecv = getRecvChan index allChans}
-                          createProcesses chans' allChans (index + 1) (acc @ [proc])
+        let rec createProcesses chans allChans index acc =
+            match chans with
+            | []           -> acc
+            | chan::chans' -> let proc = {Name = $"p{index}"; ChanSend = chan; ChanRecv = getRecvChan index allChans}
+                              createProcesses chans' allChans (index + 1) (proc :: acc)
 
-    let private injectMessage proc startMsg =
-        proc.ChanRecv.Send startMsg
-
-    let RunFIO processCount roundCount =
-        let rec createProcessRing procs roundCount first =
+        let rec createProcessRing procs roundCount =
             match procs with
-            | pa::[pb] -> Parallel(createFIOProcess pa first roundCount, createFIOProcess pb false roundCount)
+            | pa::[pb] -> Parallel(createRecvProcess pa roundCount, createSendProcess pb roundCount)
                           >>= fun _ -> End()
-            | p::ps    -> Parallel(createFIOProcess p first roundCount, createProcessRing ps roundCount false)
+            | p::ps    -> Parallel(createRecvProcess p roundCount, createProcessRing ps roundCount)
                           >>= fun _ -> End()
-            | _        -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{roundCount}"
+            | _        -> failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
         let procs = createProcesses chans chans 0 []
-        injectMessage (List.item 0 procs) 0
-        createProcessRing procs roundCount true
-
-    let RunFS processCount roundCount =
-        let rec createProcessRing procs m first =
-            match procs with
-            | pa::[pb] -> let task1 = Tasks.Task.Factory.StartNew(fun () -> createFSProcess pa first m)
-                          let task2 = Tasks.Task.Factory.StartNew(fun () -> createFSProcess pb false m)
-                          task1.Wait()
-                          task2.Wait()
-            | p::ps    -> let task = Tasks.Task.Factory.StartNew(fun () -> createFSProcess p first m)
-                          createProcessRing ps m false
-                          task.Wait()
-            | _        -> failwith $"createProcessRing failed! (at least 2 processes should exist) m = %A{m}"
-
-        let chans = [for _ in 1..processCount -> Channel<int>()]
-        let procs = createProcesses chans chans 0 []
-        injectMessage (List.item 0 procs) 0
-        createProcessRing procs roundCount true
+        createProcessRing procs roundCount
 
 // Big benchmark
 // Measures: Contention on mailbox; Many-to-Many message passing
@@ -175,7 +132,7 @@ module Big =
             match recvCount with
             | 1 -> Receive(proc.ChanRecvPong) >>= fun msg ->
                    match msg with
-                   | Pong msgValue -> printfn $"%s{proc.Name} received pong: %A{msgValue}"
+                   | Pong msgValue -> printfn $"%s{proc.Name} received pong: %i{msgValue}"
                                       match roundCount with
                                       | count when count <= 1 -> End()
                                       | count                 -> createSendPings proc 0 (count - 1)
@@ -184,17 +141,17 @@ module Big =
                                       | count                 -> createSendPings proc 0 (count - 1)
             | _ -> Receive(proc.ChanRecvPong) >>= fun msg ->
                    match msg with
-                   | Pong msgValue -> printfn $"%s{proc.Name} received pong: %A{msgValue}"
+                   | Pong msgValue -> printfn $"%s{proc.Name} received pong: %i{msgValue}"
                                       createRecvPongs proc (recvCount - 1) roundCount
                    | _             -> createRecvPongs proc (recvCount - 1) roundCount
         
         and createRecvPings proc recvCount roundCount =
             let template msgValue replyPongChan fioEnd =
-                printfn $"%s{proc.Name} received ping: %A{msgValue}"
+                printfn $"%s{proc.Name} received ping: %i{msgValue}"
                 let replyValue = msgValue + 1
                 let msgReply = Pong replyValue
                 Send(msgReply, replyPongChan) >>= fun _ ->
-                printfn $"%s{proc.Name} sent pong: %A{replyValue}"
+                printfn $"%s{proc.Name} sent pong: %i{replyValue}"
                 fioEnd
             let rec create recvCount = 
                 match recvCount with
@@ -212,9 +169,9 @@ module Big =
             let template chan fioEnd =
                 let msg = Ping (msgValue, proc.ChanRecvPong)
                 Send(msg, chan) >>= fun _ ->
-                printfn $"%s{proc.Name} sent ping: %A{msgValue}"
+                printfn $"%s{proc.Name} sent ping: %i{msgValue}"
                 fioEnd
-            let rec create chansSend =
+            let rec create (chansSend : Channel<Message> list) =
                 match chansSend with
                 | []          -> failwith "createSendPings: Empty list is not supported!"
                 | chan::[]    -> template chan (createRecvPings proc proc.ChansSend.Length roundCount)
@@ -252,7 +209,7 @@ module Big =
             match procs with
             | pa::[pb] -> Parallel(createProcess pa msgValue roundCount, createProcess pb (msgValue + 10) roundCount) >>= fun _ -> End()
             | p::ps    -> Parallel(createProcess p msgValue roundCount, createBig ps (msgValue + 10)) >>= fun _ -> End()
-            | _        -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %A{processCount}"
+            | _        -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
 
         let procs = createProcesses processCount
         createBig procs 0
@@ -271,10 +228,10 @@ module Bang =
         let rec create messageCount =
             match messageCount with
             | 1     -> Send(msg, proc.Chan) >>= fun _ ->
-                       printfn $"%s{proc.Name} sent: %A{msg}"
+                       printfn $"%s{proc.Name} sent: %i{msg}"
                        End()
             | count -> Send(msg, proc.Chan) >>= fun _ ->
-                       printfn $"%s{proc.Name} sent: %A{msg}"
+                       printfn $"%s{proc.Name} sent: %i{msg}"
                        create (count - 1)
         create messageCount
 
@@ -282,10 +239,10 @@ module Bang =
         let rec create messageCount =
             match messageCount with
             | 1     -> Receive(proc.Chan) >>= fun msg ->
-                       printfn $"%s{proc.Name} received: %A{msg}"
+                       printfn $"%s{proc.Name} received: %i{msg}"
                        End()
             | count -> Receive(proc.Chan) >>= fun msg ->
-                       printfn $"%s{proc.Name} received: %A{msg}"
+                       printfn $"%s{proc.Name} received: %i{msg}"
                        create (count - 1)
         create messageCount
             
@@ -300,8 +257,68 @@ module Bang =
             match sendProcs with
             | p::[] -> Parallel(createSendProcess p msg messageCount, createRecvProcess recvProc (senderCount * messageCount)) >>= fun _ -> End()
             | p::ps -> Parallel(createSendProcess p msg messageCount, createBang recvProc ps (msg + 10)) >>= fun _ -> End()
-            | _     -> failwith $"createBang failed! (at least 1 sending process should exist) senderCount = %A{senderCount}"
+            | _     -> failwith $"createBang failed! (at least 1 sending process should exist) senderCount = %i{senderCount}"
 
         let recvProc = {Name = "p0"; Chan = Channel<int>()}
         let sendProcs = createSendProcesses recvProc.Chan senderCount []
         createBang recvProc sendProcs 10
+
+module Benchmark =
+
+    type TimedOperation<'Result> = {millisecondsTaken : int64; returnedValue : 'Result}
+
+    let timeOperation<'Result> (func: unit -> 'Result): TimedOperation<'Result> =
+        let stopwatch = Stopwatch()
+        stopwatch.Start()
+        let returnValue = func()
+        stopwatch.Stop()
+        {millisecondsTaken = stopwatch.ElapsedMilliseconds; returnedValue = returnValue}
+
+    type PingpongConfig =
+        { RoundCount: int }
+    and ThreadRingConfig = 
+        { ProcessCount: int;
+          RoundCount: int
+        }
+    and BigConfig = 
+        { ProcessCount: int;
+          RoundCount: int
+        }
+    and BangConfig = 
+        { SenderCount: int;
+          MessageCount: int
+        }
+    and BenchmarkConfig =
+        { Pingpong: PingpongConfig
+          Threadring: ThreadRingConfig
+          Big: BigConfig
+          Bang: BangConfig
+        }
+        
+    let RunAll config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
+        let runBenchmarks benchmarks runCount =
+            let rec runOnce benchmarks acc =
+                match benchmarks with
+                | []            -> acc
+                | (name, b)::bs -> let time = (timeOperation (fun () -> (run b).Await()))
+                                   let result = (name, time.millisecondsTaken)
+                                   runOnce bs (acc @ [result])
+            let rec loop benchmarks runCount acc =
+                match runCount with
+                | 0     -> acc
+                | count -> let runResults = (count, runOnce benchmarks [])
+                           loop benchmarks (runCount - 1) (runResults :: acc)
+            loop benchmarks runCount []
+
+        let benchmarks = [("pingpong", Pingpong.Run config.Pingpong.RoundCount);
+                          ("threadring", ThreadRing.Run config.Threadring.ProcessCount config.Threadring.RoundCount);
+                          ("big", Big.Run config.Big.ProcessCount config.Big.RoundCount);
+                          ("bang", Bang.Run config.Bang.SenderCount config.Bang.MessageCount)]
+
+        let results = runBenchmarks benchmarks runCount
+        
+        for (runName, runResults) in results do
+            printfn $"############ Run %i{runName} ############"
+            for (benchmark, time) in runResults do
+                printfn $"    Benchmark: %s{benchmark}        Time: %i{time}    "
+        printfn ""
