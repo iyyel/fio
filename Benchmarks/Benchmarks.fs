@@ -19,23 +19,23 @@ module Pingpong =
         }
 
     let rec private createPingProcess proc msg roundCount =
-        let template fioEnd =
+        let template (fioEnd : int -> FIO<'Error, 'Result>) =
             Send(msg, proc.ChanSend) >>= fun _ ->
-            printfn $"ping sent: %i{msg}"
+            printfn $"%s{proc.Name} sent ping: %i{msg}"
             Receive(proc.ChanRecv) >>= fun x ->
-            printfn $"ping received: %i{x}"
-            fioEnd
+            printfn $"%s{proc.Name} received pong: %i{x}"
+            fioEnd x
         match roundCount with
-        | 1 -> template (End())
-        | _ -> template (createPingProcess proc msg (roundCount - 1))
+        | 1 -> template (fun _ -> End())
+        | _ -> template (fun msg -> createPingProcess proc msg (roundCount - 1))
 
     let rec private createPongProcess proc roundCount =
         let template fioEnd =
             Receive(proc.ChanRecv) >>= fun x ->
-            printfn $"pong received: %i{x}"
+            printfn $"%s{proc.Name} received ping: %i{x}"
             let y = x + 10
             Send(y, proc.ChanSend) >>= fun _ ->
-            printfn $"pong sent: %i{y}"
+            printfn $"%s{proc.Name} sent pong: %i{y}"
             fioEnd
         match roundCount with
         | 1 -> template (End())
@@ -191,7 +191,7 @@ module Big =
                                        ChansSend = []}
                            createRecvChanProcesses (count - 1) (acc @ [proc])
 
-            let rec createProcesses' recvChanProcs prevRecvChanProcs acc =
+            let rec create recvChanProcs prevRecvChanProcs acc =
                 match recvChanProcs with
                 | []    -> acc
                 | p::ps -> let otherProcs = prevRecvChanProcs @ ps
@@ -200,10 +200,10 @@ module Big =
                                        ChanRecvPing = p.ChanRecvPing;
                                        ChanRecvPong = p.ChanRecvPong;
                                        ChansSend = chansSend}
-                           createProcesses' ps (prevRecvChanProcs @ [p]) (proc :: acc)
+                           create ps (prevRecvChanProcs @ [p]) (proc :: acc)
 
             let recvChanProcesses = createRecvChanProcesses processCount []
-            createProcesses' recvChanProcesses [] []
+            create recvChanProcesses [] []
 
         let rec createBig procs msgValue =
             match procs with
@@ -247,11 +247,8 @@ module Bang =
         create messageCount
             
     let Run senderCount messageCount =
-        let rec createSendProcesses recvProcChan senderCount acc =
-            match senderCount with
-            | 0     -> acc
-            | count -> let proc = {Name = $"p{count}"; Chan = recvProcChan}
-                       createSendProcesses recvProcChan (count - 1) (proc :: acc)
+        let rec createSendProcesses recvProcChan senderCount =
+            List.map (fun count -> {Name = $"p{count}"; Chan = recvProcChan}) [1..senderCount]
 
         let rec createBang recvProc sendProcs msg =
             match sendProcs with
@@ -260,65 +257,108 @@ module Bang =
             | _     -> failwith $"createBang failed! (at least 1 sending process should exist) senderCount = %i{senderCount}"
 
         let recvProc = {Name = "p0"; Chan = Channel<int>()}
-        let sendProcs = createSendProcesses recvProc.Chan senderCount []
-        createBang recvProc sendProcs 10
+        let sendProcs = createSendProcesses recvProc.Chan senderCount
+        createBang recvProc sendProcs 0
 
 module Benchmark =
 
-    type TimedOperation<'Result> = {millisecondsTaken : int64; returnedValue : 'Result}
+    type private TimedOperation<'Result> = {millisecondsTaken : int64; returnedValue : 'Result}
 
-    let timeOperation<'Result> (func: unit -> 'Result): TimedOperation<'Result> =
+    let private timeOperation<'Result> (func: unit -> 'Result): TimedOperation<'Result> =
         let stopwatch = Stopwatch()
         stopwatch.Start()
         let returnValue = func()
         stopwatch.Stop()
         {millisecondsTaken = stopwatch.ElapsedMilliseconds; returnedValue = returnValue}
 
-    type PingpongConfig =
-        { RoundCount: int }
-    and ThreadRingConfig = 
-        { ProcessCount: int;
-          RoundCount: int
-        }
-    and BigConfig = 
-        { ProcessCount: int;
-          RoundCount: int
-        }
-    and BangConfig = 
-        { SenderCount: int;
-          MessageCount: int
-        }
-    and BenchmarkConfig =
+    type PingpongConfig = { RoundCount: int }
+
+    type ThreadRingConfig = { ProcessCount: int;
+                              RoundCount: int }
+    
+    type BigConfig = { ProcessCount: int;
+                       RoundCount: int }
+
+    type BangConfig = { SenderCount: int;
+                        MessageCount: int }
+
+    type BenchmarkConfig =
+        | Pingpong of PingpongConfig
+        | ThreadRing of ThreadRingConfig
+        | Big of BigConfig
+        | Bang of BangConfig
+
+    type BenchmarksConfig =
         { Pingpong: PingpongConfig
           Threadring: ThreadRingConfig
           Big: BigConfig
-          Bang: BangConfig
-        }
-        
-    let RunAll config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
-        let runBenchmarks benchmarks runCount =
-            let rec runOnce benchmarks acc =
-                match benchmarks with
-                | []            -> acc
-                | (name, b)::bs -> let time = (timeOperation (fun () -> (run b).Await()))
-                                   let result = (name, time.millisecondsTaken)
-                                   runOnce bs (acc @ [result])
-            let rec loop benchmarks runCount acc =
-                match runCount with
-                | 0     -> acc
-                | count -> let runResults = (count, runOnce benchmarks [])
-                           loop benchmarks (runCount - 1) (runResults :: acc)
-            loop benchmarks runCount []
+          Bang: BangConfig }
 
-        let benchmarks = [("pingpong", Pingpong.Run config.Pingpong.RoundCount);
-                          ("threadring", ThreadRing.Run config.Threadring.ProcessCount config.Threadring.RoundCount);
-                          ("big", Big.Run config.Big.ProcessCount config.Big.RoundCount);
-                          ("bang", Bang.Run config.Bang.SenderCount config.Bang.MessageCount)]
+    let private printBenchmarkResults (results : string * BenchmarkConfig * int64 * (int * int64) list) =
+        let benchmarkConfigString config =
+            match config with
+            | Pingpong config   -> $"RoundCount: %i{config.RoundCount}"
+            | ThreadRing config -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
+            | Big config        -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
+            | Bang config       -> $"SenderCount: %i{config.SenderCount} MessageCount: %i{config.MessageCount}"
 
-        let results = runBenchmarks benchmarks runCount
+        let rec getTimesStr times average first acc =
+            match times with
+            | []              -> let str = "|------------------------------------------------------------------|"
+                                 (acc + str)
+            | (run, time)::ts -> let avg = if first then ((string) average) else ""
+                                 let str = $"|  #%-6i{run}     %-23i{time}     %-23s{avg} |\n"
+                                 getTimesStr ts average false (acc + str)
+
+        let (name, config, average, times) = results
+        let configStr = benchmarkConfigString config
+        let timesStr = getTimesStr times average true ""
+        let headerStr = $"
+|------------------------------------------------------------------|
+|     Benchmark                  Configuration                     |
+|  ---------------    -----------------------------------          |
+|  %-15s{name}    %-35s{configStr}          |
+|------------------------------------------------------------------|
+|    Run         Execution time (ms)         Average (ms)          |
+|  -------     -----------------------     ----------------        |\n"
+
+        let toPrint = headerStr + timesStr
+        printfn "%s" toPrint
+
+    let private executeBenchmark config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
+        let rec runBenchmark bench runCount acc =
+            match runCount with
+            | count when count <= 0 -> acc
+            | count                 -> let time = (timeOperation (fun () -> (run bench).Await()))
+                                       let result = (count, time.millisecondsTaken)
+                                       runBenchmark bench (count - 1) (result :: acc)
         
-        for (runName, runResults) in results do
-            printfn $"############ Run %i{runName} ############"
-            for (benchmark, time) in runResults do
-                printfn $"    Benchmark: %s{benchmark}        Time: %i{time}    "
-        printfn ""
+        let (name, bench) = match config with
+                            | Pingpong config   -> ("Pingpong", Pingpong.Run config.RoundCount)
+                            | ThreadRing config -> ("ThreadRing", ThreadRing.Run config.ProcessCount config.RoundCount)
+                            | Big config        -> ("Big", Big.Run config.ProcessCount config.RoundCount)
+                            | Bang config       -> ("Bang", Bang.Run config.SenderCount config.MessageCount)
+
+        let times = runBenchmark bench runCount []
+
+        let average = let times = List.map (fun (_, time) -> time) times
+                      let sum = List.sum times
+                      sum / (int64) times.Length
+
+        let results = (name, config, average, times)
+        results
+
+    let Run config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
+        let results = executeBenchmark config runCount run
+        printBenchmarkResults results
+
+    let RunAll configs runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
+        let benchConfigs = [Pingpong (configs.Pingpong);
+                            ThreadRing (configs.Threadring);
+                            Big (configs.Big);
+                            Bang (configs.Bang)]
+
+        let results = List.map (fun config -> executeBenchmark config runCount run) benchConfigs
+
+        for result in results do
+            printBenchmarkResults result
