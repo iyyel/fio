@@ -6,6 +6,9 @@ namespace Benchmarks
 
 open FSharp.FIO.FIO
 open System.Diagnostics
+open System.Collections.Generic
+open System.IO
+open System
 
 // Pingpong benchmark
 // Measures: Message delivery overhead
@@ -290,9 +293,68 @@ module Benchmark =
 
     type BenchmarksConfig =
         { Pingpong: PingpongConfig
-          Threadring: ThreadRingConfig
+          ThreadRing: ThreadRingConfig
           Big: BigConfig
           Bang: BangConfig }
+
+    let private addResultsToCsvStr (results : string * BenchmarkConfig * int64 * (int * int64) list) str =
+        let (name, config, mean, times) = results
+
+        let rec fillRows times acc = 
+            match times with
+            | []                 -> acc
+            | (runNum, time)::ts -> let map = Map [ ("Run", runNum.ToString());
+                                                    ("ExecutionTime", time.ToString());
+                                                    ("ProcessCount", "N/A");
+                                                    ("RoundCount", "N/A");
+                                                    ("SenderCount", "N/A");
+                                                    ("MessageCount", "N/A");
+                                                   ]
+                                    let map = match config with
+                                              | Pingpong config   -> map.Add("RoundCount", config.RoundCount.ToString())
+                                              | ThreadRing config -> let tmp = map.Add("ProcessCount", config.ProcessCount.ToString())
+                                                                     tmp.Add("RoundCount", config.RoundCount.ToString())
+                                              | Big config        -> let tmp = map.Add("ProcessCount", config.ProcessCount.ToString())
+                                                                     tmp.Add("RoundCount", config.RoundCount.ToString())
+                                              | Bang config       -> let tmp = map.Add("SenderCount", config.SenderCount.ToString())
+                                                                     tmp.Add("MessageCount", config.MessageCount.ToString())
+                                    fillRows ts (acc @ [map])
+        
+        let rec createRowStr (rows : Map<string, string> list) acc =
+            match rows with
+            | []    -> acc
+            | r::rs -> let run = r.Item("Run")
+                       let time = r.Item("ExecutionTime")
+                       let processCount = r.Item("ProcessCount")
+                       let roundCount = r.Item("RoundCount")
+                       let senderCount = r.Item("SenderCount")
+                       let messageCount = r.Item("MessageCount")
+                       let rowStr = $"%s{name}, %s{run}, %s{time}, %i{mean}, %s{processCount}, %s{roundCount}, %s{senderCount}, %s{messageCount}\n"
+                       createRowStr rs (acc + rowStr)
+
+        let rows = fillRows times []
+        let str = str + createRowStr rows ""
+        str
+
+    let private writeSingleResultsToCsv (results : string * BenchmarkConfig * int64 * (int * int64) list) =
+        let header = "Benchmark, Run, Execution Time (ms), Run Mean (ms), ProcessCount, RoundCount, SenderCount, MessageCount\n"
+        let csvData = addResultsToCsvStr results header
+        let path = Path.Combine(Directory.GetCurrentDirectory(), "results.csv")
+        use file = File.Create(path)
+        let bytes = System.Text.ASCIIEncoding.UTF8.GetBytes(csvData)
+        file.Write(ReadOnlySpan bytes)
+
+    let private writeResultsToCsv (results :  (string * BenchmarkConfig * int64 * (int * int64) list) list) =
+        let header = "Benchmark, Run, Execution Time (ms), Run Mean (ms), ProcessCount, RoundCount, SenderCount, MessageCount\n"
+        let rec getData results acc =
+            match results with
+            | []    -> acc
+            | r::rs -> getData rs (addResultsToCsvStr r acc)
+        let csvData = getData results header
+        let path = Path.Combine(Path.GetTempPath(), "results.csv")
+        use file = File.Create(path)
+        let bytes = System.Text.ASCIIEncoding.UTF8.GetBytes(csvData)
+        file.Write(ReadOnlySpan bytes)
 
     let private printBenchmarkResults (results : string * BenchmarkConfig * int64 * (int * int64) list) =
         let benchmarkConfigString config =
@@ -302,25 +364,25 @@ module Benchmark =
             | Big config        -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
             | Bang config       -> $"SenderCount: %i{config.SenderCount} MessageCount: %i{config.MessageCount}"
 
-        let rec getTimesStr times average first acc =
+        let rec getTimesStr times mean first acc =
             match times with
             | []              -> let str = "|------------------------------------------------------------------|"
                                  (acc + str)
-            | (run, time)::ts -> let avg = if first then ((string) average) else ""
-                                 let str = $"|  #%-6i{run}     %-23i{time}     %-23s{avg} |\n"
-                                 getTimesStr ts average false (acc + str)
+            | (run, time)::ts -> let mean' = if first then ((string) mean) else ""
+                                 let str = $"|  #%-6i{run}     %-23i{time}     %-23s{mean'} |\n"
+                                 getTimesStr ts mean false (acc + str)
 
-        let (name, config, average, times) = results
+        let (name, config, mean, times) = results
         let configStr = benchmarkConfigString config
-        let timesStr = getTimesStr times average true ""
+        let timesStr = getTimesStr times mean true ""
         let headerStr = $"
 |------------------------------------------------------------------|
 |     Benchmark                  Configuration                     |
 |  ---------------    -----------------------------------          |
 |  %-15s{name}    %-35s{configStr}          |
 |------------------------------------------------------------------|
-|    Run         Execution time (ms)         Average (ms)          |
-|  -------     -----------------------     ----------------        |\n"
+|    Run         Execution time (ms)         Run Mean (ms)         |
+|  -------     -----------------------     -----------------       |\n"
 
         let toPrint = headerStr + timesStr
         printfn "%s" toPrint
@@ -341,20 +403,21 @@ module Benchmark =
 
         let times = runBenchmark bench runCount []
 
-        let average = let times = List.map (fun (_, time) -> time) times
-                      let sum = List.sum times
-                      sum / (int64) times.Length
+        let mean = let times = List.map (fun (_, time) -> time) times
+                   let sum = List.sum times
+                   sum / (int64) times.Length
 
-        let results = (name, config, average, times)
+        let results = (name, config, mean, times)
         results
 
     let Run config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
         let results = executeBenchmark config runCount run
         printBenchmarkResults results
+        writeSingleResultsToCsv results
 
     let RunAll configs runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
         let benchConfigs = [Pingpong (configs.Pingpong);
-                            ThreadRing (configs.Threadring);
+                            ThreadRing (configs.ThreadRing);
                             Big (configs.Big);
                             Bang (configs.Bang)]
 
@@ -362,3 +425,5 @@ module Benchmark =
 
         for result in results do
             printBenchmarkResults result
+
+        writeResultsToCsv results
