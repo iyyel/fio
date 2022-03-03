@@ -6,7 +6,6 @@ namespace Benchmarks
 
 open FSharp.FIO.FIO
 open System.Diagnostics
-open System.Collections.Generic
 open System.IO
 open System
 
@@ -24,9 +23,13 @@ module Pingpong =
     let rec private createPingProcess proc msg roundCount =
         let template (fioEnd : int -> FIO<'Error, 'Result>) =
             Send(msg, proc.ChanSend) >>= fun _ ->
+            #if DEBUG
             printfn $"%s{proc.Name} sent ping: %i{msg}"
+            #endif
             Receive(proc.ChanRecv) >>= fun x ->
+            #if DEBUG
             printfn $"%s{proc.Name} received pong: %i{x}"
+            #endif
             fioEnd x
         match roundCount with
         | 1 -> template (fun _ -> End())
@@ -35,10 +38,14 @@ module Pingpong =
     let rec private createPongProcess proc roundCount =
         let template fioEnd =
             Receive(proc.ChanRecv) >>= fun x ->
+            #if DEBUG
             printfn $"%s{proc.Name} received ping: %i{x}"
+            #endif
             let y = x + 10
             Send(y, proc.ChanSend) >>= fun _ ->
+            #if DEBUG
             printfn $"%s{proc.Name} sent pong: %i{y}"
+            #endif
             fioEnd
         match roundCount with
         | 1 -> template (End())
@@ -66,9 +73,13 @@ module ThreadRing =
         let template proc fioEnd =
             let x = 0
             Send(x, proc.ChanSend) >>= fun _ ->
+            #if DEBUG
             printfn $"%s{proc.Name} sent: %i{x}"
+            #endif
             Receive(proc.ChanRecv) >>= fun y ->
+            #if DEBUG
             printfn $"%s{proc.Name} received: %i{y}"
+            #endif
             fioEnd
         let rec create roundCount =
             match roundCount with
@@ -79,10 +90,14 @@ module ThreadRing =
     let private createRecvProcess proc roundCount =
         let template proc fioEnd =
             Receive(proc.ChanRecv) >>= fun x ->
+            #if DEBUG
             printfn $"%s{proc.Name} received: %i{x}"
+            #endif
             let y = x + 10
             Send(y, proc.ChanSend) >>= fun _ ->
+            #if DEBUG
             printfn $"%s{proc.Name} sent: %i{y}"
+            #endif
             fioEnd
         let rec create roundCount =
             match roundCount with
@@ -135,7 +150,10 @@ module Big =
             match recvCount with
             | 1 -> Receive(proc.ChanRecvPong) >>= fun msg ->
                    match msg with
-                   | Pong msgValue -> printfn $"%s{proc.Name} received pong: %i{msgValue}"
+                   | Pong msgValue ->
+                                      #if DEBUG
+                                      printfn $"%s{proc.Name} received pong: %i{msgValue}"
+                                      #endif
                                       match roundCount with
                                       | count when count <= 1 -> End()
                                       | count                 -> createSendPings proc 0 (count - 1)
@@ -144,17 +162,24 @@ module Big =
                                       | count                 -> createSendPings proc 0 (count - 1)
             | _ -> Receive(proc.ChanRecvPong) >>= fun msg ->
                    match msg with
-                   | Pong msgValue -> printfn $"%s{proc.Name} received pong: %i{msgValue}"
+                   | Pong msgValue ->
+                                      #if DEBUG
+                                      printfn $"%s{proc.Name} received pong: %i{msgValue}"
+                                      #endif
                                       createRecvPongs proc (recvCount - 1) roundCount
                    | _             -> createRecvPongs proc (recvCount - 1) roundCount
         
         and createRecvPings proc recvCount roundCount =
             let template msgValue replyPongChan fioEnd =
+                #if DEBUG
                 printfn $"%s{proc.Name} received ping: %i{msgValue}"
+                #endif
                 let replyValue = msgValue + 1
                 let msgReply = Pong replyValue
                 Send(msgReply, replyPongChan) >>= fun _ ->
+                #if DEBUG
                 printfn $"%s{proc.Name} sent pong: %i{replyValue}"
+                #endif
                 fioEnd
             let rec create recvCount = 
                 match recvCount with
@@ -172,7 +197,9 @@ module Big =
             let template chan fioEnd =
                 let msg = Ping (msgValue, proc.ChanRecvPong)
                 Send(msg, chan) >>= fun _ ->
+                #if DEBUG
                 printfn $"%s{proc.Name} sent ping: %i{msgValue}"
+                #endif
                 fioEnd
             let rec create (chansSend : Channel<Message> list) =
                 match chansSend with
@@ -231,10 +258,14 @@ module Bang =
         let rec create messageCount =
             match messageCount with
             | 1     -> Send(msg, proc.Chan) >>= fun _ ->
+                       #if DEBUG
                        printfn $"%s{proc.Name} sent: %i{msg}"
+                       #endif
                        End()
             | count -> Send(msg, proc.Chan) >>= fun _ ->
+                       #if DEBUG
                        printfn $"%s{proc.Name} sent: %i{msg}"
+                       #endif
                        create (count - 1)
         create messageCount
 
@@ -242,10 +273,14 @@ module Bang =
         let rec create messageCount =
             match messageCount with
             | 1     -> Receive(proc.Chan) >>= fun msg ->
+                       #if DEBUG
                        printfn $"%s{proc.Name} received: %i{msg}"
+                       #endif
                        End()
             | count -> Receive(proc.Chan) >>= fun msg ->
+                       #if DEBUG 
                        printfn $"%s{proc.Name} received: %i{msg}"
+                       #endif
                        create (count - 1)
         create messageCount
             
@@ -388,12 +423,12 @@ module Benchmark =
         printfn "%s" toPrint
 
     let private executeBenchmark config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
-        let rec runBenchmark bench runCount acc =
-            match runCount with
-            | count when count <= 0 -> acc
-            | count                 -> let time = (timeOperation (fun () -> (run bench).Await()))
-                                       let result = (count, time.millisecondsTaken)
-                                       runBenchmark bench (count - 1) (result :: acc)
+        let rec runBenchmark bench curRun runCount acc =
+            match curRun with
+            | count when count = runCount -> acc
+            | count                       -> let time = (timeOperation (fun () -> (run bench).Await()))
+                                             let result = (count, time.millisecondsTaken)
+                                             runBenchmark bench (count + 1) runCount (acc @ [result])
         
         let (name, bench) = match config with
                             | Pingpong config   -> ("Pingpong", Pingpong.Run config.RoundCount)
@@ -401,7 +436,7 @@ module Benchmark =
                             | Big config        -> ("Big", Big.Run config.ProcessCount config.RoundCount)
                             | Bang config       -> ("Bang", Bang.Run config.SenderCount config.MessageCount)
 
-        let times = runBenchmark bench runCount []
+        let times = runBenchmark bench 1 runCount []
 
         let mean = let times = List.map (fun (_, time) -> time) times
                    let sum = List.sum times

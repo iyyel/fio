@@ -16,18 +16,18 @@ let runEffect() =
     printfn $"Result: %A{fiber.Await()}"
 
 let runSingleBenchmark() =
-    let pongConfig       = Pingpong   {RoundCount   = 100}
-    let threadringConfig = ThreadRing {ProcessCount = 100; RoundCount   = 100}
-    let bigConfig        = Big        {ProcessCount = 100; RoundCount   = 100}
-    let bangConfig       = Bang       {SenderCount  = 100; MessageCount = 100}
-    Benchmarks.Benchmark.Run bangConfig 1 Naive.Run
+    let pongConfig       = Pingpong   {RoundCount   = 1000}
+    let threadringConfig = ThreadRing {ProcessCount = 1000; RoundCount   = 1000}
+    let bigConfig        = Big        {ProcessCount = 1000; RoundCount   = 1000}
+    let bangConfig       = Bang       {SenderCount  = 1000; MessageCount = 1000}
+    Benchmarks.Benchmark.Run bangConfig 10 Naive.Run
 
 let runAllBenchmarks() =
     let configs = {
-        Pingpong =   {RoundCount   = 100};
-        ThreadRing = {ProcessCount = 100; RoundCount   = 100};
-        Big =        {ProcessCount = 100; RoundCount   = 100};
-        Bang =       {SenderCount  = 100; MessageCount = 100};
+        Pingpong =   {RoundCount   = 1000};
+        ThreadRing = {ProcessCount = 1000; RoundCount   = 1000};
+        Big =        {ProcessCount = 1000; RoundCount   = 1000};
+        Bang =       {SenderCount  = 1000; MessageCount = 1000};
     }
     Benchmarks.Benchmark.RunAll configs 10 Naive.Run
 
