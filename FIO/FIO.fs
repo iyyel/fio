@@ -19,9 +19,11 @@ module FIO =
         | Success of 'Result
         | Error of 'Error
 
-    type Fiber<'Error, 'Result>
+    type InterpretFunc<'Error, 'Result> = FIO<'Error, 'Result> -> Try<'Error, 'Result>
+
+    and Fiber<'Error, 'Result>
             (eff : FIO<'Error, 'Result>,
-             interpret : FIO<'Error, 'Result> -> Try<'Error, 'Result>) =
+             interpret : InterpretFunc<'Error, 'Result>) =
         let task = Task.Factory.StartNew(fun () -> interpret eff)
 
         member _.Await() = 

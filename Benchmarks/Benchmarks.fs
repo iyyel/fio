@@ -332,133 +332,102 @@ module Benchmark =
           Big: BigConfig
           Bang: BangConfig }
 
-    let private addResultsToCsvStr (results : string * BenchmarkConfig * int64 * (int * int64) list) str =
-        let (name, config, mean, times) = results
+    type RuntimeRunFunc = FIO<obj, unit> -> Fiber<obj, unit>
 
-        let rec fillRows times acc = 
+    type BenchmarkResult = string * BenchmarkConfig * string * (int * int64) list
+
+    let private writeResultsToCsv (result : BenchmarkResult) = 
+        let configStr config =
+            match config with
+            | Pingpong config   -> $"roundcount%i{config.RoundCount}"
+            | ThreadRing config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Big config        -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Bang config       -> $"sendercount%i{config.SenderCount}-messagecount%i{config.MessageCount}"
+
+        let headerStr = "Execution Time (ms)"
+        let homePath = if (Environment.OSVersion.Platform.Equals(PlatformID.Unix) ||
+                           Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
+                       then Environment.GetEnvironmentVariable("HOME")
+                       else Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%");
+        let (name, config, runtimeName, times) = result
+        let dirPath = homePath + @"\fio\benchmarks"
+        let configStr = configStr config
+        let dateStr = DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss")
+        let fileName = name.ToLower() + "-" + configStr + "-" + runtimeName.ToLower() + "-" + dateStr + ".csv"
+        let filePath = dirPath + @"\" + fileName
+        let rec fileContentStr times acc =
             match times with
-            | []                 -> acc
-            | (runNum, time)::ts -> let map = Map [ ("Run", runNum.ToString());
-                                                    ("ExecutionTime", time.ToString());
-                                                    ("ProcessCount", "N/A");
-                                                    ("RoundCount", "N/A");
-                                                    ("SenderCount", "N/A");
-                                                    ("MessageCount", "N/A");
-                                                   ]
-                                    let map = match config with
-                                              | Pingpong config   -> map.Add("RoundCount", config.RoundCount.ToString())
-                                              | ThreadRing config -> let tmp = map.Add("ProcessCount", config.ProcessCount.ToString())
-                                                                     tmp.Add("RoundCount", config.RoundCount.ToString())
-                                              | Big config        -> let tmp = map.Add("ProcessCount", config.ProcessCount.ToString())
-                                                                     tmp.Add("RoundCount", config.RoundCount.ToString())
-                                              | Bang config       -> let tmp = map.Add("SenderCount", config.SenderCount.ToString())
-                                                                     tmp.Add("MessageCount", config.MessageCount.ToString())
-                                    fillRows ts (acc @ [map])
-        
-        let rec createRowStr (rows : Map<string, string> list) acc =
-            match rows with
-            | []    -> acc
-            | r::rs -> let run = r.Item("Run")
-                       let time = r.Item("ExecutionTime")
-                       let processCount = r.Item("ProcessCount")
-                       let roundCount = r.Item("RoundCount")
-                       let senderCount = r.Item("SenderCount")
-                       let messageCount = r.Item("MessageCount")
-                       let rowStr = $"%s{name}, %s{run}, %s{time}, %i{mean}, %s{processCount}, %s{roundCount}, %s{senderCount}, %s{messageCount}\n"
-                       createRowStr rs (acc + rowStr)
+            | []            -> acc
+            | (_, time)::ts -> fileContentStr ts (acc + $"%i{time}")
 
-        let rows = fillRows times []
-        let str = str + createRowStr rows ""
-        str
+        if (not (Directory.Exists(dirPath))) then
+            Directory.CreateDirectory(dirPath) |> ignore
+        else ()
 
-    let private writeSingleResultsToCsv (results : string * BenchmarkConfig * int64 * (int * int64) list) =
-        let header = "Benchmark, Run, Execution Time (ms), Run Mean (ms), ProcessCount, RoundCount, SenderCount, MessageCount\n"
-        let csvData = addResultsToCsvStr results header
-        let path = Path.Combine(Directory.GetCurrentDirectory(), "results.csv")
-        use file = File.Create(path)
-        let bytes = System.Text.ASCIIEncoding.UTF8.GetBytes(csvData)
-        file.Write(ReadOnlySpan bytes)
+        let fileContent = fileContentStr times ""
+        printfn $"\nWriting benchmark results to '%s{filePath}'"
+        File.WriteAllText(filePath, headerStr + "\n" + fileContent)
 
-    let private writeResultsToCsv (results :  (string * BenchmarkConfig * int64 * (int * int64) list) list) =
-        let header = "Benchmark, Run, Execution Time (ms), Run Mean (ms), ProcessCount, RoundCount, SenderCount, MessageCount\n"
-        let rec getData results acc =
-            match results with
-            | []    -> acc
-            | r::rs -> getData rs (addResultsToCsvStr r acc)
-        let csvData = getData results header
-        let path = Path.Combine(Path.GetTempPath(), "results.csv")
-        use file = File.Create(path)
-        let bytes = System.Text.ASCIIEncoding.UTF8.GetBytes(csvData)
-        file.Write(ReadOnlySpan bytes)
-
-    let private printBenchmarkResults (results : string * BenchmarkConfig * int64 * (int * int64) list) =
-        let benchmarkConfigString config =
+    let private printResult (result : BenchmarkResult) =
+        let configStr config =
             match config with
             | Pingpong config   -> $"RoundCount: %i{config.RoundCount}"
             | ThreadRing config -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
             | Big config        -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
             | Bang config       -> $"SenderCount: %i{config.SenderCount} MessageCount: %i{config.MessageCount}"
 
-        let rec getTimesStr times mean first acc =
-            match times with
-            | []              -> let str = "|------------------------------------------------------------------|"
-                                 (acc + str)
-            | (run, time)::ts -> let mean' = if first then ((string) mean) else ""
-                                 let str = $"|  #%-6i{run}     %-23i{time}     %-23s{mean'} |\n"
-                                 getTimesStr ts mean false (acc + str)
+        let rec runExecTimesStr runExecTimes acc =
+            match runExecTimes with
+            | []              -> (acc + "|---------------------------------------------------------------------|")
+            | (run, time)::ts -> let str = $"|  #%-10i{run}                 %-35i{time}    |\n"
+                                 runExecTimesStr ts (acc + str)
 
-        let (name, config, mean, times) = results
-        let configStr = benchmarkConfigString config
-        let timesStr = getTimesStr times mean true ""
+        let (benchName, config, runtimeName, times) = result
+        let configStr = configStr config
+        let runExecTimesStr = runExecTimesStr times ""
+        let benchNameRuntime = benchName + " / " + runtimeName
         let headerStr = $"
-|------------------------------------------------------------------|
-|     Benchmark                  Configuration                     |
-|  ---------------    -----------------------------------          |
-|  %-15s{name}    %-35s{configStr}          |
-|------------------------------------------------------------------|
-|    Run         Execution time (ms)         Run Mean (ms)         |
-|  -------     -----------------------     -----------------       |\n"
-
-        let toPrint = headerStr + timesStr
+|---------------------------------------------------------------------|
+|   Benchmark / Runtime                    Configuration              |
+|  ---------------------       -------------------------------------  |
+|  %-25s{benchNameRuntime}   %-35s{configStr}    |
+|---------------------------------------------------------------------|
+|           Run                         Execution time (ms)           |
+|  ---------------------       -------------------------------------  |\n"
+        let toPrint = headerStr + runExecTimesStr
         printfn "%s" toPrint
 
-    let private executeBenchmark config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
-        let rec runBenchmark bench curRun runCount acc =
+    let private runBenchmark config runCount runtimeName (run : RuntimeRunFunc) : BenchmarkResult =
+        let rec executeBenchmark fioBench curRun acc =
             match curRun with
-            | count when count = runCount -> acc
-            | count                       -> let time = (timeOperation (fun () -> (run bench).Await()))
-                                             let result = (count, time.millisecondsTaken)
-                                             runBenchmark bench (count + 1) runCount (acc @ [result])
+            | curRun' when curRun' = runCount -> acc
+            | curRun'                         -> let time = (timeOperation (fun () -> (run fioBench).Await()))
+                                                 let runNum = curRun' + 1
+                                                 let result = (runNum, time.millisecondsTaken)
+                                                 executeBenchmark fioBench runNum (acc @ [result])
         
-        let (name, bench) = match config with
-                            | Pingpong config   -> ("Pingpong", Pingpong.Run config.RoundCount)
-                            | ThreadRing config -> ("ThreadRing", ThreadRing.Run config.ProcessCount config.RoundCount)
-                            | Big config        -> ("Big", Big.Run config.ProcessCount config.RoundCount)
-                            | Bang config       -> ("Bang", Bang.Run config.SenderCount config.MessageCount)
+        let (benchName, fioBench) = match config with
+                                    | Pingpong config   -> ("Pingpong", Pingpong.Run config.RoundCount)
+                                    | ThreadRing config -> ("ThreadRing", ThreadRing.Run config.ProcessCount config.RoundCount)
+                                    | Big config        -> ("Big", Big.Run config.ProcessCount config.RoundCount)
+                                    | Bang config       -> ("Bang", Bang.Run config.SenderCount config.MessageCount)
 
-        let times = runBenchmark bench 1 runCount []
+        let runExecTimes = executeBenchmark fioBench 0 []
+        (benchName, config, runtimeName, runExecTimes)
 
-        let mean = let times = List.map (fun (_, time) -> time) times
-                   let sum = List.sum times
-                   sum / (int64) times.Length
+    let Run config runCount runtimeName (run : RuntimeRunFunc) =
+        let result = runBenchmark config runCount runtimeName run
+        printResult result
+        writeResultsToCsv result
 
-        let results = (name, config, mean, times)
-        results
-
-    let Run config runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
-        let results = executeBenchmark config runCount run
-        printBenchmarkResults results
-        writeSingleResultsToCsv results
-
-    let RunAll configs runCount (run : FIO<obj, unit> -> Fiber<obj, unit>) =
+    let RunAll configs runCount runtimeName (run : RuntimeRunFunc) =
         let benchConfigs = [Pingpong (configs.Pingpong);
                             ThreadRing (configs.ThreadRing);
                             Big (configs.Big);
                             Bang (configs.Bang)]
-
-        let results = List.map (fun config -> executeBenchmark config runCount run) benchConfigs
-
+        
+        let results = List.map (fun config -> runBenchmark config runCount runtimeName run) benchConfigs
+ 
         for result in results do
-            printBenchmarkResults result
-
-        writeResultsToCsv results
+            printResult result
+            writeResultsToCsv result

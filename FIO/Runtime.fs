@@ -11,10 +11,10 @@ module Runtime =
 
     [<AbstractClass; Sealed>]
     type Naive<'Error, 'Result> private () =
-        static member Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
+        static member Run (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
             new Fiber<'Error, 'Result>(eff, Naive.Interpret)
 
-        static member internal Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
+        static member internal Interpret (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
             eff.Accept({
                 new Visitor with
                     member _.VisitInput<'Error, 'Result>(input : Input<'Error, 'Result>) =
