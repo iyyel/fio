@@ -12,15 +12,15 @@ ThreadPool.SetMaxThreads(32767, 32767) |> ignore
 ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 let runEffect() =
-    let fiber = Naive.Run <| Benchmarks.Bang.Run 100 100
+    let fiber = Naive.Run <| Benchmarks.Bang.Create 100 100
     printfn $"Result: %A{fiber.Await()}"
 
 let runSingleBenchmark() =
-    let pongConfig       = Pingpong   {RoundCount   = 5000}
-    let threadringConfig = ThreadRing {ProcessCount = 1000; RoundCount   = 1}
-    let bigConfig        = Big        {ProcessCount = 1000; RoundCount   = 1}
-    let bangConfig       = Bang       {SenderCount  = 1000; MessageCount = 100}
-    Benchmarks.Benchmark.Run bigConfig 1 "Naive" Naive.Run
+    let pingpongConfig      = Pingpong   {RoundCount   = 1000}
+    //let threadringConfig = ThreadRing {ProcessCount = 1000; RoundCount   = 1}
+    //let bigConfig        = Big        {ProcessCount = 1000; RoundCount   = 1}
+    //let bangConfig       = Bang       {SenderCount  = 1000; MessageCount = 100}
+    Benchmarks.Benchmark.Run pingpongConfig 1 "Naive" Naive.Run
 
 let runAllBenchmarks() =
     let configs = {
@@ -33,5 +33,5 @@ let runAllBenchmarks() =
 
 [<EntryPoint>]
 let main _ =
-    runAllBenchmarks()
+    runSingleBenchmark()
     0
