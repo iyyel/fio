@@ -105,11 +105,10 @@ module Pingpong =
         let pingProc = {Name = "p0"; ChanSend = pingSendChan; ChanRecv = pongSendChan}
         let pongProc = {Name = "p1"; ChanSend = pongSendChan; ChanRecv = pingSendChan}
         let timerTask = new Timer.TimerTask(1, 1)
-        Parallel(createPingProcess pingProc 0 timerTask roundCount,
-                 createPongProcess pongProc timerTask roundCount)
-                 >>= fun (res, _) -> match res with
-                                     | Success res -> Succeed res
-                                     | Error error -> Fail error
+        Parallel(createPingProcess pingProc 0 timerTask roundCount, createPongProcess pongProc timerTask roundCount)
+        >>= fun (res, _) -> match res with
+                            | Success res -> Succeed res
+                            | Error error -> Fail error
 
 // ThreadRing benchmark
 // Measures: Message sending; Context switching between actors
@@ -159,7 +158,7 @@ module ThreadRing =
         | 1 -> template proc (End())
         | _ -> template proc (createRecvProcess proc (roundCount - 1))
 
-    let Create processCount roundCount =
+    let Create processCount roundCount : FIO<obj, int64> =
         let getRecvChan index (chans : Channel<int> list) =
             match index with
             | index when index - 1 < 0 -> chans.Item (List.length chans - 1)
@@ -272,7 +271,7 @@ module Big =
 
         createSendPings proc msgValue timerTask roundCount
 
-    let Create processCount roundCount =
+    let Create processCount roundCount : FIO<obj, int64> =
         let rec createProcesses processCount =
             let rec createRecvChanProcesses processCount acc =
                 match processCount with
@@ -354,7 +353,7 @@ module Bang =
         Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
         create (messageCount - 1)
             
-    let Create processCount roundCount =
+    let Create processCount roundCount : FIO<obj, int64> =
         let rec createSendProcesses recvProcChan senderCount =
             List.map (fun count -> {Name = $"p{count}"; Chan = recvProcChan}) [1..senderCount]
 
