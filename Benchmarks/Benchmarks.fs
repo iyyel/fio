@@ -13,31 +13,42 @@ open System.Diagnostics
 
 module internal Timer =
 
-    type internal TimerMessage = 
+    type internal TimerMessage =
         | Start
         | Stop
 
-    type internal TimerTask() = 
-        let timerChan = Channel<TimerMessage>()
+    type internal TimerTask(startCount, stopCount) =
+        let chan = Channel<TimerMessage>()
         let task = Tasks.Task.Factory.StartNew(fun () ->
             let stopwatch = Stopwatch()
-            match timerChan.Receive() with
-            | Start -> 
-                       #if DEBUG
-                       printfn "TimerTask: Started!"
-                       #endif
-                       stopwatch.Start()
-            | _     -> failwith "TimerTask: Stopped before started!"
-            match timerChan.Receive() with
-            | Stop  -> 
-            #if DEBUG
-                       printfn "TimerTask: Stopped!"
-                       #endif
-                       stopwatch.Stop()
-            | _     -> failwith "TimerTask: Started when already started!"
+
+            let rec loopStart count = 
+                match count with
+                | count when count = startCount -> 
+                                                   #if DEBUG
+                                                   printfn "TimerTask: Started!"
+                                                   #endif
+                                                   stopwatch.Start()
+                | count                         -> match chan.Receive() with
+                                                   | Start -> loopStart (count + 1)
+                                                   | _     -> loopStart count
+
+            let rec loopStop count = 
+                match count with
+                | count when count = stopCount -> 
+                                                  #if DEBUG
+                                                  printfn "TimerTask: Stopped!"
+                                                  #endif
+                                                  stopwatch.Stop()
+                | count                        -> match chan.Receive() with
+                                                  | Stop -> loopStop (count + 1)
+                                                  | _    -> loopStop count
+
+            loopStart 0
+            loopStop 0
             stopwatch.ElapsedMilliseconds)
 
-        member internal _.TimerChan = timerChan
+        member internal _.Chan() = chan
 
         member internal _.Result() = task.Result
 
@@ -53,8 +64,8 @@ module Pingpong =
         }
         
     let private createPingProcess proc msg (timerTask : Timer.TimerTask) roundCount =
-        let rec create proc msg roundCount = 
-            let template (fioEnd : int -> FIO<'Error, 'Result>) =
+        let rec create msg roundCount = 
+            let template fioEnd =
                 Send(msg, proc.ChanSend) >>= fun _ ->
                 #if DEBUG
                 printfn $"%s{proc.Name} sent ping: %i{msg}"
@@ -65,12 +76,14 @@ module Pingpong =
                 #endif
                 fioEnd x
             match roundCount with
-            | 1 -> template (fun _ -> End())
-            | _ -> template (fun msg -> create proc msg (roundCount - 1))
-        Send(Timer.Start, timerTask.TimerChan) >>= fun _ ->
-            create proc msg roundCount
+            | 1 -> let fioEnd = Send(Timer.Stop, timerTask.Chan()) >>= fun _ ->
+                                Succeed (timerTask.Result())
+                   template (fun _ -> fioEnd)
+            | _ -> template (fun msg -> create msg (roundCount - 1))
+        Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
+        create msg roundCount
 
-    let rec private createPongProcess proc (timerTask : Timer.TimerTask) roundCount : FIO<obj, int64> =
+    let rec private createPongProcess proc (timerTask : Timer.TimerTask) roundCount =
         let template fioEnd =
             Receive(proc.ChanRecv) >>= fun x ->
             #if DEBUG
@@ -83,9 +96,7 @@ module Pingpong =
             #endif
             fioEnd
         match roundCount with
-        | 1 -> let fioEnd = Send(Timer.Stop, timerTask.TimerChan) >>= fun _ ->
-                                Succeed (timerTask.Result())
-               template fioEnd
+        | 1 -> template (End())
         | _ -> template (createPongProcess proc timerTask (roundCount - 1))
 
     let Create roundCount : FIO<obj, int64> =
@@ -93,11 +104,12 @@ module Pingpong =
         let pongSendChan = Channel<int>()
         let pingProc = {Name = "p0"; ChanSend = pingSendChan; ChanRecv = pongSendChan}
         let pongProc = {Name = "p1"; ChanSend = pongSendChan; ChanRecv = pingSendChan}
-        let timerTask = new Timer.TimerTask()
+        let timerTask = new Timer.TimerTask(1, 1)
         Parallel(createPingProcess pingProc 0 timerTask roundCount,
-                 createPongProcess pongProc timerTask roundCount) >>= fun (_, pongRes) -> match pongRes with
-                                                                                          | Success res -> Succeed res
-                                                                                          | Error error -> Fail error                                                                       
+                 createPongProcess pongProc timerTask roundCount)
+                 >>= fun (res, _) -> match res with
+                                     | Success res -> Succeed res
+                                     | Error error -> Fail error
 
 // ThreadRing benchmark
 // Measures: Message sending; Context switching between actors
@@ -110,25 +122,28 @@ module ThreadRing =
           ChanRecv: Channel<int>
         }
 
-    let private createSendProcess proc roundCount =
-        let template proc fioEnd =
-            let x = 0
-            Send(x, proc.ChanSend) >>= fun _ ->
-            #if DEBUG
-            printfn $"%s{proc.Name} sent: %i{x}"
-            #endif
-            Receive(proc.ChanRecv) >>= fun y ->
-            #if DEBUG
-            printfn $"%s{proc.Name} received: %i{y}"
-            #endif
-            fioEnd
+    let private createSendProcess proc (timerTask : Timer.TimerTask) roundCount =
         let rec create roundCount =
+            let template proc fioEnd =
+                let x = 0
+                Send(x, proc.ChanSend) >>= fun _ ->
+                #if DEBUG
+                printfn $"%s{proc.Name} sent: %i{x}"
+                #endif
+                Receive(proc.ChanRecv) >>= fun y ->
+                #if DEBUG
+                printfn $"%s{proc.Name} received: %i{y}"
+                #endif
+                fioEnd
             match roundCount with
-            | 1 -> template proc (End())
+            | 1 -> let fioEnd = Send(Timer.Stop, timerTask.Chan()) >>= fun _ ->
+                                Succeed (timerTask.Result())
+                   template proc fioEnd
             | _ -> template proc (create (roundCount - 1))
+        Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
         create roundCount
 
-    let private createRecvProcess proc roundCount =
+    let rec private createRecvProcess proc roundCount =
         let template proc fioEnd =
             Receive(proc.ChanRecv) >>= fun x ->
             #if DEBUG
@@ -140,13 +155,11 @@ module ThreadRing =
             printfn $"%s{proc.Name} sent: %i{y}"
             #endif
             fioEnd
-        let rec create roundCount =
-            match roundCount with
-            | 1 -> template proc (End())
-            | _ -> template proc (create (roundCount - 1))
-        create roundCount
+        match roundCount with
+        | 1 -> template proc (End())
+        | _ -> template proc (createRecvProcess proc (roundCount - 1))
 
-    let Run processCount roundCount =
+    let Create processCount roundCount =
         let getRecvChan index (chans : Channel<int> list) =
             match index with
             | index when index - 1 < 0 -> chans.Item (List.length chans - 1)
@@ -158,17 +171,22 @@ module ThreadRing =
             | chan::chans' -> let proc = {Name = $"p{index}"; ChanSend = chan; ChanRecv = getRecvChan index allChans}
                               createProcesses chans' allChans (index + 1) (proc :: acc)
 
-        let rec createProcessRing procs roundCount =
+        let rec createProcessRing procs (timerTask : Timer.TimerTask) roundCount =
             match procs with
-            | pa::[pb] -> Parallel(createRecvProcess pa roundCount, createSendProcess pb roundCount)
-                          >>= fun _ -> End()
-            | p::ps    -> Parallel(createRecvProcess p roundCount, createProcessRing ps roundCount)
-                          >>= fun _ -> End()
+            | pa::[pb] -> Parallel(createRecvProcess pa roundCount, createSendProcess pb timerTask roundCount)
+                          >>= fun (_, res) -> match res with
+                                              | Success res -> Succeed res
+                                              | Error error -> Fail error
+            | p::ps    -> Parallel(createRecvProcess p roundCount, createProcessRing ps timerTask roundCount)
+                          >>= fun (_, res) -> match res with
+                                              | Success res -> Succeed res
+                                              | Error error -> Fail error
             | _        -> failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
         let procs = createProcesses chans chans 0 []
-        createProcessRing procs roundCount
+        let timerTask = new Timer.TimerTask(1, 1)
+        createProcessRing procs timerTask roundCount
 
 // Big benchmark
 // Measures: Contention on mailbox; Many-to-Many message passing
@@ -186,8 +204,8 @@ module Big =
           ChansSend: Channel<Message> list
         }
 
-    let private createProcess proc msgValue roundCount =
-        let rec createRecvPongs proc recvCount roundCount =
+    let private createProcess proc msgValue (timerTask : Timer.TimerTask) roundCount =
+        let rec createRecvPongs proc (timerTask : Timer.TimerTask) recvCount roundCount =
             match recvCount with
             | 1 -> Receive(proc.ChanRecvPong) >>= fun msg ->
                    match msg with
@@ -196,21 +214,23 @@ module Big =
                                       printfn $"%s{proc.Name} received pong: %i{msgValue}"
                                       #endif
                                       match roundCount with
-                                      | count when count <= 1 -> End()
-                                      | count                 -> createSendPings proc 0 (count - 1)
+                                      | count when count <= 1 -> Send(Timer.Stop, timerTask.Chan()) >>= fun _ ->
+                                                                 Succeed (timerTask.Result())
+                                      | count                 -> createSendPings proc 0 timerTask (count - 1)
                    | _             -> match roundCount with
-                                      | count when count <= 1 -> End()
-                                      | count                 -> createSendPings proc 0 (count - 1)
+                                      | count when count <= 1 -> Send(Timer.Stop, timerTask.Chan()) >>= fun _ ->
+                                                                 Succeed (timerTask.Result())
+                                      | count                 -> createSendPings proc 0 timerTask (count - 1)
             | _ -> Receive(proc.ChanRecvPong) >>= fun msg ->
                    match msg with
                    | Pong msgValue ->
                                       #if DEBUG
                                       printfn $"%s{proc.Name} received pong: %i{msgValue}"
                                       #endif
-                                      createRecvPongs proc (recvCount - 1) roundCount
-                   | _             -> createRecvPongs proc (recvCount - 1) roundCount
+                                      createRecvPongs proc timerTask (recvCount - 1) roundCount
+                   | _             -> createRecvPongs proc timerTask (recvCount - 1) roundCount
         
-        and createRecvPings proc recvCount roundCount =
+        and createRecvPings proc (timerTask : Timer.TimerTask) recvCount roundCount =
             let template msgValue replyPongChan fioEnd =
                 #if DEBUG
                 printfn $"%s{proc.Name} received ping: %i{msgValue}"
@@ -226,16 +246,17 @@ module Big =
                 match recvCount with
                 | 1 -> Receive(proc.ChanRecvPing) >>= fun msg ->
                        match msg with
-                       | Ping (msgValue, replyPongChan) -> template msgValue replyPongChan (createRecvPongs proc proc.ChansSend.Length roundCount)
-                       | _                              -> createRecvPongs proc proc.ChansSend.Length roundCount
+                       | Ping (msgValue, replyPongChan) -> template msgValue replyPongChan (createRecvPongs proc timerTask proc.ChansSend.Length roundCount)
+                       | _                              -> createRecvPongs proc timerTask proc.ChansSend.Length roundCount
                 | _ -> Receive(proc.ChanRecvPing) >>= fun msg ->
                        match msg with
-                       | Ping (msgValue, replyPongChan) -> template msgValue replyPongChan (createRecvPings proc (recvCount - 1) roundCount)                          
-                       | _                              -> createRecvPings proc (recvCount - 1) roundCount
+                       | Ping (msgValue, replyPongChan) -> template msgValue replyPongChan (createRecvPings proc timerTask (recvCount - 1) roundCount)                          
+                       | _                              -> createRecvPings proc timerTask (recvCount - 1) roundCount
             create recvCount
       
-        and createSendPings proc msgValue roundCount =
+        and createSendPings proc msgValue (timerTask : Timer.TimerTask) roundCount =
             let template chan fioEnd =
+                Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
                 let msg = Ping (msgValue, proc.ChanRecvPong)
                 Send(msg, chan) >>= fun _ ->
                 #if DEBUG
@@ -245,11 +266,11 @@ module Big =
             let rec create (chansSend : Channel<Message> list) =
                 match chansSend with
                 | []          -> failwith "createSendPings: Empty list is not supported!"
-                | chan::[]    -> template chan (createRecvPings proc proc.ChansSend.Length roundCount)
+                | chan::[]    -> template chan (createRecvPings proc timerTask proc.ChansSend.Length roundCount)
                 | chan::chans -> template chan (create chans)
             create proc.ChansSend
 
-        createSendPings proc msgValue roundCount
+        createSendPings proc msgValue timerTask roundCount
 
     let Create processCount roundCount =
         let rec createProcesses processCount =
@@ -276,14 +297,21 @@ module Big =
             let recvChanProcesses = createRecvChanProcesses processCount []
             create recvChanProcesses [] []
 
-        let rec createBig procs msgValue =
+        let rec createBig procs (timerTask : Timer.TimerTask) msgValue =
             match procs with
-            | pa::[pb] -> Parallel(createProcess pa msgValue roundCount, createProcess pb (msgValue + 10) roundCount) >>= fun _ -> End()
-            | p::ps    -> Parallel(createProcess p msgValue roundCount, createBig ps (msgValue + 10)) >>= fun _ -> End()
+            | pa::[pb] -> Parallel(createProcess pa msgValue timerTask roundCount, createProcess pb (msgValue + 10) timerTask roundCount)
+                          >>= fun (_, res) -> match res with
+                                              | Success res -> Succeed res
+                                              | Error error -> Fail error
+            | p::ps    -> Parallel(createProcess p msgValue timerTask roundCount, createBig ps timerTask (msgValue + 10))
+                          >>= fun (_, res) -> match res with
+                                              | Success res -> Succeed res
+                                              | Error error -> Fail error
             | _        -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
 
         let procs = createProcesses processCount
-        createBig procs 0
+        let timerTask = new Timer.TimerTask(processCount, processCount)
+        createBig procs timerTask 0
         
 // Bang benchmark
 // Measures: Contention on mailbox; Many-to-One message passing
@@ -295,49 +323,57 @@ module Bang =
           Chan: Channel<int>
         }
 
-    let private createSendProcess proc msg messageCount = 
-        let rec create messageCount =
+    let rec private createSendProcess proc msg messageCount =
+        let template fioEnd = 
+            Send(msg, proc.Chan) >>= fun _ ->
+            #if DEBUG
+            printfn $"%s{proc.Name} sent: %i{msg}"
+            #endif
+            fioEnd
+        match messageCount with
+        | 1     -> template (End())
+        | count -> template (createSendProcess proc msg (count - 1))
+  
+    let private createRecvProcess proc (timerTask : Timer.TimerTask) messageCount =
+        let rec create messageCount = 
+            let template fioEnd =
+                Receive(proc.Chan) >>= fun msg ->
+                #if DEBUG
+                printfn $"%s{proc.Name} received: %i{msg}"
+                #endif
+                fioEnd
             match messageCount with
-            | 1     -> Send(msg, proc.Chan) >>= fun _ ->
-                       #if DEBUG
-                       printfn $"%s{proc.Name} sent: %i{msg}"
-                       #endif
-                       End()
-            | count -> Send(msg, proc.Chan) >>= fun _ ->
-                       #if DEBUG
-                       printfn $"%s{proc.Name} sent: %i{msg}"
-                       #endif
-                       create (count - 1)
-        create messageCount
-
-    let private createRecvProcess proc messageCount = 
-        let rec create messageCount =
-            match messageCount with
-            | 1     -> Receive(proc.Chan) >>= fun msg ->
-                       #if DEBUG
-                       printfn $"%s{proc.Name} received: %i{msg}"
-                       #endif
-                       End()
-            | count -> Receive(proc.Chan) >>= fun msg ->
-                       #if DEBUG 
-                       printfn $"%s{proc.Name} received: %i{msg}"
-                       #endif
-                       create (count - 1)
-        create messageCount
+            | count when count <= 1 -> let fioEnd = Send(Timer.Stop, timerTask.Chan()) >>= fun _ ->
+                                                    Succeed (timerTask.Result())
+                                       template fioEnd
+            | count                 -> template (create (count - 1))
+        Receive(proc.Chan) >>= fun msg ->
+        #if DEBUG
+        printfn $"%s{proc.Name} received: %i{msg}"
+        #endif
+        Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
+        create (messageCount - 1)
             
-    let Create senderCount messageCount =
+    let Create processCount roundCount =
         let rec createSendProcesses recvProcChan senderCount =
             List.map (fun count -> {Name = $"p{count}"; Chan = recvProcChan}) [1..senderCount]
 
-        let rec createBang recvProc sendProcs msg =
+        let rec createBang recvProc sendProcs (timerTask : Timer.TimerTask) msg =
             match sendProcs with
-            | p::[] -> Parallel(createSendProcess p msg messageCount, createRecvProcess recvProc (senderCount * messageCount)) >>= fun _ -> End()
-            | p::ps -> Parallel(createSendProcess p msg messageCount, createBang recvProc ps (msg + 10)) >>= fun _ -> End()
-            | _     -> failwith $"createBang failed! (at least 1 sending process should exist) senderCount = %i{senderCount}"
+            | p::[] -> Parallel(createSendProcess p msg roundCount, createRecvProcess recvProc timerTask (processCount * roundCount))
+                       >>= fun (_, res) -> match res with
+                                           | Success res -> Succeed res
+                                           | Error error -> Fail error
+            | p::ps -> Parallel(createSendProcess p msg roundCount, createBang recvProc ps timerTask (msg + 10))
+                       >>= fun (_, res) -> match res with
+                                           | Success res -> Succeed res
+                                           | Error error -> Fail error
+            | _     -> failwith $"createBang failed! (at least 1 sending process should exist) processCount = %i{processCount}"
 
         let recvProc = {Name = "p0"; Chan = Channel<int>()}
-        let sendProcs = createSendProcesses recvProc.Chan senderCount
-        createBang recvProc sendProcs 0
+        let sendProcs = createSendProcesses recvProc.Chan processCount
+        let timerTask = new Timer.TimerTask(1, 1)
+        createBang recvProc sendProcs timerTask 0
 
 //
 // Benchmark assessment functions
@@ -352,14 +388,14 @@ module Benchmark =
     type BigConfig = { ProcessCount: int;
                        RoundCount: int }
 
-    type BangConfig = { SenderCount: int;
-                        MessageCount: int }
+    type BangConfig = { ProcessCount: int;
+                        RoundCount: int }
 
     type BenchmarkConfig =
         | Pingpong of PingpongConfig
-       // | ThreadRing of ThreadRingConfig
-       // | Big of BigConfig
-       // | Bang of BangConfig
+        | ThreadRing of ThreadRingConfig
+        | Big of BigConfig
+        | Bang of BangConfig
 
     type BenchmarksConfig =
         { Pingpong: PingpongConfig
@@ -375,9 +411,9 @@ module Benchmark =
         let configStr config =
             match config with
             | Pingpong config   -> $"roundcount%i{config.RoundCount}"
-           // | ThreadRing config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-           // | Big config        -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-           // | Bang config       -> $"sendercount%i{config.SenderCount}-messagecount%i{config.MessageCount}"
+            | ThreadRing config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Big config        -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Bang config       -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
 
         let headerStr = "Execution Time (ms)"
         let homePath = if (Environment.OSVersion.Platform.Equals(PlatformID.Unix) ||
@@ -393,7 +429,7 @@ module Benchmark =
         let rec fileContentStr times acc =
             match times with
             | []            -> acc
-            | (_, time)::ts -> fileContentStr ts (acc + $"%i{time}")
+            | (_, time)::ts -> fileContentStr ts (acc + $"%i{time}\n")
 
         if (not (Directory.Exists(dirPath))) then
             Directory.CreateDirectory(dirPath) |> ignore
@@ -407,9 +443,9 @@ module Benchmark =
         let configStr config =
             match config with
             | Pingpong config   -> $"RoundCount: %i{config.RoundCount}"
-           // | ThreadRing config -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
-           // | Big config        -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
-           // | Bang config       -> $"SenderCount: %i{config.SenderCount} MessageCount: %i{config.MessageCount}"
+            | ThreadRing config -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
+            | Big config        -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
+            | Bang config       -> $"ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount}"
 
         let rec runExecTimesStr runExecTimes acc =
             match runExecTimes with
@@ -433,24 +469,25 @@ module Benchmark =
         printfn "%s" toPrint
 
     let private runBenchmark config runCount runtimeName (run : RuntimeRunFunc) : BenchmarkResult =
-        let rec executeBenchmark fioBench curRun acc =
+        let createBenchmark config =
+            match config with
+            | Pingpong config   -> ("Pingpong", Pingpong.Create config.RoundCount)
+            | ThreadRing config -> ("ThreadRing", ThreadRing.Create config.ProcessCount config.RoundCount)
+            | Big config        -> ("Big", Big.Create config.ProcessCount config.RoundCount)
+            | Bang config       -> ("Bang", Bang.Create config.ProcessCount config.RoundCount)
+
+        let rec executeBenchmark (benchName, fioBench) curRun acc =
             match curRun with
-            | curRun' when curRun' = runCount -> acc
+            | curRun' when curRun' = runCount -> (benchName, acc)
             | curRun'                         -> let result = (run fioBench).Await()
                                                  let time = match result with
                                                             | Success time -> time
                                                             | Error _      -> -1
                                                  let runNum = curRun' + 1
                                                  let result = (runNum, time)
-                                                 executeBenchmark fioBench runNum (acc @ [result])
+                                                 executeBenchmark (createBenchmark config) runNum (acc @ [result])
         
-        let (benchName, fioBench) = match config with
-                                    | Pingpong config   -> ("Pingpong", Pingpong.Create config.RoundCount)
-                                 //   | ThreadRing config -> ("ThreadRing", ThreadRing.Run config.ProcessCount config.RoundCount)
-                                 //   | Big config        -> ("Big", Big.Run config.ProcessCount config.RoundCount)
-                                 //   | Bang config       -> ("Bang", Bang.Run config.SenderCount config.MessageCount)
-
-        let runExecTimes = executeBenchmark fioBench 0 []
+        let (benchName, runExecTimes) = executeBenchmark (createBenchmark config) 0 []
         (benchName, config, runtimeName, runExecTimes)
 
     let Run config runCount runtimeName (run : RuntimeRunFunc) =
@@ -460,9 +497,9 @@ module Benchmark =
 
     let RunAll configs runCount runtimeName (run : RuntimeRunFunc) =
         let benchConfigs = [Pingpong (configs.Pingpong);
-                            (*ThreadRing (configs.ThreadRing);*)
-                            (*Big (configs.Big);*)
-                            (*Bang (configs.Bang)*)]
+                            ThreadRing (configs.ThreadRing);
+                            Big (configs.Big);
+                            Bang (configs.Bang)]
         
         let results = List.map (fun config -> runBenchmark config runCount runtimeName run) benchConfigs
  
