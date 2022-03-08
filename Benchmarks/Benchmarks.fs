@@ -333,26 +333,19 @@ module Bang =
         | 1     -> template (End())
         | count -> template (createSendProcess proc msg (count - 1))
   
-    let private createRecvProcess proc (timerTask : Timer.TimerTask) messageCount =
-        let rec create messageCount = 
-            let template fioEnd =
-                Receive(proc.Chan) >>= fun msg ->
-                #if DEBUG
-                printfn $"%s{proc.Name} received: %i{msg}"
-                #endif
-                fioEnd
-            match messageCount with
-            | count when count <= 1 -> let fioEnd = Send(Timer.Stop, timerTask.Chan()) >>= fun _ ->
-                                                    Succeed (timerTask.Result())
-                                       template fioEnd
-            | count                 -> template (create (count - 1))
-        Receive(proc.Chan) >>= fun msg ->
-        #if DEBUG
-        printfn $"%s{proc.Name} received: %i{msg}"
-        #endif
-        Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
-        create (messageCount - 1)
-            
+    let rec private createRecvProcess proc (timerTask : Timer.TimerTask) messageCount =
+        let template fioEnd =
+            Receive(proc.Chan) >>= fun msg ->
+            #if DEBUG
+            printfn $"%s{proc.Name} received: %i{msg}"
+            #endif
+            fioEnd
+        match messageCount with
+        | count when count <= 1 -> let fioEnd = Send(Timer.Stop, timerTask.Chan()) >>= fun _ ->
+                                                Succeed (timerTask.Result())
+                                   template fioEnd
+        | count                 -> template (createRecvProcess proc timerTask (count - 1))
+
     let Create processCount roundCount : FIO<obj, int64> =
         let rec createSendProcesses recvProcChan senderCount =
             List.map (fun count -> {Name = $"p{count}"; Chan = recvProcChan}) [1..senderCount]
@@ -372,7 +365,9 @@ module Bang =
         let recvProc = {Name = "p0"; Chan = Channel<int>()}
         let sendProcs = createSendProcesses recvProc.Chan processCount
         let timerTask = new Timer.TimerTask(1, 1)
-        createBang recvProc sendProcs timerTask 0
+        let eff = createBang recvProc sendProcs timerTask 0
+        Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
+        eff
 
 //
 // Benchmark assessment functions
@@ -395,12 +390,6 @@ module Benchmark =
         | ThreadRing of ThreadRingConfig
         | Big of BigConfig
         | Bang of BangConfig
-
-    type BenchmarksConfig =
-        { Pingpong: PingpongConfig
-          ThreadRing: ThreadRingConfig
-          Big: BigConfig
-          Bang: BangConfig }
 
     type RuntimeRunFunc = FIO<obj, int64> -> Fiber<obj, int64>
 
@@ -489,18 +478,8 @@ module Benchmark =
         let (benchName, runExecTimes) = executeBenchmark (createBenchmark config) 0 []
         (benchName, config, runtimeName, runExecTimes)
 
-    let Run config runCount runtimeName (run : RuntimeRunFunc) =
-        let result = runBenchmark config runCount runtimeName run
-        printResult result
-        writeResultsToCsv result
-
-    let RunAll configs runCount runtimeName (run : RuntimeRunFunc) =
-        let benchConfigs = [Pingpong (configs.Pingpong);
-                            ThreadRing (configs.ThreadRing);
-                            Big (configs.Big);
-                            Bang (configs.Bang)]
-        
-        let results = List.map (fun config -> runBenchmark config runCount runtimeName run) benchConfigs
+    let Run configs runCount runtimeName (run : RuntimeRunFunc) =
+        let results = List.map (fun config -> runBenchmark config runCount runtimeName run) configs
  
         for result in results do
             printResult result

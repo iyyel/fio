@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Benchmarks": {
+      "commandName": "Project",
+      "commandLineArgs": "--runtime \"Naive\" --pingpong 3000 --threadring 3000 1 --big 3000 1 --bang 3000 1 --runs 20"
+    }
+  }
+}

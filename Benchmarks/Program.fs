@@ -11,27 +11,34 @@ open System.Threading
 ThreadPool.SetMaxThreads(32767, 32767) |> ignore
 ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
-let runEffect() =
-    let fiber = Naive.Run <| Benchmarks.Bang.Create 100 100
-    printfn $"Result: %A{fiber.Await()}"
+let runProgram args =
+    let parser = new ArgParser.Parser()
+    let results = parser.GetResults args
+    let runtime = results.GetResult ArgParser.Runtime
+    let runCount = results.GetResult ArgParser.Runs
+    let pingpongConfig = match results.TryGetResult ArgParser.Pingpong with
+                         | Some roundCount -> [Pingpong {RoundCount = roundCount}]
+                         | _               -> []
+    let threadRingConfig = match results.TryGetResult ArgParser.ThreadRing with
+                           | Some (processCount, roundCount) -> [ThreadRing {ProcessCount = processCount; RoundCount = roundCount}]
+                           | _                               -> []
+    let bigConfig = match results.TryGetResult ArgParser.Big with
+                    | Some (processCount, roundCount) -> [Big {ProcessCount = processCount; RoundCount = roundCount}]
+                    | _                               -> []       
+    let bangConfig = match results.TryGetResult ArgParser.Bang with
+                     | Some (processCount, roundCount) -> [Bang {ProcessCount = processCount; RoundCount = roundCount}]
+                     | _                               -> []
+    let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
 
-let runSingleBenchmark() =
-    let pingpongConfig   = Pingpong   {RoundCount   = 1000}
-    let threadringConfig = ThreadRing {ProcessCount = 1000; RoundCount = 3}
-    let bigConfig        = Big        {ProcessCount = 1000; RoundCount = 3}
-    let bangConfig       = Bang       {ProcessCount = 1000; RoundCount = 3}
-    Benchmarks.Benchmark.Run bangConfig 1 "Naive" Naive.Run
-
-let runAllBenchmarks() =
-    let configs = {
-        Pingpong   = {RoundCount   = 1000};
-        ThreadRing = {ProcessCount = 1000; RoundCount = 3};
-        Big        = {ProcessCount = 1000; RoundCount = 3};
-        Bang       = {ProcessCount = 1000; RoundCount = 3};
-    }
-    Benchmarks.Benchmark.RunAll configs 10 "Naive" Naive.Run
+    let (runtimeName, runtimeFunc) = match runtime with
+                                     | ArgParser.Naive     -> ("Naive", Naive.Run)
+                                     | ArgParser.Default   -> ("Default", Default.Run)
+                                     | ArgParser.Optimized -> ("Optimized", Default.Run)
+                      
+    Benchmarks.Benchmark.Run configs runCount runtimeName runtimeFunc
 
 [<EntryPoint>]
-let main _ =
-    runAllBenchmarks()
+let main args =
+    printfn $"arguments: %A{args}"
+    runProgram args
     0
