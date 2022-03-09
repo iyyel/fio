@@ -31,9 +31,9 @@ let runProgram args =
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
 
     let (runtimeName, runtimeFunc) = match runtime with
-                                     | ArgParser.Naive     -> ("Naive", Naive.Run)
-                                     | ArgParser.Default   -> ("Default", Default.Run)
-                                     | ArgParser.Optimized -> ("Optimized", Default.Run)
+                                     | ArgParser.Default  -> ("Default", Default.Run)
+                                     | ArgParser.Naive    -> ("Naive", Naive.Run)
+                                     | ArgParser.Advanced -> ("Advanced", Advanced.Run)
                       
     Benchmarks.Benchmark.Run configs runCount runtimeName runtimeFunc
 

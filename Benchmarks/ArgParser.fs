@@ -7,9 +7,9 @@ module ArgParser
 open Argu
 
 type Runtime =
-    | Naive
     | Default
-    | Optimized
+    | Naive
+    | Advanced
 
 type Arguments =
     | [<Mandatory>] Runtime of runtime:Runtime
@@ -17,13 +17,13 @@ type Arguments =
     | ThreadRing of ProcessCount:int * RoundCount:int
     | Big of ProcessCount:int * RoundCount:int
     | Bang of ProcessCount:int * RoundCount:int
-    | [<Mandatory>] Runs of rounds:int
+    | [<Mandatory>] Runs of Runs:int
 
     interface IArgParserTemplate with
         member args.Usage =
             match args with
-            | Runtime _    -> "specify desired runtime (default, naive, optimized)"
-            | Pingpong _   -> "specify rounds for pingpong benchmark"
+            | Runtime _    -> "specify desired runtime (default, naive, advanced)"
+            | Pingpong _   -> "specify round count for pingpong benchmark"
             | ThreadRing _ -> "specify process count and round count for threadring benchmark"
             | Big _        -> "specify process count and round count for big benchmark"
             | Bang _       -> "specify process count and round count for bang benchmark"

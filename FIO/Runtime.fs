@@ -72,4 +72,6 @@ module Runtime =
                         Error fail.Error
             })
 
+    and Advanced<'Error, 'Result> = Naive<'Error, 'Result>
+
     and Default<'Error, 'Result> = Naive<'Error, 'Result>
