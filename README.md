@@ -62,7 +62,7 @@
       </ul>
     </li>
     <li>
-      <li><a href="#usage">Usage</a></li>
+      <a href="#usage">Usage</a>
       <ul>
         <li><a href="#benchmarks">Benchmarks</a></li>
       </ul>
