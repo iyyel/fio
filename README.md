@@ -20,7 +20,7 @@
 <br />
 <div align="center">
   <a href="https://github.com/iyyel/fio">
-    <img src="images/fio_logo_wide.png" alt="FIO Logo">
+    <img src="images/fio_logo_wide.png" width="400" height="500" alt="FIO Logo">
   </a>
 
   <!-- <h3 align="center">Title</h3> -->
