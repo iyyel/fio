@@ -419,7 +419,7 @@ module Benchmark =
         else ()
 
         let fileContent = fileContentStr times ""
-        printfn $"\nWriting benchmark results to '%s{filePath}'"
+        printfn $"\nSaving benchmark results to '%s{filePath}'"
         File.WriteAllText(filePath, headerStr + "\n" + fileContent)
 
     let private printResult (result : BenchmarkResult) =

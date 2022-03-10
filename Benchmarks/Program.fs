@@ -31,9 +31,9 @@ let runProgram args =
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
 
     let runtimeName, runtimeFunc = match runtime with
-                                     | ArgParser.Default  -> ("Default", Default.Run)
-                                     | ArgParser.Naive    -> ("Naive", Naive.Run)
-                                     | ArgParser.Advanced -> ("Advanced", Advanced.Run)
+                                     | ArgParser.Default  -> ("Default", Default().Run)
+                                     | ArgParser.Naive    -> ("Naive", Naive().Run)
+                                     | ArgParser.Advanced -> ("Advanced", Advanced().Run)
                       
     Run configs runCount runtimeName runtimeFunc
 
@@ -41,5 +41,11 @@ let runProgram args =
 let main args =
     let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
     printfn $"benchmark arguments:%s{argStr}"
-    runProgram args
+    //runProgram args
+
+    let runtime = Advanced()
+
+    let workers = runtime.Workers
+      
+
     0

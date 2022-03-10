@@ -27,7 +27,7 @@ type Arguments =
             | ThreadRing _ -> "specify process count and round count for threadring benchmark"
             | Big _        -> "specify process count and round count for big benchmark"
             | Bang _       -> "specify process count and round count for bang benchmark"
-            | Runs _       -> "specify the amount of runs for each benchmark"
+            | Runs _       -> "specify the number of runs for each benchmark"
 
 type Parser() =
     let parser = ArgumentParser.Create<Arguments>()
