@@ -2,7 +2,7 @@
   "profiles": {
     "Benchmarks": {
       "commandName": "Project",
-      "commandLineArgs": "--runtime \"Naive\" --bang 2500 1 --runs 20"
+      "commandLineArgs": "--runtime \"Naive\" --pingpong 20000 --threadring 5000 5 --big 1000 5 --bang 10000 5 --runs 20"
     }
   }
 }

@@ -39,6 +39,7 @@ let runProgram args =
 
 [<EntryPoint>]
 let main args =
-    printfn $"arguments: %A{args}"
+    let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
+    printfn $"arguments:%s{argStr}"
     runProgram args
     0
