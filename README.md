@@ -119,11 +119,17 @@ It is quite simple to get started with installing or developing for **FIO**.
 
 ## Usage
 
-...
+Explain here how to use the library. Import it, etc.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
+
+## Benchmarks
+
+Explain here how to run and interpret the benchmarks, where they're saved, etc.
+
+<p align="right">(<a href="#top">back to top</a>)</p>
 
 
 <!-- LICENSE -->
