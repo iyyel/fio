@@ -12,7 +12,7 @@ ThreadPool.SetMaxThreads(32767, 32767) |> ignore
 ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 let runProgram args =
-    let parser = new ArgParser.Parser()
+    let parser = ArgParser.Parser()
     let results = parser.GetResults args
     let runtime = results.GetResult ArgParser.Runtime
     let runCount = results.GetResult ArgParser.Runs
@@ -30,16 +30,16 @@ let runProgram args =
                      | _                               -> []
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
 
-    let (runtimeName, runtimeFunc) = match runtime with
+    let runtimeName, runtimeFunc = match runtime with
                                      | ArgParser.Default  -> ("Default", Default.Run)
                                      | ArgParser.Naive    -> ("Naive", Naive.Run)
                                      | ArgParser.Advanced -> ("Advanced", Advanced.Run)
                       
-    Benchmarks.Benchmark.Run configs runCount runtimeName runtimeFunc
+    Run configs runCount runtimeName runtimeFunc
 
 [<EntryPoint>]
 let main args =
     let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
-    printfn $"arguments:%s{argStr}"
+    printfn $"benchmark arguments:%s{argStr}"
     runProgram args
     0

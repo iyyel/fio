@@ -103,7 +103,7 @@ module Pingpong =
         let pongSendChan = Channel<int>()
         let pingProc = {Name = "p0"; ChanSend = pingSendChan; ChanRecv = pongSendChan}
         let pongProc = {Name = "p1"; ChanSend = pongSendChan; ChanRecv = pingSendChan}
-        let timerTask = new Timer.TimerTask(1, 1)
+        let timerTask = Timer.TimerTask(1, 1)
         Parallel(createPingProcess pingProc roundCount timerTask, createPongProcess pongProc roundCount)
         >>= fun (res, _) -> match res with
                             | Success res -> Succeed res
@@ -178,10 +178,10 @@ module ThreadRing =
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
         let procs = createProcesses chans chans 0 []
-        let (pa, pb, ps) = match procs with
-                           | pa::pb::ps -> (pa, pb, ps)
-                           | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
-        let timerTask = new Timer.TimerTask(1, 1)
+        let pa, pb, ps = match procs with
+                         | pa::pb::ps -> (pa, pb, ps)
+                         | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
+        let timerTask = Timer.TimerTask(1, 1)
         let fioEnd = Parallel(createRecvProcess pb roundCount, createSendProcess pa roundCount timerTask)
                      >>= fun (_, res) -> match res with
                                          | Success res -> Succeed res
@@ -211,7 +211,7 @@ module Big =
             else
                 let x = msg
                 let msg = Ping (x, proc.ChanRecvPong)
-                let (chan, chans) = (List.head chans, List.tail chans)
+                let chan, chans = (List.head chans, List.tail chans)
                 Succeed msg >>= fun msg -> Send(msg, chan) >>= fun _ ->
                 #if DEBUG
                 printfn $"%s{proc.Name} sent ping: %i{x}"
@@ -293,8 +293,8 @@ module Big =
                        createBig ps (msg + 10) timerTask fio
          
         let procs = createProcesses processCount
-        let timerTask = new Timer.TimerTask(processCount, processCount)
-        let (pa, pb, ps) = match procs with
+        let timerTask = Timer.TimerTask(processCount, processCount)
+        let pa, pb, ps = match procs with
                            | pa::pb::ps -> (pa, pb, ps)
                            | _          -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let fioEnd = Parallel(createProcess pa (10 * (processCount - 2)) roundCount timerTask,
@@ -351,10 +351,10 @@ module Bang =
 
         let recvProc = {Name = "p0"; Chan = Channel<int>()}
         let sendProcs = createSendProcesses recvProc.Chan processCount
-        let (p, ps) = match List.rev sendProcs with
-                      | p::ps -> (p, List.rev ps)
-                      | _     -> failwith $"createBig failed! (at least 1 sending process should exist) processCount = %i{processCount}"
-        let timerTask = new Timer.TimerTask(1, 1)
+        let p, ps = match List.rev sendProcs with
+                    | p::ps -> (p, List.rev ps)
+                    | _     -> failwith $"createBig failed! (at least 1 sending process should exist) processCount = %i{processCount}"
+        let timerTask = Timer.TimerTask(1, 1)
         let fioEnd = Parallel(createSendProcess p 0 roundCount,
                               createRecvProcess recvProc (processCount * roundCount) timerTask)
                      >>= fun (_, res) -> match res with
@@ -402,11 +402,12 @@ module Benchmark =
                            Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
                        then Environment.GetEnvironmentVariable("HOME")
                        else Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%");
-        let (name, config, runtimeName, times) = result
+        let benchName, config, runtimeName, times = result
         let dirPath = homePath + @"\fio\benchmarks"
         let configStr = configStr config
         let dateStr = DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss")
-        let fileName = name.ToLower() + "-" + configStr + "-" + runtimeName.ToLower() + "-" + dateStr + ".csv"
+        let runStr = times.Length.ToString() + "runs"
+        let fileName = runtimeName.ToLower() + "-" + benchName.ToLower() + "-" + configStr + "-" + runStr + "-" + dateStr + ".csv"
         let filePath = dirPath + @"\" + fileName
         let rec fileContentStr times acc =
             match times with
@@ -435,7 +436,7 @@ module Benchmark =
             | (run, time)::ts -> let str = $"|  #%-10i{run}                 %-35i{time}    |\n"
                                  runExecTimesStr ts (acc + str)
 
-        let (benchName, config, runtimeName, times) = result
+        let benchName, config, runtimeName, times = result
         let configStr = configStr config
         let runExecTimesStr = runExecTimesStr times ""
         let benchNameRuntime = benchName + " / " + runtimeName
@@ -448,7 +449,7 @@ module Benchmark =
 |           Run                         Execution time (ms)           |
 |  ---------------------       -------------------------------------  |\n"
         let toPrint = headerStr + runExecTimesStr
-        printfn "%s" toPrint
+        printfn $"%s{toPrint}"
 
     let private runBenchmark config runCount runtimeName (run : RuntimeRunFunc) : BenchmarkResult =
         let createBenchmark config =
@@ -469,7 +470,7 @@ module Benchmark =
                                                  let result = (runNum, time)
                                                  executeBenchmark (createBenchmark config) runNum (acc @ [result])
         
-        let (benchName, runExecTimes) = executeBenchmark (createBenchmark config) 0 []
+        let benchName, runExecTimes = executeBenchmark (createBenchmark config) 0 []
         (benchName, config, runtimeName, runExecTimes)
 
     let Run configs runCount runtimeName (run : RuntimeRunFunc) =
