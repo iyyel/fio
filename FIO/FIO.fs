@@ -21,22 +21,24 @@ module FIO =
 
     type InterpretFunc<'Error, 'Result> = FIO<'Error, 'Result> -> Try<'Error, 'Result>
 
-    and Fiber<'Error, 'Result>
+    and [<AbstractClass>] Fiber<'Error, 'Result>() =
+        abstract Await<'Error, 'Result> : unit -> Try<'Error, 'Result>
+
+    and AdvancedFiber<'Error, 'Result>(chan : Channel<Try<'Error, 'Result>>) = 
+        inherit Fiber<'Error, 'Result>()
+
+        override _.Await() =
+            chan.Receive()
+
+    and NaiveFiber<'Error, 'Result>
             (eff : FIO<'Error, 'Result>,
              interpret : InterpretFunc<'Error, 'Result>) =
+        inherit Fiber<'Error, 'Result>()
+
         let task = Task.Factory.StartNew(fun () -> interpret eff)
 
-        member _.Await() = 
+        override _.Await() = 
             task.Result
-
-        member _.IsCompleted() =
-            task.IsCompleted
-
-        member _.IsCompletedSuccessfully() =
-            task.IsCompletedSuccessfully
-
-        member _.IsFaulted() =
-            task.IsFaulted
 
         member internal _.Task() =
             task

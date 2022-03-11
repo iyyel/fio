@@ -6,6 +6,7 @@ module Program
 
 open Benchmarks.Benchmark
 open FSharp.FIO.Runtime
+open FSharp.FIO.FIO
 open System.Threading
 
 ThreadPool.SetMaxThreads(32767, 32767) |> ignore
@@ -42,10 +43,9 @@ let main args =
     let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
     printfn $"benchmark arguments:%s{argStr}"
     //runProgram args
-
     let runtime = Advanced()
-
     let workers = runtime.Workers
-      
 
+    let eff = Benchmarks.Pingpong.Create 10 :> obj
+    let eff2 = eff :?> FIO<obj, obj>
     0

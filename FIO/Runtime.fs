@@ -6,16 +6,43 @@ namespace FSharp.FIO
 
 open FSharp.FIO.FIO
 open System.Threading.Tasks
+open System.Collections.Concurrent
 
 module Runtime =
+    
+    type WorkItem<'Error, 'Result> = FIO<'Error, 'Result> * Channel<Try<'Error, 'Result>>
 
-    type Worker(id, interpret : InterpretFunc<'Error, 'Result>) =
+    type Worker(id, runtime : Runtime) =
+        let workQueue = new BlockingCollection<WorkItem<obj, obj>>()
+
+        let _ = Task.Factory.StartNew(fun () ->
+            for eff, resultChan in workQueue.GetConsumingEnumerable() do
+                printfn $"Worker(%s{id}): Found new work. Starting work..."
+                let result = runtime.Interpret eff
+                printfn $"Worker(%s{id}): Work done. Sending result..."
+                resultChan.Send(result))
+
         member _.Id = id
-        member _.Execute(eff) = 
-            Task.Factory.StartNew(fun () -> interpret eff)
- 
-    [<AbstractClass>]
-    type Runtime() =
+        member _.AddWork(workItem) =
+            workQueue.Add(workItem)
+            printfn $"Worker(%s{id}): Added new work. New total work queue size: %i{workQueue.Count}"
+
+    and WorkerHandler(workerCount : int option, runtime : Runtime) as self =
+        let mutable workers : Worker list = []
+        do 
+            workers <- self.CreateWorkers
+
+        member public _.Workers
+            with get() = workers
+
+        member private _.CreateWorkers = let createWorkers count = 
+                                            List.map (fun id -> Worker(id.ToString(), runtime)) [0..count]
+                                         match workerCount with
+                                         | Some count -> createWorkers (count - 1)
+                                         | _          -> let cpuCount = System.Environment.ProcessorCount 
+                                                         createWorkers (cpuCount - 1)
+
+    and [<AbstractClass>] Runtime() =
         abstract Run<'Error, 'Result> : FIO<'Error, 'Result> -> Fiber<'Error, 'Result>
         abstract Interpret<'Error, 'Result> : FIO<'Error, 'Result> -> Try<'Error, 'Result>
 
@@ -25,7 +52,7 @@ module Runtime =
     and Naive() =
         inherit Runtime()
         override this.Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
-            new Fiber<'Error, 'Result>(eff, this.Interpret)
+            new NaiveFiber<'Error, 'Result>(eff, this.Interpret)
 
         override this.Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
             eff.Accept({
@@ -38,7 +65,7 @@ module Runtime =
 
                     member _.VisitConcurrent<'FIOError, 'FIOResult, 'Error, 'Result>
                             (con : Concurrent<'FIOError, 'FIOResult, 'Error, 'Result>) = 
-                        let fiber = new Fiber<'FIOError, 'FIOResult>(con.Eff, this.Interpret)
+                        let fiber = new NaiveFiber<'FIOError, 'FIOResult>(con.Eff, this.Interpret)
                         this.Interpret <| con.Cont fiber
 
                     member _.VisitAwait<'FIOError, 'FIOResult, 'Error, 'Result>
@@ -66,8 +93,8 @@ module Runtime =
                         | Error error -> this.Interpret <| onError.Cont error
 
                     member _.VisitRace<'Error, 'Result>(race : Race<'Error, 'Result>) =
-                        let fiberA = new Fiber<'Error, 'Result>(race.EffA, this.Interpret)
-                        let fiberB = new Fiber<'Error, 'Result>(race.EffB, this.Interpret)
+                        let fiberA = new NaiveFiber<'Error, 'Result>(race.EffA, this.Interpret)
+                        let fiberB = new NaiveFiber<'Error, 'Result>(race.EffB, this.Interpret)
                         let task = Task.WhenAny([fiberA.Task(); fiberB.Task()])
                         task.Result.Result
 
@@ -88,24 +115,17 @@ module Runtime =
 // 
 // Advanced runtime implementation
 // 
-    and Advanced(?workerCount) as self =
+    and Advanced(?workerCount) =
         inherit Runtime()
-        let mutable workers = []
-        do 
-            workers <- self.CreateWorkers
 
-        member public _.Workers
-            with get() = workers
-
-        member private this.CreateWorkers = let createWorkers count = 
-                                                List.map (fun id -> Worker(id.ToString(), this.Interpret)) [0..count]
-                                            match workerCount with
-                                            | Some count -> createWorkers (count - 1)
-                                            | _          -> let cpuCount = System.Environment.ProcessorCount 
-                                                            createWorkers (cpuCount - 1)
+        member this.Workers = let workerHandler = new WorkerHandler(workerCount, this)
+                              workerHandler.Workers
 
         override this.Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
-            new Fiber<'Error, 'Result>(eff, this.Interpret)
+            let resultChan = Channel<Try<'Error, 'Result>>()
+            let workItem = (eff, resultChan)
+            //workers.Head.AddWork workItem
+            new AdvancedFiber<'Error, 'Result>(resultChan)
 
         override this.Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
             eff.Accept({
@@ -118,7 +138,7 @@ module Runtime =
 
                     member _.VisitConcurrent<'FIOError, 'FIOResult, 'Error, 'Result>
                             (con : Concurrent<'FIOError, 'FIOResult, 'Error, 'Result>) = 
-                        let fiber = new Fiber<'FIOError, 'FIOResult>(con.Eff, this.Interpret)
+                        let fiber = new NaiveFiber<'FIOError, 'FIOResult>(con.Eff, this.Interpret)
                         this.Interpret <| con.Cont fiber
 
                     member _.VisitAwait<'FIOError, 'FIOResult, 'Error, 'Result>
@@ -146,8 +166,8 @@ module Runtime =
                         | Error error -> this.Interpret <| onError.Cont error
 
                     member _.VisitRace<'Error, 'Result>(race : Race<'Error, 'Result>) =
-                        let fiberA = new Fiber<'Error, 'Result>(race.EffA, this.Interpret)
-                        let fiberB = new Fiber<'Error, 'Result>(race.EffB, this.Interpret)
+                        let fiberA = new NaiveFiber<'Error, 'Result>(race.EffA, this.Interpret)
+                        let fiberB = new NaiveFiber<'Error, 'Result>(race.EffB, this.Interpret)
                         let task = Task.WhenAny([fiberA.Task(); fiberB.Task()])
                         task.Result.Result
 
