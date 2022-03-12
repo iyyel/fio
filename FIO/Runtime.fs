@@ -9,7 +9,7 @@ open System.Threading.Tasks
 open System.Collections.Concurrent
 
 module Runtime =
-    
+
     type WorkItem<'Error, 'Result> = FIO<'Error, 'Result> * Channel<Try<'Error, 'Result>>
 
     type Worker(id, runtime : Runtime) =
@@ -43,18 +43,18 @@ module Runtime =
                                                          createWorkers (cpuCount - 1)
 
     and [<AbstractClass>] Runtime() =
-        abstract Run<'Error, 'Result> : FIO<'Error, 'Result> -> Fiber<'Error, 'Result>
-        abstract Interpret<'Error, 'Result> : FIO<'Error, 'Result> -> Try<'Error, 'Result>
+        abstract Run : FIO<'Error, 'Result> -> Fiber<'Error, 'Result>
+        abstract Interpret : FIO<'Error, 'Result> -> Try<'Error, 'Result>
 
 // 
 // Naive runtime implementation
 // 
     and Naive() =
         inherit Runtime()
-        override this.Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
+        override this.Run (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
             new NaiveFiber<'Error, 'Result>(eff, this.Interpret)
 
-        override this.Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
+        override this.Interpret (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
             eff.Accept({
                 new Visitor with
                     member _.VisitInput<'Error, 'Result>(input : Input<'Error, 'Result>) =
@@ -121,13 +121,23 @@ module Runtime =
         member this.Workers = let workerHandler = new WorkerHandler(workerCount, this)
                               workerHandler.Workers
 
-        override this.Run<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
-            let resultChan = Channel<Try<'Error, 'Result>>()
-            let workItem = (eff, resultChan)
-            //workers.Head.AddWork workItem
-            new AdvancedFiber<'Error, 'Result>(resultChan)
+        override this.Run (eff : FIO<'Error, 'Result>) : Fiber<'Error, 'Result> =
+            //let fiber = this.LowLevelRun eff
+            failwith ""
 
-        override this.Interpret<'Error, 'Result> (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
+         member this.LowLevelRun (eff : FIO<_, _>) : Fiber<'Error, 'Result> = 
+            // create WorkItem for worker
+            let resultChan = Channel<Try<_, _>>()
+            let workItem = (eff, resultChan)
+
+            // get a worker (just the head for demonstration purposes)
+            let worker = List.head this.Workers
+            let _ = worker.AddWork(workItem)
+
+            // return fiber
+            new AdvancedFiber<'Error, 'Result>(resultChan)
+           
+        override this.Interpret (eff : FIO<'Error, 'Result>) : Try<'Error, 'Result> =
             eff.Accept({
                 new Visitor with
                     member _.VisitInput<'Error, 'Result>(input : Input<'Error, 'Result>) =
