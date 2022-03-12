@@ -98,7 +98,7 @@ module Pingpong =
                 create (roundCount - 1)
         create roundCount
 
-    let Create roundCount : FIO<obj, int64> =
+    let Create roundCount : FIO<int64, obj> =
         let pingSendChan = Channel<int>()
         let pongSendChan = Channel<int>()
         let pingProc = {Name = "p0"; ChanSend = pingSendChan; ChanRecv = pongSendChan}
@@ -106,7 +106,7 @@ module Pingpong =
         let timerTask = Timer.TimerTask(1, 1)
         Parallel(createPingProcess pingProc roundCount timerTask, createPongProcess pongProc roundCount)
         >>= fun (res, _) -> match res with
-                            | Success res -> Succeed res
+                            | Ok res      -> Succeed res
                             | Error error -> Fail error
 
 // ThreadRing benchmark
@@ -155,7 +155,7 @@ module ThreadRing =
                 create (roundCount - 1)
         create roundCount
 
-    let Create processCount roundCount : FIO<obj, int64> =
+    let Create processCount roundCount : FIO<int64, obj> =
         let getRecvChan index (chans : Channel<int> list) =
             match index with
             | index when index - 1 < 0 -> chans.Item (List.length chans - 1)
@@ -172,7 +172,7 @@ module ThreadRing =
             | []    -> acc
             | p::ps -> let fio = Parallel(createRecvProcess p roundCount, acc)
                                  >>= fun (_, res) -> match res with
-                                                     | Success res -> Succeed res
+                                                     | Ok res      -> Succeed res
                                                      | Error error -> Fail error
                        createThreadRing ps timerTask fio
 
@@ -184,7 +184,7 @@ module ThreadRing =
         let timerTask = Timer.TimerTask(1, 1)
         let fioEnd = Parallel(createRecvProcess pb roundCount, createSendProcess pa roundCount timerTask)
                      >>= fun (_, res) -> match res with
-                                         | Success res -> Succeed res
+                                         | Ok res      -> Succeed res
                                          | Error error -> Fail error
         createThreadRing ps timerTask fioEnd
 
@@ -258,7 +258,7 @@ module Big =
         Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
         createSendPings proc.ChansSend (roundCount - 1)
         
-    let Create processCount roundCount : FIO<obj, int64> =
+    let Create processCount roundCount : FIO<int64, obj> =
         let rec createProcesses processCount =
             let rec createRecvChanProcesses processCount acc =
                 match processCount with
@@ -288,7 +288,7 @@ module Big =
             | []    -> acc
             | p::ps -> let fio = Parallel(createProcess p msg roundCount timerTask, acc)
                                  >>= fun (res, _) -> match res with
-                                                     | Success res -> Succeed res
+                                                     | Ok res      -> Succeed res
                                                      | Error error -> Fail error
                        createBig ps (msg + 10) timerTask fio
          
@@ -300,7 +300,7 @@ module Big =
         let fioEnd = Parallel(createProcess pa (10 * (processCount - 2)) roundCount timerTask,
                               createProcess pb (10 * (processCount - 1)) roundCount timerTask)
                      >>= fun (res, _) -> match res with
-                                         | Success res -> Succeed res
+                                         | Ok res      -> Succeed res
                                          | Error error -> Fail error
         createBig ps 0 timerTask fioEnd
         
@@ -336,7 +336,7 @@ module Bang =
             #endif
             createRecvProcess proc (roundCount - 1) timerTask
 
-    let Create processCount roundCount : FIO<obj, int64> =
+    let Create processCount roundCount : FIO<int64, obj> =
         let rec createSendProcesses recvProcChan senderCount =
             List.map (fun count -> {Name = $"p{count}"; Chan = recvProcChan}) [1..senderCount]
 
@@ -345,7 +345,7 @@ module Bang =
             | []    -> acc
             | p::ps -> let fio = Parallel(createSendProcess p 0 roundCount, acc)
                                  >>= fun (_, res) -> match res with
-                                                     | Success res -> Succeed res
+                                                     | Ok res      -> Succeed res
                                                      | Error error -> Fail error
                        createBang recvProc ps fio
 
@@ -358,7 +358,7 @@ module Bang =
         let fioEnd = Parallel(createSendProcess p 0 roundCount,
                               createRecvProcess recvProc (processCount * roundCount) timerTask)
                      >>= fun (_, res) -> match res with
-                                         | Success res -> Succeed res
+                                         | Ok res      -> Succeed res
                                          | Error error -> Fail error
         Send(Timer.Start, timerTask.Chan()) >>= fun _ ->
         createBang recvProc ps fioEnd
@@ -385,7 +385,7 @@ module Benchmark =
         | Big of BigConfig
         | Bang of BangConfig
 
-    type RuntimeRunFunc = FIO<obj, int64> -> Fiber<obj, int64>
+    type RuntimeRunFunc = FIO<int64, obj> -> Fiber<int64, obj>
 
     type BenchmarkResult = string * BenchmarkConfig * string * (int * int64) list
 
@@ -464,8 +464,8 @@ module Benchmark =
             | curRun' when curRun' = runCount -> (benchName, acc)
             | curRun'                         -> let result = (run fioBench).Await()
                                                  let time = match result with
-                                                            | Success time -> time
-                                                            | Error _      -> -1
+                                                            | Ok time -> time
+                                                            | Error _  -> -1
                                                  let runNum = curRun' + 1
                                                  let result = (runNum, time)
                                                  executeBenchmark (createBenchmark config) runNum (acc @ [result])
