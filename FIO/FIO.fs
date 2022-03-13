@@ -9,147 +9,79 @@ open System.Threading.Tasks
 
 module FIO =
 
-    type Channel<'Msg>() =
-        let bc = new BlockingCollection<'Msg>()
-        member _.Send(msg) = bc.Add msg
-        member _.Receive() = bc.Take()
-        member _.Size() = bc.Count
+    type Channel<'V> private (bc : BlockingCollection<obj>) =
+        new() = Channel(new BlockingCollection<obj>())
+        member _.Add(value : 'V) = bc.Add(value)
+        member _.Take() : 'V = bc.Take() :?> 'V
+        member _.Count() = bc.Count
+        member internal _.Upcast() = Channel<obj>(bc)
 
-    type InterpretFunc<'Result, 'Error> = FIO<'Result, 'Error> -> Result<'Result, 'Error>
+    and Fiber<'R, 'E>(fio : FIO<'R, 'E>, interpret : FIO<'R, 'E> -> Result<'R, 'E>) =
+        let task = Task.Factory.StartNew(fun () -> interpret fio)
+        member _.Await() = task.Result
+        member internal _.Task() = task
 
-    and Fiber<'Result, 'Error>
-            (eff : FIO<'Result, 'Error>,
-             interpret : InterpretFunc<'Result, 'Error>) =
-        let task = Task.Factory.StartNew(fun () -> interpret eff)
+    and FIO<'R, 'E> =
+        | NonBlocking of action: (unit -> Result<'R, 'E>)
+        | Blocking of chan: Channel<'R>
+        | Concurrent of eff: FIO<obj, 'E> * cont: (Fiber<obj, 'E> -> FIO<'R, 'E>)
+        | Await of fiber: Fiber<obj, 'E> * cont: (Result<obj, 'E> -> FIO<'R, 'E>)
+        | Sequence of eff: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
+        | Success of result: 'R
+        | Failure of error: 'E
 
-        member _.Await() = 
-            task.Result
+    let rec internal upcastResult<'R, 'E>(fio : FIO<'R, 'E>) : FIO<obj, 'E> =
+        match fio with
+        | NonBlocking action     -> NonBlocking(fun () ->
+                                        match action() with
+                                        | Ok res    -> Ok (res :> obj)
+                                        | Error err -> Error err)
+        | Blocking chan          -> Blocking (chan.Upcast())
+        | Concurrent (fio, cont) -> Concurrent (fio, fun fiber -> upcastResult <| cont fiber)
+        | Await (fiber, cont)    -> Await (fiber, fun res -> upcastResult <| cont res)
+        | Sequence (fio, cont)   -> Sequence (fio, fun res -> upcastResult <| cont res)
+        | Success res            -> Success (res :> obj)
+        | Failure err            -> Failure err
 
-        member internal _.Task() =
-            task
+    let rec internal upcastError<'R, 'E>(fio : FIO<'R, 'E>) : FIO<'R, obj> =
+        match fio with
+        | NonBlocking action     -> NonBlocking(fun () ->
+                                        match action() with
+                                        | Ok res    -> Ok res
+                                        | Error err -> Error (err :> obj))
+        | Blocking chan -> Blocking chan
+     // | Concurrent (fio, cont) -> Concurrent (upcastError fio, fun fiber -> upcastError <| cont fiber)
+     // | Await (fiber, cont)    -> Await (fiber, fun res -> upcastError <| cont res)
+        | Sequence (fio, cont)   -> Sequence (upcastError fio, fun res -> upcastError <| cont res)
+        | Success res            -> Success res
+        | Failure err            -> Failure (err :> obj)
 
-    and Visitor =
-        abstract VisitInput<'Result, 'Error>                             : Input<'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitAction<'Result, 'Error>                            : Action<'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitConcurrent<'FIOResult, 'FIOError, 'Result, 'Error> : Concurrent<'FIOResult, 'FIOError, 'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitAwait<'FIOResult, 'FIOError, 'Result, 'Error>      : Await<'FIOResult, 'FIOError, 'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitSequence<'FIOResult, 'Result, 'Error>              : Sequence<'FIOResult, 'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitOrElse<'Result, 'Error>                            : OrElse<'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitOnError<'FIOError,'Result, 'Error>                 : OnError<'FIOError,'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitRace<'Result, 'Error>                              : Race<'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitAttempt<'FIOResult, 'FIOError, 'Result, 'Error>    : Attempt<'FIOResult, 'FIOError, 'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitSucceed<'Result, 'Error>                           : Succeed<'Result, 'Error> -> Result<'Result, 'Error>
-        abstract VisitFail<'Result, 'Error>                              : Fail<'Result, 'Error> -> Result<'Result, 'Error>
+    let internal upcastBoth<'R, 'E>(fio : FIO<'R, 'E>) : FIO<obj, obj> =
+        upcastResult <| upcastError fio
 
-    and [<AbstractClass>] FIO<'Result, 'Error>() =
-        abstract Accept<'Result, 'Error> : Visitor -> Result<'Result, 'Error>
+    let Send<'V, 'E>(value : 'V, chan : Channel<'V>) : FIO<Unit, 'E> =
+        NonBlocking (fun () -> Ok <| chan.Add(value))
 
-    and Input<'Result, 'Error>(chan : Channel<'Result>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Chan = chan
-        override this.Accept(visitor) =
-            visitor.VisitInput(this)
+    let Receive<'R, 'E>(chan : Channel<'R>) : FIO<'R, 'E> =
+        Blocking chan
 
-    and Action<'Result, 'Error>(func : unit -> 'Result) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Func = func
-        override this.Accept(visitor) =
-            visitor.VisitAction(this)
+    let (>>) (fio : FIO<'R1, 'E>) (cont : ('R1 -> FIO<'R, 'E>)) : FIO<'R, 'E> =
+        Sequence (upcastResult fio, fun (res : obj) -> cont (res :?> 'R1))
 
-    and Concurrent<'FIOResult, 'FIOError, 'Result, 'Error>
-            (eff : FIO<'FIOResult, 'FIOError>,
-             cont : Fiber<'FIOResult, 'FIOError> -> FIO<'Result, 'Error>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Eff = eff
-        member internal _.Cont = cont
-        override this.Accept(visitor) =
-            visitor.VisitConcurrent(this)
+    let Succeed<'R, 'E>(res : 'R) : FIO<'R, 'E> =
+        Success res
 
-    and Await<'FIOResult, 'FIOError, 'Result, 'Error>
-            (fiber : Fiber<'FIOResult, 'FIOError>,
-             cont : Result<'FIOResult, 'FIOError> -> FIO<'Result, 'Error>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Fiber = fiber
-        member internal _.Cont = cont
-        override this.Accept(visitor) =
-            visitor.VisitAwait(this)
+    let Fail<'R, 'E>(err : 'E) : FIO<'R, 'E> =
+        Failure err
 
-    and Sequence<'FIOResult, 'Result, 'Error>
-            (eff : FIO<'FIOResult, 'Error>,
-             cont : 'FIOResult -> FIO<'Result, 'Error>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Eff = eff
-        member internal _.Cont = cont
-        override this.Accept(visitor) =
-            visitor.VisitSequence(this)
-
-    and OrElse<'Result, 'Error>
-            (eff : FIO<'Result, 'Error>,
-             elseEff : FIO<'Result, 'Error>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Eff = eff
-        member internal _.ElseEff = elseEff
-        override this.Accept(visitor) =
-            visitor.VisitOrElse(this)
-
-    and OnError<'FIOError, 'Result, 'Error>
-            (eff : FIO<'Result, 'FIOError>,
-             cont : 'FIOError -> FIO<'Result, 'Error>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Eff = eff
-        member internal _.Cont = cont
-        override this.Accept(visitor) =
-            visitor.VisitOnError(this)
-
-    and Race<'Result, 'Error>
-            (effA : FIO<'Result, 'Error>,
-             effB : FIO<'Result, 'Error>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.EffA = effA
-        member internal _.EffB = effB
-        override this.Accept(visitor) =
-            visitor.VisitRace(this)
-
-    and Attempt<'FIOResult, 'FIOError, 'Result, 'Error>
-            (eff : FIO<'FIOResult, 'FIOError>,
-             contSuccess : 'FIOResult -> FIO<'Result, 'Error>,
-             contError : 'FIOError -> FIO<'Result, 'Error>) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Eff = eff
-        member internal _.ContSuccess = contSuccess
-        member internal _.ContError = contError
-        override this.Accept(visitor) =
-            visitor.VisitAttempt(this)
-
-    and Succeed<'Result, 'Error>(result : 'Result) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Result = result
-        override this.Accept(visitor) =
-            visitor.VisitSucceed(this)
-
-    and Fail<'Result, 'Error>(error : 'Error) =
-        inherit FIO<'Result, 'Error>()
-        member internal _.Error = error
-        override this.Accept(visitor) =
-            visitor.VisitFail(this)
-
-    let Send<'Result, 'Error>(result : 'Result, chan : Channel<'Result>) =
-        Action<unit, 'Error>(fun () -> chan.Send(result))
-
-    let Receive<'Result, 'Error>(chan : Channel<'Result>) =
-        Input<'Result, 'Error>(chan)
-
-    let End() : Succeed<unit, 'Error> =
-        Succeed ()
-
-    let (>>=) (eff : FIO<'FIOResult, 'Error>) (cont : 'FIOResult -> FIO<'Result, 'Error>) =
-        Sequence<'FIOResult, 'Result, 'Error>(eff, cont)
-
-    let Parallel<'ResultA, 'ErrorA, 'ResultB, 'ErrorB, 'ResultC, 'ErrorC>
-            (effA : FIO<'ResultA, 'ErrorA>,
-             effB : FIO<'ResultB, 'ErrorB>) =
-        Concurrent(effA, fun fiberA ->
-            Concurrent(effB, fun fiberB ->
-                Await(fiberA, fun resA ->
-                    Await(fiberB, fun resB ->
-                        Succeed ((resA, resB))))))
+    let End<'E>() : FIO<Unit, 'E> =
+        Success ()
+    
+    (*
+    let Parallel<'R1, 'R2, 'E>(eff1 : FIO<'R1, 'E>, eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
+        Concurrent(upcastResult eff1, fun fiber1 ->
+            Concurrent(upcastResult eff2, fun fiber2 ->
+                Await(fiber1, fun res1 ->
+                    Await(fiber2, fun res2 ->
+                        Success (res1, res2)))))
+    *)
