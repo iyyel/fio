@@ -16,7 +16,7 @@ module FIO =
         member _.Count() = bc.Count
         member internal _.Upcast() = Channel<obj>(bc)
 
-    and Fiber<'R, 'E>(fio : FIO<'R, 'E>, interpret : FIO<'R, 'E> -> Result<'R, 'E>) =
+    type Fiber<'R, 'E>(fio : FIO<'R, 'E>, interpret : FIO<'R, 'E> -> Result<'R, 'E>) =
         let task = Task.Factory.StartNew(fun () -> interpret fio)
         member _.Await() = task.Result
         member internal _.Task() = task
@@ -49,8 +49,8 @@ module FIO =
                                         match action() with
                                         | Ok res    -> Ok res
                                         | Error err -> Error (err :> obj))
-        | Blocking chan -> Blocking chan
-     // | Concurrent (fio, cont) -> Concurrent (upcastError fio, fun fiber -> upcastError <| cont fiber)
+        | Blocking chan          -> Blocking chan
+     // | Concurrent (fio, cont) -> Concurrent (upcastError fio, fun fiber -> failwith "") // Why is fiber : Fiber<obj, obj> when it should be Fiber<obj, 'E>?
      // | Await (fiber, cont)    -> Await (fiber, fun res -> upcastError <| cont res)
         | Sequence (fio, cont)   -> Sequence (upcastError fio, fun res -> upcastError <| cont res)
         | Success res            -> Success res
@@ -65,8 +65,8 @@ module FIO =
     let Receive<'R, 'E>(chan : Channel<'R>) : FIO<'R, 'E> =
         Blocking chan
 
-    let (>>) (fio : FIO<'R1, 'E>) (cont : ('R1 -> FIO<'R, 'E>)) : FIO<'R, 'E> =
-        Sequence (upcastResult fio, fun (res : obj) -> cont (res :?> 'R1))
+    let (>>) (fio : FIO<'R1, 'E>) (cont : 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
+        Sequence (upcastResult fio, fun res -> cont (res :?> 'R1))
 
     let Succeed<'R, 'E>(res : 'R) : FIO<'R, 'E> =
         Success res
@@ -77,67 +77,51 @@ module FIO =
     let End<'E>() : FIO<Unit, 'E> =
         Success ()
     
-    (*
-    let Parallel<'R1, 'R2, 'E>(eff1 : FIO<'R1, 'E>, eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
-        Concurrent(upcastResult eff1, fun fiber1 ->
-            Concurrent(upcastResult eff2, fun fiber2 ->
+    let Parallel<'R1, 'R2, 'E>(fio1 : FIO<'R1, 'E>, fio2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
+        Concurrent(upcastResult fio1, fun fiber1 ->
+            Concurrent(upcastResult fio2, fun fiber2 ->
                 Await(fiber1, fun res1 ->
                     Await(fiber2, fun res2 ->
-                        Success (res1, res2)))))
-    *)
+                        match res1, res2 with
+                        | Ok res1, Ok res2 -> Success (res1 :?> 'R1, res2 :?> 'R2)
+                        | Error err, _     -> Failure err
+                        | _, Error err     -> Failure err
+                        ))))
+    
+    let AwaitFIO<'R, 'R1, 'E>(fio : FIO<'R1, 'E>, contSucc : 'R1 -> FIO<'R, 'E>, contErr : 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
+        Concurrent(upcastResult fio, fun fiber ->
+            Await(fiber, fun res ->
+                match res with
+                | Ok res    -> contSucc (res :?> 'R1)
+                | Error err -> contErr err))
 
-    (*
-    let AwaitEffect<'FIOError, 'FIOResult, 'Error, 'Result>
-        (eff : FIO<'FIOError, 'FIOResult>,
-            contSuccess : 'FIOResult -> FIO<'Error, 'Result>,
-            effError : 'FIOError -> FIO<'Error, 'Result>) =
-    Concurrent(eff, fun fiber ->
-        Await(fiber, fun result ->
-            match result with
-            | Success res -> contSuccess res
-            | Error error -> effError error))
+    let SequenceFunc<'R, 'R1, 'E>(fio : FIO<'R1, 'E>, cont : 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
+        AwaitFIO(fio, (fun res -> AwaitFIO(cont res,
+                                      (fun res -> Success res),
+                                      (fun err -> Failure err))),
+                      (fun err -> Failure err))
 
-    let Sequence<'FIOResult, 'Error, 'Result>
-            (eff : FIO<'Error, 'FIOResult>,
-             cont : 'FIOResult -> FIO<'Error, 'Result>) =
-        AwaitEffect(eff, (fun resEff -> AwaitEffect(cont resEff,
-                                            (fun resCont -> Succeed resCont),
-                                            (fun errCont -> Fail errCont))),
-                         (fun errEff -> Fail errEff))
+    let OrElse<'R, 'E>(fio : FIO<'R, 'E>, elseFIO : FIO<'R, 'E>) : FIO<'R, 'E> =
+        AwaitFIO(fio, (fun res -> Success res),
+                      (fun _   -> AwaitFIO(elseFIO,
+                                      (fun res -> Success res),
+                                      (fun err -> Failure err))))
 
-    let (>>=) (eff : FIO<'Error, 'FIOResult>) (cont : 'FIOResult -> FIO<'Error, 'Result>) =
-        Sequence<'FIOResult, 'Error, 'Result>(eff, cont)
+(*
+    let OnError<'R, 'E, 'E1>(fio : FIO<'R, 'E1>, cont : 'E1 -> FIO<'R, 'E>) =
+        AwaitFIO(fio, (fun res -> Success res),
+                      (fun err -> AwaitFIO(cont err,
+                                      (fun res -> Success res), 
+                                      (fun err -> Failure err))))
+*)
 
-    let OrElse<'Error, 'Result>(eff : FIO<'Error, 'Result>, elseEff : FIO<'Error, 'Result>) =
-        AwaitEffect(eff, (fun resEff -> Succeed resEff),
-                         (fun _      -> AwaitEffect(elseEff,
-                                            (fun resElse -> Succeed resElse),
-                                            (fun errElse -> Fail errElse))))
+    let Race<'R, 'E>(fio1 : FIO<'R, 'E>, fio2 : FIO<'R, 'E>) : FIO<'R, 'E> =
+        Concurrent(upcastResult fio1, fun fiber1 ->
+            Concurrent(upcastResult fio2, fun fiber2 ->
+                let task = Task.WhenAny([fiber1.Task(); fiber2.Task()])
+                match task.Result.Result with
+                | Ok res    -> Success (res :?> 'R)
+                | Error err -> Failure err))
+        
 
-    let OnError<'FIOError, 'Error, 'Result>
-            (eff : FIO<'FIOError, 'Result>,
-             cont : 'FIOError -> FIO<'Error, 'Result>) =
-        AwaitEffect(eff, (fun resEff -> Succeed resEff),
-                         (fun errEff -> AwaitEffect(cont errEff,
-                                            (fun resCont -> Succeed resCont),
-                                            (fun errCont -> Fail errCont))))
-
-    let Race<'Error, 'Result>
-            (effA : FIO<'Error, 'Result>,
-             effB : FIO<'Error, 'Result>) =
-        let rec loop (fiberA : Fiber<'Error, 'Result>) (fiberB : Fiber<'Error, 'Result>) =
-            if fiberA.IsCompleted() then
-                // cancel and dispose of fiber B?
-                fiberA.Await()
-            else if fiberB.IsCompleted() then
-                // cancel and dispose of fiber A?
-                fiberB.Await()
-            else
-                loop fiberA fiberB
-        Concurrent(effA, fun fiberA ->
-            Concurrent(effB, fun fiberB ->
-                match loop fiberA fiberB with
-                | Success res -> Succeed res
-                | Error error -> Fail error))
-
-                *)
+                

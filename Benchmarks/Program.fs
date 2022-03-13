@@ -40,7 +40,12 @@ let runProgram args =
 
 [<EntryPoint>]
 let main args =
-    let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
-    printfn $"benchmark arguments:%s{argStr}"
-    runProgram args
+    //let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
+    //printfn $"benchmark arguments:%s{argStr}"
+    //runProgram args
+
+    let fio = Benchmarks.Pingpong.Create 10
+    let runtime = Naive()
+    let fiber = runtime.Run fio
+    printfn $"Result: %A{fiber.Await()}"
     0

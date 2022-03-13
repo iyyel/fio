@@ -20,7 +20,7 @@ module Runtime =
             match fio with
             | NonBlocking action     -> action()
             | Blocking chan          -> Ok <| chan.Take()
-            | Concurrent (fio, cont) -> let fiber = new Fiber<_, _>(fio, this.LowLevelEval)
+            | Concurrent (fio, cont) -> let fiber = Fiber<_, _>(fio, this.LowLevelEval)
                                         this.LowLevelEval <| cont fiber
             | Await (fiber, cont)    -> this.LowLevelEval <| (cont <| fiber.Await())
             | Sequence (fio, cont)   -> match this.LowLevelEval fio with
