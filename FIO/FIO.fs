@@ -85,3 +85,59 @@ module FIO =
                     Await(fiber2, fun res2 ->
                         Success (res1, res2)))))
     *)
+
+    (*
+    let AwaitEffect<'FIOError, 'FIOResult, 'Error, 'Result>
+        (eff : FIO<'FIOError, 'FIOResult>,
+            contSuccess : 'FIOResult -> FIO<'Error, 'Result>,
+            effError : 'FIOError -> FIO<'Error, 'Result>) =
+    Concurrent(eff, fun fiber ->
+        Await(fiber, fun result ->
+            match result with
+            | Success res -> contSuccess res
+            | Error error -> effError error))
+
+    let Sequence<'FIOResult, 'Error, 'Result>
+            (eff : FIO<'Error, 'FIOResult>,
+             cont : 'FIOResult -> FIO<'Error, 'Result>) =
+        AwaitEffect(eff, (fun resEff -> AwaitEffect(cont resEff,
+                                            (fun resCont -> Succeed resCont),
+                                            (fun errCont -> Fail errCont))),
+                         (fun errEff -> Fail errEff))
+
+    let (>>=) (eff : FIO<'Error, 'FIOResult>) (cont : 'FIOResult -> FIO<'Error, 'Result>) =
+        Sequence<'FIOResult, 'Error, 'Result>(eff, cont)
+
+    let OrElse<'Error, 'Result>(eff : FIO<'Error, 'Result>, elseEff : FIO<'Error, 'Result>) =
+        AwaitEffect(eff, (fun resEff -> Succeed resEff),
+                         (fun _      -> AwaitEffect(elseEff,
+                                            (fun resElse -> Succeed resElse),
+                                            (fun errElse -> Fail errElse))))
+
+    let OnError<'FIOError, 'Error, 'Result>
+            (eff : FIO<'FIOError, 'Result>,
+             cont : 'FIOError -> FIO<'Error, 'Result>) =
+        AwaitEffect(eff, (fun resEff -> Succeed resEff),
+                         (fun errEff -> AwaitEffect(cont errEff,
+                                            (fun resCont -> Succeed resCont),
+                                            (fun errCont -> Fail errCont))))
+
+    let Race<'Error, 'Result>
+            (effA : FIO<'Error, 'Result>,
+             effB : FIO<'Error, 'Result>) =
+        let rec loop (fiberA : Fiber<'Error, 'Result>) (fiberB : Fiber<'Error, 'Result>) =
+            if fiberA.IsCompleted() then
+                // cancel and dispose of fiber B?
+                fiberA.Await()
+            else if fiberB.IsCompleted() then
+                // cancel and dispose of fiber A?
+                fiberB.Await()
+            else
+                loop fiberA fiberB
+        Concurrent(effA, fun fiberA ->
+            Concurrent(effB, fun fiberB ->
+                match loop fiberA fiberB with
+                | Success res -> Succeed res
+                | Error error -> Fail error))
+
+                *)
