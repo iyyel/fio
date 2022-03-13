@@ -14,15 +14,15 @@ module Runtime =
         inherit Runtime()
 
         member this.Run (fio : FIO<'R, 'E>) : Fiber<'R, 'E> =
-            new Fiber<'R, 'E>(fio, this.Eval)
+            new Fiber<'R, 'E>(fio, this.LowLevelEval)
 
         member private this.LowLevelEval (fio : FIO<obj, obj>) : Result<obj, obj> =
             match fio with
             | NonBlocking action     -> action()
             | Blocking chan          -> Ok <| chan.Take()
-            | Concurrent (fio, cont) -> let fiber = Fiber<_, _>(fio, this.LowLevelEval)
-                                        this.LowLevelEval <| cont fiber
-            | Await (fiber, cont)    -> this.LowLevelEval <| (cont <| fiber.Await())
+            | Concurrent fio         -> let fiber = Fiber<obj, obj>(fio, this.LowLevelEval)
+                                        Ok fiber
+            | Await fiber            -> fiber.Await()
             | Sequence (fio, cont)   -> match this.LowLevelEval fio with
                                         | Ok res    -> this.LowLevelEval <| cont res
                                         | Error err -> Error err
@@ -30,7 +30,7 @@ module Runtime =
             | Failure err -> Error err
 
         member private this.Eval (fio : FIO<'R, 'E>) : Result<'R, 'E> =
-            match this.LowLevelEval <| upcastBoth fio with
+            match this.LowLevelEval <| fio.upcastBoth() with
             | Ok res    -> Ok (res :?> 'R)
             | Error err -> Error (err :?> 'E)
 

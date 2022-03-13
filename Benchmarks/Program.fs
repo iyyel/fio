@@ -44,7 +44,7 @@ let main args =
     //printfn $"benchmark arguments:%s{argStr}"
     //runProgram args
 
-    let fio = Benchmarks.Pingpong.Create 10
+    let fio = Parallel(Success 10, Success "abc")
     let runtime = Naive()
     let fiber = runtime.Run fio
     printfn $"Result: %A{fiber.Await()}"

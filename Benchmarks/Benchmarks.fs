@@ -371,7 +371,7 @@ module Benchmark =
         | ThreadRing of ThreadRingConfig
         | Big of BigConfig
         | Bang of BangConfig
-
+    
     type RuntimeRunFunc = FIO<int64, obj> -> Fiber<int64, obj>
 
     type BenchmarkResult = string * BenchmarkConfig * string * (int * int64) list
@@ -451,8 +451,8 @@ module Benchmark =
             | curRun' when curRun' = runCount -> (benchName, acc)
             | curRun'                         -> let result = (run fioBench).Await()
                                                  let time = match result with
-                                                            | Ok time -> time
-                                                            | Error _  -> -1
+                                                            | Ok time -> (time :?> int64)
+                                                            | Error _ -> -1
                                                  let runNum = curRun' + 1
                                                  let result = (runNum, time)
                                                  executeBenchmark (createBenchmark config) runNum (acc @ [result])
