@@ -20,7 +20,6 @@ let printArgs args =
 let runBenchmarks args =
     let parser = ArgParser.Parser()
     let results = parser.GetResults args
-
     let runtime = results.GetResult ArgParser.Runtime
     let runs = results.GetResult ArgParser.Runs
     let pingpongConfig = match results.TryGetResult ArgParser.Pingpong with
@@ -36,11 +35,9 @@ let runBenchmarks args =
                      | Some (processCount, roundCount) -> [Bang {ProcessCount = processCount; RoundCount = roundCount}]
                      | _                               -> []
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
-
     let runtimeName, evalFunc = match runtime with
-                                   | ArgParser.Naive    -> ("Naive", Naive().Eval)
-                                   | ArgParser.Advanced -> ("Advanced", Advanced().Eval)
-                      
+                                | ArgParser.Naive    -> ("Naive", Naive().Eval)
+                                | ArgParser.Advanced -> ("Advanced", Advanced().Eval)
     Run configs runs runtimeName evalFunc
 
 [<EntryPoint>]

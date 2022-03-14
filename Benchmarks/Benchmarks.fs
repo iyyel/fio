@@ -21,7 +21,6 @@ module internal Timer =
         let chan = Channel<TimerMessage>()
         let task = Tasks.Task.Factory.StartNew(fun () ->
             let stopwatch = Stopwatch()
-
             let rec loopStart count =
                 match count with
                 | 0     ->
@@ -47,9 +46,7 @@ module internal Timer =
             loopStart startCount
             loopStop stopCount
             stopwatch.ElapsedMilliseconds)
-
         member internal _.Chan() = chan
-
         member internal _.Result() = task.Result
 
 // Pingpong benchmark
@@ -84,7 +81,7 @@ module Pingpong =
     let private createPongProcess proc roundCount =
         let rec create roundCount =
             if roundCount = 0 then
-                Success 0 >> fun _ -> End()
+                End()
             else
                 Receive(proc.ChanRecv) >> fun x ->
                 #if DEBUG
@@ -207,7 +204,7 @@ module Big =
                 let x = msg
                 let msg = Ping (x, proc.ChanRecvPong)
                 let chan, chans = (List.head chans, List.tail chans)
-                Success msg >> fun msg -> Send(msg, chan) >> fun _ ->
+                Send(msg, chan) >> fun _ ->
                 #if DEBUG
                 printfn $"%s{proc.Name} sent ping: %i{x}"
                 #endif
