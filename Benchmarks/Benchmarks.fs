@@ -387,12 +387,12 @@ module Benchmark =
                            Environment.OSVersion.Platform.Equals(PlatformID.MacOSX))
                        then Environment.GetEnvironmentVariable("HOME")
                        else Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%");
-        let benchName, config, runtimeName, times = result
-        let dirPath = homePath + @"\fio\benchmarks"
+        let benchName, config, runtime, times = result
+        let folderName = DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss")
+        let dirPath = homePath + @"\fio\benchmarks\" + folderName
         let configStr = configStr config
-        let dateStr = DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss")
         let runStr = times.Length.ToString() + "runs"
-        let fileName = runtimeName.ToLower() + "-" + benchName.ToLower() + "-" + configStr + "-" + runStr + "-" + dateStr + ".csv"
+        let fileName = runtime.ToLower() + "-" + benchName.ToLower() + "-" + configStr + "-" + runStr + ".csv"
         let filePath = dirPath + @"\" + fileName
         let rec fileContentStr times acc =
             match times with
@@ -436,7 +436,7 @@ module Benchmark =
         let toPrint = headerStr + runExecTimesStr
         printfn $"%s{toPrint}"
 
-    let private runBenchmark config runCount runtimeName (run : EvalFunc) : BenchmarkResult =
+    let private runBenchmark config runs runtime (eval : EvalFunc) : BenchmarkResult =
         let createBenchmark config =
             match config with
             | Pingpong config   -> ("Pingpong", Pingpong.Create config.RoundCount)
@@ -446,8 +446,8 @@ module Benchmark =
 
         let rec executeBenchmark (benchName, fioBench) curRun acc =
             match curRun with
-            | curRun' when curRun' = runCount -> (benchName, acc)
-            | curRun'                         -> let result = (run fioBench).Await()
+            | curRun' when curRun' = runs -> (benchName, acc)
+            | curRun'                         -> let result = (eval fioBench).Await()
                                                  let time = match result with
                                                             | Ok time -> time
                                                             | Error _ -> -1
@@ -456,11 +456,10 @@ module Benchmark =
                                                  executeBenchmark (createBenchmark config) runNum (acc @ [result])
         
         let benchName, runExecTimes = executeBenchmark (createBenchmark config) 0 []
-        (benchName, config, runtimeName, runExecTimes)
+        (benchName, config, runtime, runExecTimes)
 
-    let Run configs runCount runtimeName (eval : EvalFunc) =
-        let results = List.map (fun config -> runBenchmark config runCount runtimeName eval) configs
- 
+    let Run configs runs runtime (eval : EvalFunc) =
+        let results = List.map (fun config -> runBenchmark config runs runtime eval) configs
         for result in results do
             printResult result
             writeResultsToCsv result

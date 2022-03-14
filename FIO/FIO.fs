@@ -5,7 +5,6 @@
 namespace FSharp.FIO
 
 open System.Collections.Concurrent
-open System.Threading.Tasks
 
 module FIO =
 
@@ -17,7 +16,7 @@ module FIO =
 
     type LowLevelFiber internal (bc : BlockingCollection<Result<obj, obj>>) =
         let mutable completed = false
-        member internal _.Complete(res : Result<obj ,obj>) =
+        member internal _.Complete(res : Result<obj, obj>) =
             match completed with
             | false -> completed <- true
                        bc.Add res
@@ -26,10 +25,12 @@ module FIO =
 
     type Fiber<'R, 'E> private (bc : BlockingCollection<Result<obj, obj>>) =
         new() = Fiber(new BlockingCollection<Result<obj, obj>>())
-        member internal _.ToLowLevel() : LowLevelFiber = new LowLevelFiber(bc)
-        member _.Await() : Result<'R, 'E> = match bc.Take() with
-                                            | Ok res    -> Ok (res :?> 'R)
-                                            | Error err -> Error (err :?> 'E)
+        member internal _.ToLowLevel() = new LowLevelFiber(bc)
+        member _.Await() : Result<'R, 'E> =
+            match bc.Take() with
+            | Ok res    -> Ok (res :?> 'R)
+            | Error err -> Error (err :?> 'E)
+
     and FIO<'R, 'E> =
         | NonBlocking of action: (unit -> Result<'R, 'E>)
         | Blocking of chan: Channel<'R>
@@ -69,7 +70,7 @@ module FIO =
             this.upcastResult().upcastError()
 
     let Send<'V, 'E>(value : 'V, chan : Channel<'V>) : FIO<Unit, 'E> =
-        NonBlocking (fun () -> Ok <| chan.Add(value))
+        NonBlocking <| fun () -> Ok <| chan.Add value
 
     let Receive<'R, 'E>(chan : Channel<'R>) : FIO<'R, 'E> =
         Blocking chan
@@ -82,7 +83,7 @@ module FIO =
         Concurrent (fio.upcastBoth(), fiber, fiber.ToLowLevel())
 
     let Await<'R, 'E>(fiber : Fiber<'R, 'E>) : FIO<'R, 'E> =
-        Await (fiber.ToLowLevel())
+        Await <| fiber.ToLowLevel()
 
     let Succeed<'R, 'E>(res : 'R) : FIO<'R, 'E> =
         Success res
@@ -105,19 +106,22 @@ module FIO =
         match fiber.Await() with
         | Ok res  -> Success res
         | Error _ -> Spawn(elseFIO) >> fun fiber ->
-                     Await(fiber) >> fun res -> Success res
+                     Await(fiber) >> fun res ->
+                     Success res
 
     let OnError<'R, 'E1, 'E>(fio : FIO<'R, 'E1>, cont : 'E1 -> FIO<'R, 'E>) =
         Spawn(fio) >> fun fiber ->
         match fiber.Await() with
         | Ok res    -> Success res
         | Error err -> cont err
-(*
+
     let Race<'R, 'E>(fio1 : FIO<'R, 'E>, fio2 : FIO<'R, 'E>) : FIO<'R, 'E> =
         Spawn(fio1) >> fun fiber1 ->
         Spawn(fio2) >> fun fiber2 ->
-        let task = Task.WhenAny([fiber1.Task(); fiber2.Task()])
+        let async1 = async { return fiber1.Await() }
+        let async2 = async { return fiber2.Await() }
+        let task = [async1; async2] |> List.map Async.StartAsTask
+                                    |> System.Threading.Tasks.Task.WhenAny
         match task.Result.Result with
-        | Ok res    -> Success (res :?> 'R)
-        | Error err -> Failure (err :?> 'E)
-        *)
+        | Ok res    -> Success res
+        | Error err -> Failure err
