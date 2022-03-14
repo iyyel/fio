@@ -13,7 +13,7 @@ module FIO =
         new() = Channel(new BlockingCollection<obj>())
         member _.Add(value : 'R) = chan.Add value
         member _.Take() : 'R = chan.Take() :?> 'R
-        member internal _.Upcast() = Channel<obj>(chan)
+        member internal _.Upcast() = Channel<obj> chan
 
     type LowLevelFiber internal (chan : BlockingCollection<Result<obj, obj>>) =
         let mutable completed = false
@@ -24,9 +24,9 @@ module FIO =
             | true  -> failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
         member internal _.Await() : Result<obj, obj> = chan.Take()
 
-    type Fiber<'R, 'E> private (chan : BlockingCollection<Result<obj, obj>>) =
+    and Fiber<'R, 'E> private (chan : BlockingCollection<Result<obj, obj>>) =
         new() = Fiber(new BlockingCollection<Result<obj, obj>>())
-        member internal _.ToLowLevel() = LowLevelFiber(chan)
+        member internal _.ToLowLevel() = LowLevelFiber chan
         member _.Await() : Result<'R, 'E> =
             match chan.Take() with
             | Ok res    -> Ok (res :?> 'R)
@@ -43,11 +43,11 @@ module FIO =
 
         member internal this.UpcastResult<'R, 'E>() : FIO<obj, 'E> =
             match this with
-            | NonBlocking action               -> NonBlocking(fun () ->
-                                                      match action() with
-                                                      | Ok res    -> Ok (res :> obj)
-                                                      | Error err -> Error err)
-            | Blocking chan                    -> Blocking (chan.Upcast())
+            | NonBlocking action               -> NonBlocking <| fun () ->
+                                                  match action() with
+                                                  | Ok res    -> Ok (res :> obj)
+                                                  | Error err -> Error err
+            | Blocking chan                    -> Blocking <| chan.Upcast()
             | Concurrent (eff, fiber, llfiber) -> Concurrent (eff, fiber, llfiber)
             | Await llfiber                    -> Await llfiber
             | Sequence (eff, cont)             -> Sequence (eff, fun res -> (cont res).UpcastResult())
@@ -56,10 +56,10 @@ module FIO =
 
         member internal this.UpcastError<'R, 'E>() : FIO<'R, obj> =
             match this with
-            | NonBlocking action               -> NonBlocking(fun () ->
-                                                      match action() with
-                                                      | Ok res    -> Ok res
-                                                      | Error err -> Error (err :> obj))
+            | NonBlocking action               -> NonBlocking <| fun () ->
+                                                  match action() with
+                                                  | Ok res    -> Ok res
+                                                  | Error err -> Error (err :> obj)
             | Blocking chan                    -> Blocking chan
             | Concurrent (eff, fiber, llfiber) -> Concurrent (eff, fiber, llfiber)
             | Await llfiber                    -> Await llfiber
@@ -96,29 +96,29 @@ module FIO =
         Success ()
     
     let Parallel<'R1, 'R2, 'E>(eff1 : FIO<'R1, 'E>, eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
-        Spawn(eff1) >> fun fiber1 ->
-        Spawn(eff2) >> fun fiber2 ->
-        Await(fiber1) >> fun res1 ->
-        Await(fiber2) >> fun res2 ->
+        Spawn eff1 >> fun fiber1 ->
+        Spawn eff2 >> fun fiber2 ->
+        Await fiber1 >> fun res1 ->
+        Await fiber2 >> fun res2 ->
         Success (res1, res2)
 
     let OrElse<'R, 'E>(eff : FIO<'R, 'E>, elseEff : FIO<'R, 'E>) : FIO<'R, 'E> =
-        Spawn(eff) >> fun fiber ->
+        Spawn eff >> fun fiber ->
         match fiber.Await() with
         | Ok res  -> Success res
-        | Error _ -> Spawn(elseEff) >> fun fiber ->
-                     Await(fiber) >> fun res ->
+        | Error _ -> Spawn elseEff >> fun fiber ->
+                     Await fiber >> fun res ->
                      Success res
 
     let OnError<'R, 'E1, 'E>(eff : FIO<'R, 'E1>, cont : 'E1 -> FIO<'R, 'E>) =
-        Spawn(eff) >> fun fiber ->
+        Spawn eff >> fun fiber ->
         match fiber.Await() with
         | Ok res    -> Success res
         | Error err -> cont err
 
     let Race<'R, 'E>(eff1 : FIO<'R, 'E>, eff2 : FIO<'R, 'E>) : FIO<'R, 'E> =
-        Spawn(eff1) >> fun fiber1 ->
-        Spawn(eff2) >> fun fiber2 ->
+        Spawn eff1 >> fun fiber1 ->
+        Spawn eff2 >> fun fiber2 ->
         let task1 = Task.Factory.StartNew(fun () -> fiber1.Await())
         let task2 = Task.Factory.StartNew(fun () -> fiber2.Await())
         let task = Task.WhenAny [task1; task2]

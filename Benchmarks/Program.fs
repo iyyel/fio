@@ -48,7 +48,6 @@ let runSampleEffect() =
 
 [<EntryPoint>]
 let main args =
-    //printArgs args
-    //runBenchmarks args
-    runSampleEffect()
+    printArgs args
+    runBenchmarks args
     0

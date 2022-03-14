@@ -52,8 +52,8 @@ module Runtime =
             | Sequence (eff, cont)             -> match this.LowLevelEval eff with
                                                   | Ok res    -> this.LowLevelEval <| cont res
                                                   | Error err -> Error err
-            | Success res -> Ok res
-            | Failure err -> Error err
+            | Success res                      -> Ok res
+            | Failure err                      -> Error err
 
         override this.Eval (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
             let fiber = new Fiber<'R, 'E>()
@@ -67,8 +67,7 @@ module Runtime =
             let create count = List.map (fun id -> Worker(id.ToString(), self, workQueue)) [0..count - 1]
             match workerCount with
             | Some count -> create count
-            | _          -> let cpuCount = System.Environment.ProcessorCount
-                            create cpuCount
+            | _          -> create System.Environment.ProcessorCount
         
         let workQueue = new BlockingCollection<WorkItem>()
         let workers = createWorkers workQueue
@@ -83,8 +82,8 @@ module Runtime =
             | Sequence (eff, cont)             -> match this.LowLevelEval eff with
                                                   | Ok res    -> this.LowLevelEval <| cont res
                                                   | Error err -> Error err
-            | Success res -> Ok res
-            | Failure err -> Error err
+            | Success res                      -> Ok res
+            | Failure err                      -> Error err
 
         override _.Eval (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
             let workItem = WorkItem.Create <| eff.Upcast()
