@@ -32,20 +32,15 @@ let runProgram args =
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
 
     let runtimeName, runtimeFunc = match runtime with
-                                     | ArgParser.Default  -> ("Default", Default().Run)
-                                     | ArgParser.Naive    -> ("Naive", Naive().Run)
-                                     | ArgParser.Advanced -> ("Advanced", Advanced().Run)
+                                     | ArgParser.Default  -> ("Default", Default().Eval)
+                                     | ArgParser.Naive    -> ("Naive", Naive().Eval)
+                                     | ArgParser.Advanced -> ("Advanced", Advanced().Eval)
                       
     Run configs runCount runtimeName runtimeFunc
 
 [<EntryPoint>]
 let main args =
-    //let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
-    //printfn $"benchmark arguments:%s{argStr}"
-    //runProgram args
-
-    let fio = Parallel(Success 10, Success "abc")
-    let runtime = Naive()
-    let fiber = runtime.Run fio
-    printfn $"Result: %A{fiber.Await()}"
+    let argStr = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
+    printfn $"benchmark arguments:%s{argStr}"
+    runProgram args
     0

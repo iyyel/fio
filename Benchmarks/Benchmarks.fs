@@ -139,7 +139,7 @@ module ThreadRing =
     let private createRecvProcess proc roundCount =
         let rec create roundCount =
             if roundCount = 0 then
-                Success 0 >> fun _ -> End()
+                End()
             else
                 Receive(proc.ChanRecv) >> fun x ->
                 #if DEBUG
@@ -235,7 +235,6 @@ module Big =
         and createRecvPongs recvCount roundCount =
             if recvCount = 0 then
                 if roundCount = 0 then
-                    Success (Pong 0) >> fun _ -> 
                     Send(Timer.Stop, timerTask.Chan()) >> fun _ ->
                     Success (timerTask.Result())
                 else
@@ -307,7 +306,7 @@ module Bang =
 
     let rec private createSendProcess proc msg roundCount =
         if roundCount = 0 then
-            Success () >> fun _ -> End()
+            End()
         else
             Send(msg, proc.Chan) >> fun _ ->
             #if DEBUG
@@ -317,7 +316,6 @@ module Bang =
   
     let rec private createRecvProcess proc roundCount (timerTask : Timer.TimerTask) =
         if roundCount = 0 then
-            Success 0 >> fun _ ->
             Send(Timer.Stop, timerTask.Chan()) >> fun _ ->
             Success (timerTask.Result())
         else
@@ -372,7 +370,7 @@ module Benchmark =
         | Big of BigConfig
         | Bang of BangConfig
     
-    type RuntimeRunFunc = FIO<int64, obj> -> Fiber<int64, obj>
+    type EvalFunc = FIO<int64, obj> -> Fiber<int64, obj>
 
     type BenchmarkResult = string * BenchmarkConfig * string * (int * int64) list
 
@@ -438,7 +436,7 @@ module Benchmark =
         let toPrint = headerStr + runExecTimesStr
         printfn $"%s{toPrint}"
 
-    let private runBenchmark config runCount runtimeName (run : RuntimeRunFunc) : BenchmarkResult =
+    let private runBenchmark config runCount runtimeName (run : EvalFunc) : BenchmarkResult =
         let createBenchmark config =
             match config with
             | Pingpong config   -> ("Pingpong", Pingpong.Create config.RoundCount)
@@ -451,7 +449,7 @@ module Benchmark =
             | curRun' when curRun' = runCount -> (benchName, acc)
             | curRun'                         -> let result = (run fioBench).Await()
                                                  let time = match result with
-                                                            | Ok time -> (time :?> int64)
+                                                            | Ok time -> time
                                                             | Error _ -> -1
                                                  let runNum = curRun' + 1
                                                  let result = (runNum, time)
@@ -460,8 +458,8 @@ module Benchmark =
         let benchName, runExecTimes = executeBenchmark (createBenchmark config) 0 []
         (benchName, config, runtimeName, runExecTimes)
 
-    let Run configs runCount runtimeName (run : RuntimeRunFunc) =
-        let results = List.map (fun config -> runBenchmark config runCount runtimeName run) configs
+    let Run configs runCount runtimeName (eval : EvalFunc) =
+        let results = List.map (fun config -> runBenchmark config runCount runtimeName eval) configs
  
         for result in results do
             printResult result
