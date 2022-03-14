@@ -40,8 +40,15 @@ let runBenchmarks args =
                                 | ArgParser.Advanced -> ("Advanced", Advanced().Eval)
     Run configs runs runtimeName evalFunc
 
+let runSampleEffect() =
+    let eff = Benchmarks.Pingpong.Create 10
+    let runtime = Advanced()
+    let fiber = runtime.Eval eff
+    printfn $"Result: %A{fiber.Await()}"
+
 [<EntryPoint>]
 let main args =
-    printArgs args
-    runBenchmarks args
+    //printArgs args
+    //runBenchmarks args
+    runSampleEffect()
     0

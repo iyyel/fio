@@ -25,7 +25,7 @@ module internal Timer =
                 match count with
                 | 0     ->
                            #if DEBUG
-                           printfn "TimerTask: Started!"
+                           printfn "DEBUG: TimerTask: Started!"
                            #endif
                            stopwatch.Start()
                 | count -> match chan.Take() with
@@ -36,7 +36,7 @@ module internal Timer =
                 match count with
                 | 0     ->
                            #if DEBUG
-                           printfn "TimerTask: Stopped!"
+                           printfn "DEBUG: TimerTask: Stopped!"
                            #endif
                            stopwatch.Stop()
                 | count -> match chan.Take() with
@@ -54,12 +54,8 @@ module internal Timer =
 // Savina benchmark #1 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
 module Pingpong =
 
-    type private Process =
-        { Name: string
-          ChanSend: Channel<int>
-          ChanRecv: Channel<int>
-        }
-        
+    type private Process = { Name: string; ChanSend: Channel<int>; ChanRecv: Channel<int> }
+
     let private createPingProcess proc roundCount (timerTask : Timer.TimerTask) =
         let rec create msg roundCount =
             if roundCount = 0 then
@@ -68,11 +64,11 @@ module Pingpong =
             else
                 Send(msg, proc.ChanSend) >> fun _ ->
                 #if DEBUG
-                printfn $"%s{proc.Name} sent ping: %i{msg}"
+                printfn $"DEBUG: %s{proc.Name} sent ping: %i{msg}"
                 #endif
                 Receive(proc.ChanRecv) >> fun x ->
                 #if DEBUG
-                printfn $"%s{proc.Name} received pong: %i{x}"
+                printfn $"DEBUG: %s{proc.Name} received pong: %i{x}"
                 #endif
                 create x (roundCount - 1)
         Send(Timer.Start, timerTask.Chan()) >> fun _ ->
@@ -85,12 +81,12 @@ module Pingpong =
             else
                 Receive(proc.ChanRecv) >> fun x ->
                 #if DEBUG
-                printfn $"%s{proc.Name} received ping: %i{x}"
+                printfn $"DEBUG: %s{proc.Name} received ping: %i{x}"
                 #endif
                 let y = x + 10
                 Send(y, proc.ChanSend) >> fun _ ->
                 #if DEBUG
-                printfn $"%s{proc.Name} sent pong: %i{y}"
+                printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
                 #endif
                 create (roundCount - 1)
         create roundCount
@@ -109,11 +105,7 @@ module Pingpong =
 // Savina benchmark #5 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
 module ThreadRing =
 
-    type private Process =
-        { Name: string
-          ChanSend: Channel<int>
-          ChanRecv: Channel<int>
-        }
+    type private Process = { Name: string; ChanSend: Channel<int>; ChanRecv: Channel<int> }
 
     let private createSendProcess proc roundCount (timerTask : Timer.TimerTask) =
         let rec create msg roundCount =
@@ -123,11 +115,11 @@ module ThreadRing =
             else
                 Send(msg, proc.ChanSend) >> fun _ ->
                 #if DEBUG
-                printfn $"%s{proc.Name} sent: %i{msg}"
+                printfn $"DEBUG: %s{proc.Name} sent: %i{msg}"
                 #endif
                 Receive(proc.ChanRecv) >> fun x ->
                 #if DEBUG
-                printfn $"%s{proc.Name} received: %i{x}"
+                printfn $"DEBUG: %s{proc.Name} received: %i{x}"
                 #endif
                 create x (roundCount - 1)
         Send(Timer.Start, timerTask.Chan()) >> fun _ ->
@@ -140,12 +132,12 @@ module ThreadRing =
             else
                 Receive(proc.ChanRecv) >> fun x ->
                 #if DEBUG
-                printfn $"%s{proc.Name} received: %i{x}"
+                printfn $"DEBUG: %s{proc.Name} received: %i{x}"
                 #endif
                 let y = x + 10
                 Send(y, proc.ChanSend) >> fun _ ->
                 #if DEBUG
-                printfn $"%s{proc.Name} sent: %i{y}"
+                printfn $"DEBUG: %s{proc.Name} sent: %i{y}"
                 #endif
                 create (roundCount - 1)
         create roundCount
@@ -165,9 +157,9 @@ module ThreadRing =
         let rec createThreadRing procs (timerTask : Timer.TimerTask) acc =
             match procs with
             | []    -> acc
-            | p::ps -> let fio = Parallel(createRecvProcess p roundCount, acc)
+            | p::ps -> let eff = Parallel(createRecvProcess p roundCount, acc)
                                  >> fun (_, res) -> Success res
-                       createThreadRing ps timerTask fio
+                       createThreadRing ps timerTask eff
 
         let chans = [for _ in 1..processCount -> Channel<int>()]
         let procs = createProcesses chans chans 0 []
@@ -175,10 +167,10 @@ module ThreadRing =
                          | pa::pb::ps -> (pa, pb, ps)
                          | _          -> failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let timerTask = Timer.TimerTask(1, 1)
-        let fioEnd = Parallel(createRecvProcess pb roundCount, createSendProcess pa roundCount timerTask)
+        let effEnd = Parallel(createRecvProcess pb roundCount, createSendProcess pa roundCount timerTask)
                      >> fun (_, res) -> Success res
 
-        createThreadRing ps timerTask fioEnd
+        createThreadRing ps timerTask effEnd
 
 // Big benchmark
 // Measures: Contention on mailbox; Many-to-Many message passing
@@ -189,12 +181,8 @@ module Big =
         | Ping of int * Channel<Message>
         | Pong of int
     
-    type private Process =
-        { Name: string
-          ChanRecvPing: Channel<Message>
-          ChanRecvPong: Channel<Message>
-          ChansSend: Channel<Message> list
-        }
+    type private Process = { Name: string; ChanRecvPing: Channel<Message>;
+                             ChanRecvPong: Channel<Message>; ChansSend: Channel<Message> list }
 
     let private createProcess proc msg roundCount (timerTask : Timer.TimerTask) =
         let rec createSendPings chans roundCount =
@@ -206,7 +194,7 @@ module Big =
                 let chan, chans = (List.head chans, List.tail chans)
                 Send(msg, chan) >> fun _ ->
                 #if DEBUG
-                printfn $"%s{proc.Name} sent ping: %i{x}"
+                printfn $"DEBUG: %s{proc.Name} sent ping: %i{x}"
                 #endif
                 createSendPings chans roundCount
 
@@ -218,13 +206,13 @@ module Big =
                 match msg with
                 | Ping (x, replyChan) ->
                                         #if DEBUG
-                                        printfn $"%s{proc.Name} received ping: %i{x}"
+                                        printfn $"DEBUG: %s{proc.Name} received ping: %i{x}"
                                         #endif
                                         let y = x + 1
                                         let msgReply = Pong y
                                         Send(msgReply, replyChan) >> fun _ ->
                                         #if DEBUG
-                                        printfn $"%s{proc.Name} sent pong: %i{y}"
+                                        printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
                                         #endif
                                         createRecvPings (recvCount - 1) roundCount
                 | _                  -> failwith "createRecvPings: Received pong when ping should be received!"
@@ -241,7 +229,7 @@ module Big =
                 match msg with
                 | Pong x ->
                             #if DEBUG
-                            printfn $"%s{proc.Name} received pong: %i{x}"
+                            printfn $"DEBUG: %s{proc.Name} received pong: %i{x}"
                             #endif
                             createRecvPongs (recvCount - 1) roundCount
                 | _      -> failwith "createRecvPongs: Received ping when pong should be received!"
@@ -277,29 +265,26 @@ module Big =
         let rec createBig procs msg timerTask acc =
             match procs with
             | []    -> acc
-            | p::ps -> let fio = Parallel(createProcess p msg roundCount timerTask, acc)
+            | p::ps -> let eff = Parallel(createProcess p msg roundCount timerTask, acc)
                                  >> fun (res, _) -> Success res
-                       createBig ps (msg + 10) timerTask fio
+                       createBig ps (msg + 10) timerTask eff
          
         let procs = createProcesses processCount
         let timerTask = Timer.TimerTask(processCount, processCount)
         let pa, pb, ps = match procs with
                            | pa::pb::ps -> (pa, pb, ps)
                            | _          -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
-        let fioEnd = Parallel(createProcess pa (10 * (processCount - 2)) roundCount timerTask,
+        let effEnd = Parallel(createProcess pa (10 * (processCount - 2)) roundCount timerTask,
                               createProcess pb (10 * (processCount - 1)) roundCount timerTask)
                      >> fun (res, _) -> Success res
-        createBig ps 0 timerTask fioEnd
+        createBig ps 0 timerTask effEnd
         
 // Bang benchmark
 // Measures: Contention on mailbox; Many-to-One message passing
 // A Scalability Benchmark Suite for Erlang/OTP (https://dl.acm.org/doi/10.1145/2364489.2364495I)
 module Bang =
 
-    type private Process =
-        { Name: string
-          Chan: Channel<int>
-        }
+    type private Process = { Name: string; Chan: Channel<int> }
 
     let rec private createSendProcess proc msg roundCount =
         if roundCount = 0 then
@@ -307,7 +292,7 @@ module Bang =
         else
             Send(msg, proc.Chan) >> fun _ ->
             #if DEBUG
-            printfn $"%s{proc.Name} sent: %i{msg}"
+            printfn $"DEBUG: %s{proc.Name} sent: %i{msg}"
             #endif
             createSendProcess proc (msg + 10) (roundCount - 1)
   
@@ -318,7 +303,7 @@ module Bang =
         else
             Receive(proc.Chan) >> fun msg ->
             #if DEBUG
-            printfn $"%s{proc.Name} received: %i{msg}"
+            printfn $"DEBUG: %s{proc.Name} received: %i{msg}"
             #endif
             createRecvProcess proc (roundCount - 1) timerTask
 
@@ -329,9 +314,9 @@ module Bang =
         let rec createBang recvProc sendProcs acc =
             match sendProcs with
             | []    -> acc
-            | p::ps -> let fio = Parallel(createSendProcess p 0 roundCount, acc)
+            | p::ps -> let eff = Parallel(createSendProcess p 0 roundCount, acc)
                                  >> fun (_, res) -> Success res
-                       createBang recvProc ps fio
+                       createBang recvProc ps eff
 
         let recvProc = {Name = "p0"; Chan = Channel<int>()}
         let sendProcs = createSendProcesses recvProc.Chan processCount
@@ -339,11 +324,11 @@ module Bang =
                     | p::ps -> (p, List.rev ps)
                     | _     -> failwith $"createBig failed! (at least 1 sending process should exist) processCount = %i{processCount}"
         let timerTask = Timer.TimerTask(1, 1)
-        let fioEnd = Parallel(createSendProcess p 0 roundCount,
+        let effEnd = Parallel(createSendProcess p 0 roundCount,
                               createRecvProcess recvProc (processCount * roundCount) timerTask)
                      >> fun (_, res) -> Success res
         Send(Timer.Start, timerTask.Chan()) >> fun _ ->
-        createBang recvProc ps fioEnd
+        createBang recvProc ps effEnd
 
 //
 // Benchmark assessment functions
@@ -352,16 +337,13 @@ module Benchmark =
 
     type PingpongConfig = { RoundCount: int }
 
-    type ThreadRingConfig = { ProcessCount: int;
-                              RoundCount: int }
+    and ThreadRingConfig = { ProcessCount: int; RoundCount: int }
     
-    type BigConfig = { ProcessCount: int;
-                       RoundCount: int }
+    and BigConfig = { ProcessCount: int; RoundCount: int }
 
-    type BangConfig = { ProcessCount: int;
-                        RoundCount: int }
+    and BangConfig = {  ProcessCount: int; RoundCount: int }
 
-    type BenchmarkConfig =
+    and BenchmarkConfig =
         | Pingpong of PingpongConfig
         | ThreadRing of ThreadRingConfig
         | Big of BigConfig
@@ -441,10 +423,10 @@ module Benchmark =
             | Big config        -> ("Big", Big.Create config.ProcessCount config.RoundCount)
             | Bang config       -> ("Bang", Bang.Create config.ProcessCount config.RoundCount)
 
-        let rec executeBenchmark (benchName, fioBench) curRun acc =
+        let rec executeBenchmark (bench, eff) curRun acc =
             match curRun with
-            | curRun' when curRun' = runs -> (benchName, acc)
-            | curRun'                         -> let result = (eval fioBench).Await()
+            | curRun' when curRun' = runs -> (bench, acc)
+            | curRun'                         -> let result = (eval eff).Await()
                                                  let time = match result with
                                                             | Ok time -> time
                                                             | Error _ -> -1
@@ -452,8 +434,8 @@ module Benchmark =
                                                  let result = (runNum, time)
                                                  executeBenchmark (createBenchmark config) runNum (acc @ [result])
         
-        let benchName, runExecTimes = executeBenchmark (createBenchmark config) 0 []
-        (benchName, config, runtime, runExecTimes)
+        let bench, runExecTimes = executeBenchmark (createBenchmark config) 0 []
+        (bench, config, runtime, runExecTimes)
 
     let Run configs runs runtime (eval : EvalFunc) =
         let results = List.map (fun config -> runBenchmark config runs runtime eval) configs
