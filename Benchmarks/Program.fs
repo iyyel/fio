@@ -41,13 +41,25 @@ let runBenchmarks args =
     Run configs runs runtimeName evalFunc
 
 let runSampleEffect() =
-    let eff = Benchmarks.Pingpong.Create 10
-    let runtime = Advanced()
-    let fiber = runtime.Eval eff
+    let pinger chan =
+        let x = 42
+        Send (x, chan) >> fun _ ->
+        printfn $"Pinger sent ping: %i{x}"
+        Succeed "pinger done"
+    let ponger chan =
+        Receive chan >> fun x ->
+        printfn $"Ponger received ping: %i{x}"
+        Succeed "ponger done"
+    let pingpong = let chan = Channel<int>()
+                   Parallel (pinger chan, ponger chan)
+
+    let runtime = Advanced(2, 5)
+    let fiber = runtime.Eval <| Parallel(Success "10", Success "20")
     printfn $"Result: %A{fiber.Await()}"
 
 [<EntryPoint>]
 let main args =
-    printArgs args
-    runBenchmarks args
+    //printArgs args
+    //runBenchmarks args
+    runSampleEffect()
     0
