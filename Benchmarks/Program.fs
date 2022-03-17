@@ -53,8 +53,8 @@ let runSampleEffect() =
     let pingpong = let chan = Channel<int>()
                    Parallel (pinger chan, ponger chan)
 
-    let runtime = Advanced(2, 5)
-    let fiber = runtime.Eval <| Parallel(Success "10", Success "20")
+    let runtime = Advanced(2, 1)
+    let fiber = runtime.Eval <| pingpong
     printfn $"Result: %A{fiber.Await()}"
 
 [<EntryPoint>]

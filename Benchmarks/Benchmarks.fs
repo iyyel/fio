@@ -8,7 +8,6 @@ open FSharp.FIO.FIO
 
 open System
 open System.IO
-open System.Threading
 open System.Diagnostics
 
 module internal Timer =
@@ -19,7 +18,7 @@ module internal Timer =
 
     type internal TimerTask(startCount, stopCount) =
         let chan = Channel<TimerMessage>()
-        let task = Tasks.Task.Factory.StartNew(fun () ->
+        let task = (async {
             let stopwatch = Stopwatch()
             let rec loopStart count =
                 match count with
@@ -45,7 +44,8 @@ module internal Timer =
 
             loopStart startCount
             loopStop stopCount
-            stopwatch.ElapsedMilliseconds)
+            return stopwatch.ElapsedMilliseconds
+        } |> Async.StartAsTask)
         member internal _.Chan() = chan
         member internal _.Result() = task.Result
 
@@ -59,10 +59,10 @@ module Pingpong =
     let private createPingProcess proc roundCount (timerTask : Timer.TimerTask) =
         let rec create msg roundCount =
             if roundCount = 0 then
-                Send(Timer.Stop, timerTask.Chan()) >> fun _ ->
+                Send (Timer.Stop, timerTask.Chan()) >> fun _ ->
                 Success <| timerTask.Result()
             else
-                Send(msg, proc.ChanSend) >> fun _ ->
+                Send (msg, proc.ChanSend) >> fun _ ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} sent ping: %i{msg}"
                 #endif
@@ -71,7 +71,7 @@ module Pingpong =
                 printfn $"DEBUG: %s{proc.Name} received pong: %i{x}"
                 #endif
                 create x (roundCount - 1)
-        Send(Timer.Start, timerTask.Chan()) >> fun _ ->
+        Send (Timer.Start, timerTask.Chan()) >> fun _ ->
         create 0 roundCount
 
     let private createPongProcess proc roundCount =
@@ -84,7 +84,7 @@ module Pingpong =
                 printfn $"DEBUG: %s{proc.Name} received ping: %i{x}"
                 #endif
                 let y = x + 10
-                Send(y, proc.ChanSend) >> fun _ ->
+                Send (y, proc.ChanSend) >> fun _ ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
                 #endif
@@ -97,7 +97,7 @@ module Pingpong =
         let pingProc = { Name = "p0"; ChanSend = pingSendChan; ChanRecv = pongSendChan }
         let pongProc = { Name = "p1"; ChanSend = pongSendChan; ChanRecv = pingSendChan }
         let timerTask = Timer.TimerTask(1, 1)
-        Parallel(createPingProcess pingProc roundCount timerTask, createPongProcess pongProc roundCount)
+        Parallel (createPingProcess pingProc roundCount timerTask, createPongProcess pongProc roundCount)
         >> fun (res, _) -> Success res
 
 // ThreadRing benchmark
@@ -122,7 +122,7 @@ module ThreadRing =
                 printfn $"DEBUG: %s{proc.Name} received: %i{x}"
                 #endif
                 create x (roundCount - 1)
-        Send(Timer.Start, timerTask.Chan()) >> fun _ ->
+        Send (Timer.Start, timerTask.Chan()) >> fun _ ->
         create 0 roundCount
 
     let private createRecvProcess proc roundCount =
