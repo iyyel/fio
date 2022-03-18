@@ -64,7 +64,7 @@ module Runtime =
         member internal this.Complete(res : Result<obj, obj>) = this.LLFiber.Complete res
 
     and BlockingItem = { Blocker: Blocker; WorkItem: WorkItem } with
-        static member Create(blocker, workItem) = { Blocker = blocker; WorkItem = workItem}
+        static member Create(blocker, workItem) = { Blocker = blocker; WorkItem = workItem }
 
     and EvalWorker(id, runtime : Advanced, 
             workQueue : BlockingCollection<WorkItem>,

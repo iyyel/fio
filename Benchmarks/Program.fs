@@ -54,7 +54,7 @@ let runSampleEffect() =
                    Parallel (pinger chan, ponger chan)
 
     let runtime = Advanced(2, 2, 10)
-    let fiber = runtime.Eval <| Benchmarks.Bang.Create 100 1
+    let fiber = runtime.Eval <| Benchmarks.Big.Create 100 1
     printfn $"Result: %A{fiber.Await()}"
 
 [<EntryPoint>]
