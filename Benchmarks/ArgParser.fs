@@ -6,22 +6,20 @@ module ArgParser
 
 open Argu
 
-type Runtime =
-    | Naive
-    | Advanced
-
 type Arguments =
-    | [<Mandatory>] Runtime of runtime: Runtime
-    | Pingpong of RoundCount: int
-    | ThreadRing of ProcessCount: int * RoundCount: int
-    | Big of ProcessCount: int * RoundCount: int
-    | Bang of ProcessCount: int * RoundCount: int
-    | [<Mandatory>] Runs of Runs: int
+    | Naive
+    | Advanced of evalworkercount: int * blockingworkercount: int * evalsteps: int 
+    | Pingpong of roundcount: int
+    | ThreadRing of processcount: int * roundcount: int
+    | Big of processcount: int * roundcount: int
+    | Bang of processcount: int * roundcount: int
+    | [<Mandatory>] Runs of runs:int
 
     interface IArgParserTemplate with
         member args.Usage =
             match args with
-            | Runtime _    -> "specify desired runtime (Naive, Advanced)"
+            | Naive _      -> "specify naive runtime"
+            | Advanced _   -> "specify evalworkercount, blockingworkercount and evalsteps for advanced runtime"
             | Pingpong _   -> "specify round count for pingpong benchmark"
             | ThreadRing _ -> "specify process count and round count for threadring benchmark"
             | Big _        -> "specify process count and round count for big benchmark"

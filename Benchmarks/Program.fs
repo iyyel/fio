@@ -20,7 +20,6 @@ let printArgs args =
 let runBenchmarks args =
     let parser = ArgParser.Parser()
     let results = parser.GetResults args
-    let runtime = results.GetResult ArgParser.Runtime
     let runs = results.GetResult ArgParser.Runs
     let pingpongConfig = match results.TryGetResult ArgParser.Pingpong with
                          | Some roundCount -> [Pingpong {RoundCount = roundCount}]
@@ -35,10 +34,14 @@ let runBenchmarks args =
                      | Some (processCount, roundCount) -> [Bang {ProcessCount = processCount; RoundCount = roundCount}]
                      | _                               -> []
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
-    let runtimeName, evalFunc = match runtime with
-                                | ArgParser.Naive    -> ("Naive", Naive().Eval)
-                                | ArgParser.Advanced -> ("Advanced", Advanced().Eval)
-    Run configs runs runtimeName evalFunc
+
+    let runtime : Runtime = match results.TryGetResult ArgParser.Naive with
+                  | Some _ -> Naive()
+                  | _      -> match results.TryGetResult ArgParser.Advanced with
+                              | Some (x, y, z) -> Advanced(x, y, z)                  
+                              | _              -> failwith "ArgParser: No runtime specified!"
+                                   
+    Run configs runs runtime
 
 let runSampleEffect() =
     let pinger chan =
@@ -59,7 +62,7 @@ let runSampleEffect() =
 
 [<EntryPoint>]
 let main args =
-    //printArgs args
-    //runBenchmarks args
-    runSampleEffect()
+    printArgs args
+    runBenchmarks args
+    //runSampleEffect()
     0

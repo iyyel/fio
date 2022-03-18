@@ -9,15 +9,44 @@ open System
 
 module FIO =
 
-    type Channel<'R> private (chan : BlockingCollection<obj>) =
-        new() = Channel(new BlockingCollection<obj>())
+    type Channel<'R> private (id : Guid, chan : BlockingCollection<obj>) =
+        new() = Channel(Guid.NewGuid(), new BlockingCollection<obj>())
+        interface IComparable with 
+            member this.CompareTo other =
+                match other with
+                | :? Channel<'R> as c -> if this.Id = c.Id then 1
+                                         else -1
+                | _                   -> -1
+        interface System.IComparable<Channel<'R>> with 
+            member this.CompareTo other = 
+                this.Id.CompareTo other.Id.CompareTo
+        override this.Equals other = 
+            match other with
+            | :? Channel<'R> as c -> this.Id = c.Id
+            | _                   -> false
+        override _.GetHashCode() = id.GetHashCode()
+        member internal _.Id = id
+        member internal _.Upcast() = Channel<obj>(id, chan)
         member _.Add(value : 'R) = chan.Add value
         member _.Take() : 'R = chan.Take() :?> 'R
-        member internal _.Id = id
-        member internal _.Count() = chan.Count
-        member internal _.Upcast() = Channel<obj> chan
+        member _.Count() = chan.Count
 
-    type LowLevelFiber internal (chan : BlockingCollection<Result<obj, obj>>) =
+    type LowLevelFiber internal (id : Guid, chan : BlockingCollection<Result<obj, obj>>) =
+        interface IComparable with 
+            member this.CompareTo other = 
+                match other with
+                | :? LowLevelFiber as f -> if this.Id = f.Id then 1
+                                           else -1
+                | _                     -> -1
+        interface System.IComparable<LowLevelFiber> with 
+            member this.CompareTo other =
+                this.Id.CompareTo other.Id.CompareTo
+        override this.Equals other =
+            match other with
+            | :? LowLevelFiber as f -> this.Id = f.Id
+            | _                     -> false
+        override _.GetHashCode() = id.GetHashCode()
+        member internal _.Id = id
         member internal _.Complete(res : Result<obj, obj>) =
             if chan.Count = 0 then chan.Add res
             else failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
@@ -26,9 +55,9 @@ module FIO =
                                                        res
         member internal _.Completed() = chan.Count > 0
 
-    and Fiber<'R, 'E> private (chan : BlockingCollection<Result<obj, obj>>) =
-        new() = Fiber(new BlockingCollection<Result<obj, obj>>())
-        member internal _.ToLowLevel() = LowLevelFiber chan
+    and Fiber<'R, 'E> private (id : Guid, chan : BlockingCollection<Result<obj, obj>>) =
+        new() = Fiber(Guid.NewGuid(), new BlockingCollection<Result<obj, obj>>())
+        member internal _.ToLowLevel() = LowLevelFiber (id, chan)
         member _.Await() : Result<'R, 'E> =
             match chan.Take() with
             | Ok res    -> Ok (res :?> 'R)

@@ -5,6 +5,7 @@
 namespace Benchmarks
 
 open FSharp.FIO.FIO
+open FSharp.FIO.Runtime
 
 open System
 open System.IO
@@ -398,8 +399,8 @@ module Benchmark =
 
         let rec runExecTimesStr runExecTimes acc =
             match runExecTimes with
-            | []              -> (acc + "|---------------------------------------------------------------------|")
-            | (run, time)::ts -> let str = $"|  #%-10i{run}                 %-35i{time}    |\n"
+            | []              -> (acc + "|---------------------------------------------------------------------------|")
+            | (run, time)::ts -> let str = $"|  #%-10i{run}                       %-35i{time}    |\n"
                                  runExecTimesStr ts (acc + str)
 
         let benchName, config, runtimeName, times = result
@@ -407,17 +408,24 @@ module Benchmark =
         let runExecTimesStr = runExecTimesStr times ""
         let benchNameRuntime = benchName + " / " + runtimeName
         let headerStr = $"
-|---------------------------------------------------------------------|
-|   Benchmark / Runtime                    Configuration              |
-|  ---------------------       -------------------------------------  |
-|  %-25s{benchNameRuntime}   %-35s{configStr}    |
-|---------------------------------------------------------------------|
-|           Run                         Execution time (ms)           |
-|  ---------------------       -------------------------------------  |\n"
+|---------------------------------------------------------------------------|
+|      Benchmark / Runtime                       Configuration              |
+|  ---------------------------       -------------------------------------  |
+|  %-30s{benchNameRuntime}    %-35s{configStr}    |
+|---------------------------------------------------------------------------|
+|              Run                            Execution time (ms)           |
+|  ---------------------------       -------------------------------------  |\n"
         let toPrint = headerStr + runExecTimesStr
         printfn $"%s{toPrint}"
 
-    let private runBenchmark config runs runtime (eval : EvalFunc) : BenchmarkResult =
+    let private runBenchmark config runs (runtime : Runtime) : BenchmarkResult =
+        let getRuntimeName (runtime : Runtime) =
+            match runtime with
+            | :? Naive         -> "Naive"
+            | :? Advanced as a -> let (x, y, z) = a.GetConfiguration()
+                                  $"advanced-%i{x}-%i{y}-%i{z}"
+            | _                -> failwith "Invalid runtime!"
+
         let createBenchmark config =
             match config with
             | Pingpong config   -> ("Pingpong", Pingpong.Create config.RoundCount)
@@ -428,7 +436,7 @@ module Benchmark =
         let rec executeBenchmark (bench, eff) curRun acc =
             match curRun with
             | curRun' when curRun' = runs -> (bench, acc)
-            | curRun'                     -> let res = (eval eff).Await()
+            | curRun'                     -> let res: Result<int64, obj> = runtime.Eval(eff).Await()
                                              let time = match res with
                                                         | Ok time -> time
                                                         | Error _ -> -1
@@ -436,11 +444,12 @@ module Benchmark =
                                              let result = (runNum, time)
                                              executeBenchmark (createBenchmark config) runNum (acc @ [result])
         
+        let runtimeName = getRuntimeName runtime
         let bench, runExecTimes = executeBenchmark (createBenchmark config) 0 []
-        (bench, config, runtime, runExecTimes)
+        (bench, config, runtimeName, runExecTimes)
 
-    let Run configs runs runtime (eval : EvalFunc) =
-        let results = List.map (fun config -> runBenchmark config runs runtime eval) configs
+    let Run configs runs runtime =
+        let results = List.map (fun config -> runBenchmark config runs runtime) configs
         for result in results do
             printResult result
             writeResultsToCsv result

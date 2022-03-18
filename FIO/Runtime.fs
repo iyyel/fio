@@ -10,7 +10,8 @@ open System.Collections.Concurrent
 
 module Runtime =
 
-    type [<AbstractClass>] Runtime() = class end
+    type [<AbstractClass>] Runtime() =
+        abstract Eval<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
 
 (***************************************************************************)
 (*                                                                         *)
@@ -38,7 +39,7 @@ module Runtime =
             | Success res                      -> Ok res
             | Failure err                      -> Error err
 
-        member this.Eval (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
+        override this.Eval<'R, 'E> (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
             let fiber = new Fiber<'R, 'E>()
             async {
                 fiber.ToLowLevel().Complete <| this.LowLevelEval (eff.Upcast())
@@ -170,7 +171,7 @@ module Runtime =
                 | Success res                      -> (Success res, Evaluated, evalSteps - 1)
                 | Failure err                      -> (Failure err, Evaluated, evalSteps - 1)
 
-        member _.Eval (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
+        override _.Eval<'R, 'E> (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
             let fiber = Fiber<'R, 'E>()
             workQueue.Add <| WorkItem.Create (eff.Upcast(), fiber.ToLowLevel())
             fiber
@@ -193,3 +194,15 @@ module Runtime =
                 match blockingWorkerCount with
                 | Some blockingWorkerCount -> createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + blockingWorkerCount - 1) |> ignore
                 | _                        -> createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + defaultBlockingWorkerCount - 1) |> ignore
+
+        member _.GetConfiguration() =
+            let evalWorkerCount = match evalWorkerCount with
+                                  | Some evalWorkerCount -> evalWorkerCount
+                                  | _                    -> defaultEvalWorkerCount
+            let blockingWorkerCount = match blockingWorkerCount with
+                                      | Some blockingWorkerCount -> blockingWorkerCount
+                                      | _                        -> defaultBlockingWorkerCount
+            let evalSteps = match evalSteps with
+                            | Some evalSteps -> evalSteps
+                            | _              -> defaultEvalSteps
+            (evalWorkerCount, blockingWorkerCount, evalSteps)
