@@ -22,25 +22,27 @@ module internal Timer =
             let stopwatch = Stopwatch()
             let rec loopStart count =
                 match count with
-                | 0     ->
-                           #if DEBUG
-                           printfn "DEBUG: TimerTask: Started!"
-                           #endif
-                           stopwatch.Start()
-                | count -> match chan.Take() with
-                           | Start -> loopStart (count - 1)
-                           | _     -> loopStart count
+                | 0 ->
+                    #if DEBUG
+                    printfn "DEBUG: TimerTask: Started!"
+                    #endif
+                    stopwatch.Start()
+                | count -> 
+                    match chan.Take() with
+                    | Start -> loopStart (count - 1)
+                    | _     -> loopStart count
 
             let rec loopStop count =
                 match count with
                 | 0     ->
-                           #if DEBUG
-                           printfn "DEBUG: TimerTask: Stopped!"
-                           #endif
-                           stopwatch.Stop()
-                | count -> match chan.Take() with
-                           | Stop -> loopStop (count - 1)
-                           | _    -> loopStop count
+                    #if DEBUG
+                    printfn "DEBUG: TimerTask: Stopped!"
+                    #endif
+                    stopwatch.Stop()
+                | count ->
+                    match chan.Take() with
+                    | Stop -> loopStop (count - 1)
+                    | _    -> loopStop count
 
             loopStart startCount
             loopStop stopCount
@@ -205,17 +207,17 @@ module Big =
                 Receive proc.ChanRecvPing >> fun msg ->
                 match msg with
                 | Ping (x, replyChan) ->
-                                        #if DEBUG
-                                        printfn $"DEBUG: %s{proc.Name} received ping: %i{x}"
-                                        #endif
-                                        let y = x + 1
-                                        let msgReply = Pong y
-                                        Send (msgReply, replyChan) >> fun _ ->
-                                        #if DEBUG
-                                        printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
-                                        #endif
-                                        createRecvPings (recvCount - 1) roundCount
-                | _                  -> failwith "createRecvPings: Received pong when ping should be received!"
+                    #if DEBUG
+                    printfn $"DEBUG: %s{proc.Name} received ping: %i{x}"
+                    #endif
+                    let y = x + 1
+                    let msgReply = Pong y
+                    Send (msgReply, replyChan) >> fun _ ->
+                    #if DEBUG
+                    printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
+                    #endif
+                    createRecvPings (recvCount - 1) roundCount
+                | _ -> failwith "createRecvPings: Received pong when ping should be received!"
        
         and createRecvPongs recvCount roundCount =
             if recvCount = 0 then
@@ -228,11 +230,11 @@ module Big =
                 Receive proc.ChanRecvPong >> fun msg ->
                 match msg with
                 | Pong x ->
-                            #if DEBUG
-                            printfn $"DEBUG: %s{proc.Name} received pong: %i{x}"
-                            #endif
-                            createRecvPongs (recvCount - 1) roundCount
-                | _      -> failwith "createRecvPongs: Received ping when pong should be received!"
+                    #if DEBUG
+                    printfn $"DEBUG: %s{proc.Name} received pong: %i{x}"
+                    #endif
+                    createRecvPongs (recvCount - 1) roundCount
+                | _ -> failwith "createRecvPongs: Received ping when pong should be received!"
 
         Send (Timer.Start, timerTask.Chan()) >> fun _ ->
         createSendPings proc.ChansSend (roundCount - 1)

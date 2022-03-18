@@ -5,6 +5,7 @@
 namespace FSharp.FIO
 
 open System.Collections.Concurrent
+open System
 
 module FIO =
 
@@ -12,13 +13,18 @@ module FIO =
         new() = Channel(new BlockingCollection<obj>())
         member _.Add(value : 'R) = chan.Add value
         member _.Take() : 'R = chan.Take() :?> 'R
+        member internal _.Id = id
+        member internal _.Count() = chan.Count
         member internal _.Upcast() = Channel<obj> chan
 
     type LowLevelFiber internal (chan : BlockingCollection<Result<obj, obj>>) =
         member internal _.Complete(res : Result<obj, obj>) =
             if chan.Count = 0 then chan.Add res
             else failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
-        member internal _.Await() : Result<obj, obj> = chan.Take()
+        member internal _.Await() : Result<obj, obj> = let res = chan.Take()
+                                                       chan.Add res
+                                                       res
+        member internal _.Completed() = chan.Count > 0
 
     and Fiber<'R, 'E> private (chan : BlockingCollection<Result<obj, obj>>) =
         new() = Fiber(new BlockingCollection<Result<obj, obj>>())
@@ -33,7 +39,7 @@ module FIO =
         | NonBlocking of action: (unit -> Result<'R, 'E>)
         | Blocking of chan: Channel<'R>
         | Concurrent of effect: FIO<obj, obj> * fiber: obj * llfiber: LowLevelFiber
-        | Await of llfiber: LowLevelFiber
+        | AwaitFiber of llfiber: LowLevelFiber
         | Sequence of effect: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
         | SequenceError of FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
         | Success of result: 'R
@@ -47,7 +53,7 @@ module FIO =
                                                   | Error err -> Error err
             | Blocking chan                    -> Blocking <| chan.Upcast()
             | Concurrent (eff, fiber, llfiber) -> Concurrent (eff, fiber, llfiber)
-            | Await llfiber                    -> Await llfiber
+            | AwaitFiber llfiber                    -> AwaitFiber llfiber
             | Sequence (eff, cont)             -> Sequence (eff, fun res -> (cont res).UpcastResult())
             | SequenceError (eff, cont)        -> SequenceError (eff, fun res -> (cont res).UpcastResult())
             | Success res                      -> Success (res :> obj)
@@ -61,7 +67,7 @@ module FIO =
                                                   | Error err -> Error (err :> obj)
             | Blocking chan                    -> Blocking chan
             | Concurrent (eff, fiber, llfiber) -> Concurrent (eff, fiber, llfiber)
-            | Await llfiber                    -> Await llfiber
+            | AwaitFiber llfiber                    -> AwaitFiber llfiber
             | Sequence (eff, cont)             -> Sequence (eff.UpcastError(), fun res -> (cont res).UpcastError())
             | SequenceError (eff, cont)        -> SequenceError (eff.UpcastError(), fun res -> (cont res).UpcastError())
             | Success res                      -> Success res
@@ -87,7 +93,7 @@ module FIO =
         Concurrent (eff.Upcast(), fiber, fiber.ToLowLevel())
 
     let Await<'R, 'E>(fiber : Fiber<'R, 'E>) : FIO<'R, 'E> =
-        Await <| fiber.ToLowLevel()
+        AwaitFiber <| fiber.ToLowLevel()
 
     let Succeed<'R, 'E>(res : 'R) : FIO<'R, 'E> =
         Success res
