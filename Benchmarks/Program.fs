@@ -21,40 +21,53 @@ let runBenchmarks args =
     let parser = ArgParser.Parser()
     let results = parser.GetResults args
     let runs = results.GetResult ArgParser.Runs
-    let pingpongConfig = match results.TryGetResult ArgParser.Pingpong with
-                         | Some roundCount -> [Pingpong {RoundCount = roundCount}]
-                         | _               -> []
-    let threadRingConfig = match results.TryGetResult ArgParser.ThreadRing with
-                           | Some (processCount, roundCount) -> [ThreadRing {ProcessCount = processCount; RoundCount = roundCount}]
-                           | _                               -> []
-    let bigConfig = match results.TryGetResult ArgParser.Big with
-                    | Some (processCount, roundCount) -> [Big {ProcessCount = processCount; RoundCount = roundCount}]
-                    | _                               -> []       
-    let bangConfig = match results.TryGetResult ArgParser.Bang with
-                     | Some (processCount, roundCount) -> [Bang {ProcessCount = processCount; RoundCount = roundCount}]
-                     | _                               -> []
+
+    let pingpongConfig =
+        match results.TryGetResult ArgParser.Pingpong with
+        | Some roundCount -> [ Pingpong { RoundCount = roundCount } ]
+        | _               -> []
+
+    let threadRingConfig =
+        match results.TryGetResult ArgParser.ThreadRing with
+        | Some (processCount, roundCount) -> [ ThreadRing { ProcessCount = processCount; RoundCount = roundCount } ]
+        | _                               -> []
+
+    let bigConfig =
+        match results.TryGetResult ArgParser.Big with
+        | Some (processCount, roundCount) -> [ Big { ProcessCount = processCount; RoundCount = roundCount } ]
+        | _                               -> []
+
+    let bangConfig =
+        match results.TryGetResult ArgParser.Bang with
+        | Some (processCount, roundCount) -> [ Bang { ProcessCount = processCount; RoundCount = roundCount } ]
+        | _                               -> []
+
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
 
-    let runtime : Runtime = match results.TryGetResult ArgParser.Naive with
-                  | Some _ -> Naive()
-                  | _      -> match results.TryGetResult ArgParser.Advanced with
-                              | Some (x, y, z) -> Advanced(x, y, z)                  
-                              | _              -> failwith "ArgParser: No runtime specified!"
-                                   
+    let runtime: Runtime =
+        match results.TryGetResult ArgParser.Naive with
+        | Some _ -> Naive()
+        | _      -> match results.TryGetResult ArgParser.Advanced with
+                    | Some (x, y, z) -> Advanced(x, y, z)
+                    | _              -> failwith "ArgParser: No runtime specified!"
+                    
     Run configs runs runtime
 
-let runSampleEffect() =
+let runSampleEffect () =
     let pinger chan =
         let x = 42
-        Send (x, chan) >> fun _ ->
+        Send(x, chan) >> fun _ ->
         printfn $"Pinger sent ping: %i{x}"
         Succeed "pinger done"
+
     let ponger chan =
         Receive chan >> fun x ->
         printfn $"Ponger received ping: %i{x}"
         Succeed "ponger done"
-    let pingpong = let chan = Channel<int>()
-                   Parallel (pinger chan, ponger chan)
+
+    let pingpong =
+        let chan = Channel<int>()
+        Parallel(pinger chan, ponger chan)
 
     let runtime = Advanced(2, 2, 10)
     let fiber = runtime.Eval <| Benchmarks.Big.Create 100 1
@@ -64,5 +77,4 @@ let runSampleEffect() =
 let main args =
     printArgs args
     runBenchmarks args
-    //runSampleEffect()
     0

@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "Benchmarks": {
-      "commandName": "Project",
-      "commandLineArgs": "--advanced 2 2 10 --pingpong 10000 --threadring 2000 1 --bang 2000 1 --runs 1"
-    }
-  }
-}

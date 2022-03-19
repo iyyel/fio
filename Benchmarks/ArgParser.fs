@@ -8,12 +8,12 @@ open Argu
 
 type Arguments =
     | Naive
-    | Advanced of evalworkercount: int * blockingworkercount: int * evalsteps: int 
+    | Advanced of evalworkercount: int * blockingworkercount: int * evalsteps: int
     | Pingpong of roundcount: int
     | ThreadRing of processcount: int * roundcount: int
     | Big of processcount: int * roundcount: int
     | Bang of processcount: int * roundcount: int
-    | [<Mandatory>] Runs of runs:int
+    | [<Mandatory>] Runs of runs: int
 
     interface IArgParserTemplate with
         member args.Usage =
