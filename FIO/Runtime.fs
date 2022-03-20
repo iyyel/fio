@@ -73,6 +73,7 @@ module Runtime =
             runtime: Advanced,
             workQueue: BlockingCollection<WorkItem>,
             blockingQueue: BlockingCollection<BlockingItem>,
+            blockingEventQueue: BlockingCollection<Blocker>,
             execSteps) =
         let _ = (async {
                     for workItem in workQueue.GetConsumingEnumerable() do
@@ -102,10 +103,11 @@ module Runtime =
                             blockingQueue.Add <| BlockingItem.Create(blocker, WorkItem.Create(eff, workItem.LLFiber))
                         | _ -> failwith $"EvalWorker(%s{id}): Error occurred while pattern-matching on evaluated effect!"
             } |> Async.StartAsTask |> ignore)
-
+        
     and BlockingWorker(id,
                        workQueue: BlockingCollection<WorkItem>,
-                       blockingQueue: BlockingCollection<BlockingItem>) =
+                       blockingQueue: BlockingCollection<BlockingItem>,
+                       blockingEventQueue: BlockingCollection<Blocker>) =
         let _ = (async {
                     for blockingItem in blockingQueue.GetConsumingEnumerable() do
                     #if DEBUG
@@ -145,6 +147,7 @@ module Runtime =
         let defaultEvalSteps = 10
         let workQueue = new BlockingCollection<WorkItem>()
         let blockingQueue = new BlockingCollection<BlockingItem>()
+        let blockingEventQueue = new BlockingCollection<Blocker>()
         do self.CreateWorkers()
 
         member internal this.LowLevelEval (eff: FIO<obj, obj>) (evalSteps: int) : FIO<obj, obj> * Action * int =
@@ -186,39 +189,47 @@ module Runtime =
         member private _.CreateWorkers() =
             let createEvalWorkers startId endId =
                 match evalSteps with
-                | Some steps -> List.map (fun id -> EvalWorker(id.ToString(), self, workQueue, blockingQueue, steps)) [ startId .. endId ]
-                | None       -> List.map (fun id -> EvalWorker(id.ToString(), self, workQueue, blockingQueue, defaultEvalSteps)) [ startId .. endId ]
+                | Some steps -> List.map (fun id -> EvalWorker(id.ToString(), self, workQueue, blockingQueue, blockingEventQueue, steps)) [ startId .. endId ]
+                | None       -> List.map (fun id -> EvalWorker(id.ToString(), self, workQueue, blockingQueue, blockingEventQueue, defaultEvalSteps)) [ startId .. endId ]
 
             let createBlockingWorkers startId endId =
-                List.map (fun id -> BlockingWorker(id.ToString(), workQueue, blockingQueue)) [ startId .. endId ]
+                List.map (fun id -> BlockingWorker(id.ToString(), workQueue, blockingQueue, blockingEventQueue)) [ startId .. endId ]
 
             match evalWorkerCount with
-            | Some evalWorkerCount -> createEvalWorkers 0 (evalWorkerCount - 1) |> ignore
-                                      match blockingWorkerCount with
-                                      | Some blockingWorkerCount -> createBlockingWorkers evalWorkerCount (evalWorkerCount + blockingWorkerCount - 1)
-                                                                    |> ignore
-                                      | _                        -> createBlockingWorkers evalWorkerCount (evalWorkerCount + defaultBlockingWorkerCount - 1)
-                                                                    |> ignore
-            | _                    -> createEvalWorkers 0 (defaultEvalWorkerCount - 1) |> ignore
+            | Some evalWorkerCount ->
+                createEvalWorkers 0 (evalWorkerCount - 1) |> ignore
+                match blockingWorkerCount with
+                | Some blockingWorkerCount ->
+                    createBlockingWorkers evalWorkerCount (evalWorkerCount + blockingWorkerCount - 1)
+                    |> ignore
+                | _ ->
+                    createBlockingWorkers evalWorkerCount (evalWorkerCount + defaultBlockingWorkerCount - 1)
+                    |> ignore
+            | _ -> createEvalWorkers 0 (defaultEvalWorkerCount - 1) |> ignore
 
             match blockingWorkerCount with
-            | Some blockingWorkerCount -> createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + blockingWorkerCount - 1)
-                                          |> ignore
-            | _                        -> createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + defaultBlockingWorkerCount - 1)
-                                          |> ignore
+            | Some blockingWorkerCount ->
+                createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + blockingWorkerCount - 1)
+                |> ignore
+            | _ ->
+                createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + defaultBlockingWorkerCount - 1)
+                |> ignore
 
         member _.GetConfiguration() =
-            let evalWorkerCount = match evalWorkerCount with
-                                  | Some evalWorkerCount -> evalWorkerCount
-                                  | _ -> defaultEvalWorkerCount
+            let evalWorkerCount =
+                match evalWorkerCount with
+                | Some evalWorkerCount -> evalWorkerCount
+                | _                    -> defaultEvalWorkerCount
 
-            let blockingWorkerCount = match blockingWorkerCount with
-                                      | Some blockingWorkerCount -> blockingWorkerCount
-                                      | _ -> defaultBlockingWorkerCount
+            let blockingWorkerCount =
+                match blockingWorkerCount with
+                | Some blockingWorkerCount -> blockingWorkerCount
+                | _                        -> defaultBlockingWorkerCount
 
-            let evalSteps = match evalSteps with
-                            | Some evalSteps -> evalSteps
-                            | _ -> defaultEvalSteps
+            let evalSteps =
+                match evalSteps with
+                | Some evalSteps -> evalSteps
+                | _              -> defaultEvalSteps
                             
             (evalWorkerCount, blockingWorkerCount, evalSteps)
             

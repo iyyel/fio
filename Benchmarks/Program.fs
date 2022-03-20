@@ -21,6 +21,7 @@ let runBenchmarks args =
     let parser = ArgParser.Parser()
     let results = parser.GetResults args
     let runs = results.GetResult ArgParser.Runs
+    let processIncrement = results.GetResult ArgParser.Process_Count_Increment
 
     let pingpongConfig =
         match results.TryGetResult ArgParser.Pingpong with
@@ -44,14 +45,13 @@ let runBenchmarks args =
 
     let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
 
-    let runtime: Runtime =
-        match results.TryGetResult ArgParser.Naive with
-        | Some _ -> Naive()
-        | _      -> match results.TryGetResult ArgParser.Advanced with
-                    | Some (x, y, z) -> Advanced(x, y, z)
-                    | _              -> failwith "ArgParser: No runtime specified!"
-                    
-    Run configs runs runtime
+    let runtime : Runtime = match results.TryGetResult ArgParser.Naive_Runtime with
+                            | Some _ -> Naive()
+                            | _      -> match results.TryGetResult ArgParser.Advanced_Runtime with
+                                        | Some (x, y, z) -> Advanced(x, y, z)
+                                        | _              -> failwith "CLIArguments: Invalid runtime specified!"
+                                        
+    Run configs runtime runs processIncrement
 
 let runSampleEffect () =
     let pinger chan =

@@ -7,28 +7,33 @@ module ArgParser
 open Argu
 
 type Arguments =
-    | Naive
-    | Advanced of evalworkercount: int * blockingworkercount: int * evalsteps: int
+    | Naive_Runtime
+    | Advanced_Runtime of evalworkercount: int * blockingworkercount: int * evalsteps: int
     | Pingpong of roundcount: int
     | ThreadRing of processcount: int * roundcount: int
     | Big of processcount: int * roundcount: int
     | Bang of processcount: int * roundcount: int
     | [<Mandatory>] Runs of runs: int
+    | [<Mandatory>] Process_Count_Increment of processcountinc: int * inctimes: int
 
     interface IArgParserTemplate with
-        member args.Usage =
-            match args with
-            | Naive _      -> "specify naive runtime"
-            | Advanced _   -> "specify evalworkercount, blockingworkercount and evalsteps for advanced runtime"
-            | Pingpong _   -> "specify round count for pingpong benchmark"
-            | ThreadRing _ -> "specify process count and round count for threadring benchmark"
-            | Big _        -> "specify process count and round count for big benchmark"
-            | Bang _       -> "specify process count and round count for bang benchmark"
-            | Runs _       -> "specify the number of runs for each benchmark"
+        member this.Usage =
+            match this with
+            | Naive_Runtime _         -> "specify naive runtime. (specify only one runtime)"
+            | Advanced_Runtime _      -> "specify eval worker count, blocking worker count and eval steps for advanced runtime. (specify only one runtime)"
+            | Pingpong _              -> "specify round count for pingpong benchmark."
+            | ThreadRing _            -> "specify process count and round count for threadring benchmark."
+            | Big _                   -> "specify process count and round count for big benchmark."
+            | Bang _                  -> "specify process count and round count for bang benchmark."
+            | Runs _                  -> "specify the number of runs for each benchmark."
+            | Process_Count_Increment _ -> "specify the value of process count increment and how many times."
 
 type Parser() =
     let parser = ArgumentParser.Create<Arguments>()
 
-    member _.GetResults(args) =
+    member _.GetResults args =
         let results = parser.Parse args
         results
+
+    member _.GetUsage() =
+        parser.PrintUsage()
