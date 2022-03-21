@@ -1,25 +1,30 @@
-﻿// FIO - effectful programming library for F#
-// Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)
-// All rights reserved.
+﻿(**********************************************************************************)
+(* FIO - Effectful programming library for F#                                     *)
+(* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
+(* All rights reserved                                                            *)
+(**********************************************************************************)
 
 namespace FSharp.FIO
 
-open System.Collections.Concurrent
 open System
+open System.Collections.Concurrent
 
 module FIO =
     
     type Channel<'R> private (id: Guid, chan: BlockingCollection<obj>) =
         new() = Channel(Guid.NewGuid(), new BlockingCollection<obj>())
         interface IComparable with
-            member this.CompareTo other = match other with
-                                          | :? Channel<'R> as chan -> if this.Id = chan.Id then 1 else -1
-                                          | _                      -> -1                
+            member this.CompareTo other = 
+                match other with
+                | :? Channel<'R> as chan -> 
+                    if this.Id = chan.Id then 1 else -1
+                | _ -> -1
         interface System.IComparable<Channel<'R>> with
             member this.CompareTo other = this.Id.CompareTo other.Id.CompareTo
-        override this.Equals other = match other with
-                                     | :? Channel<'R> as chan -> this.Id = chan.Id
-                                     | _                      -> false
+        override this.Equals other = 
+            match other with
+            | :? Channel<'R> as chan -> this.Id = chan.Id
+            | _ -> false
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
         member internal _.Upcast() = Channel<obj>(id, chan)
@@ -29,21 +34,23 @@ module FIO =
 
     type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
         interface IComparable with
-            member this.CompareTo other = match other with
-                                          | :? LowLevelFiber as fiber -> if this.Id = fiber.Id then 1 else -1
-                                          | _                         -> -1
+            member this.CompareTo other = 
+                match other with
+                | :? LowLevelFiber as fiber ->
+                    if this.Id = fiber.Id then 1 else -1
+                | _ -> -1
         interface System.IComparable<LowLevelFiber> with
             member this.CompareTo other = this.Id.CompareTo other.Id.CompareTo
-        override this.Equals other = match other with
-                                     | :? LowLevelFiber as llfiber -> this.Id = llfiber.Id
-                                     | _                            -> false
+        override this.Equals other = 
+            match other with
+            | :? LowLevelFiber as llfiber ->
+                this.Id = llfiber.Id
+            | _ -> false
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
         member internal _.Complete(res: Result<obj, obj>) =
-            if chan.Count = 0 then
-                chan.Add res
-            else
-                failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
+            if chan.Count = 0 then chan.Add res
+            else failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
         member internal _.Await() : Result<obj, obj> =
             let res = chan.Take()
             chan.Add res
@@ -53,9 +60,10 @@ module FIO =
     and Fiber<'R, 'E> private (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
         new() = Fiber(Guid.NewGuid(), new BlockingCollection<Result<obj, obj>>())
         member internal _.ToLowLevel() = LowLevelFiber(id, chan)
-        member _.Await() : Result<'R, 'E> = match chan.Take() with
-                                            | Ok res    -> Ok (res :?> 'R)
-                                            | Error err -> Error (err :?> 'E)
+        member _.Await() : Result<'R, 'E> = 
+            match chan.Take() with
+            | Ok res    -> Ok (res :?> 'R)
+            | Error err -> Error (err :?> 'E)
         member internal _.Completed() = chan.Count > 0
         
     and FIO<'R, 'E> =
@@ -65,50 +73,73 @@ module FIO =
         | AwaitFiber of llfiber: LowLevelFiber
         | Sequence of effect: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
         | SequenceError of FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
+        | DataEvent of chan: Channel<'R>
         | Success of result: 'R
         | Failure of error: 'E
 
         member internal this.UpcastResult<'R, 'E>() : FIO<obj, 'E> =
             match this with
-            | NonBlocking action               -> NonBlocking <| fun () ->
-                                                  match action () with
-                                                  | Ok res -> Ok (res :> obj)
-                                                  | Error err -> Error err
-            | Blocking chan                    -> Blocking <| chan.Upcast()
-            | Concurrent (eff, fiber, llfiber) -> Concurrent (eff, fiber, llfiber)
-            | AwaitFiber llfiber               -> AwaitFiber llfiber
-            | Sequence (eff, cont)             -> Sequence (eff, fun res -> (cont res).UpcastResult())
-            | SequenceError (eff, cont)        -> SequenceError (eff, fun res -> (cont res).UpcastResult())
-            | Success res                      -> Success (res :> obj)
-            | Failure err                      -> Failure err
+            | NonBlocking action ->
+                NonBlocking <| fun () ->
+                match action () with
+                | Ok res -> Ok (res :> obj)
+                | Error err -> Error err
+            | Blocking chan -> 
+                Blocking <| chan.Upcast()
+            | Concurrent (eff, fiber, llfiber) ->
+                Concurrent (eff, fiber, llfiber)
+            | AwaitFiber llfiber ->
+                AwaitFiber llfiber
+            | Sequence (eff, cont) ->
+                Sequence (eff, fun res -> (cont res).UpcastResult())
+            | SequenceError (eff, cont) ->
+                SequenceError (eff, fun res -> (cont res).UpcastResult())
+            | DataEvent chan ->
+                DataEvent <| chan.Upcast()
+            | Success res ->
+                Success (res :> obj)
+            | Failure err ->
+                Failure err
 
         member internal this.UpcastError<'R, 'E>() : FIO<'R, obj> =
             match this with
-            | NonBlocking action               -> NonBlocking <| fun () ->
-                                                  match action () with
-                                                  | Ok res -> Ok res
-                                                  | Error err -> Error (err :> obj)
-            | Blocking chan                    -> Blocking chan
-            | Concurrent (eff, fiber, llfiber) -> Concurrent (eff, fiber, llfiber)
-            | AwaitFiber llfiber               -> AwaitFiber llfiber
-            | Sequence (eff, cont)             -> Sequence (eff.UpcastError(), fun res -> (cont res).UpcastError())
-            | SequenceError (eff, cont)        -> SequenceError (eff.UpcastError(), fun res -> (cont res).UpcastError())
-            | Success res                      -> Success res
-            | Failure err                      -> Failure (err :> obj)
+            | NonBlocking action ->
+                NonBlocking <| fun () ->
+                match action () with
+                | Ok res -> Ok res
+                | Error err -> Error (err :> obj)
+            | Blocking chan ->
+                Blocking chan
+            | Concurrent (eff, fiber, llfiber) ->
+                Concurrent (eff, fiber, llfiber)
+            | AwaitFiber llfiber ->
+                AwaitFiber llfiber
+            | Sequence (eff, cont) ->
+                Sequence (eff.UpcastError(), fun res -> (cont res).UpcastError())
+            | SequenceError (eff, cont) ->
+                SequenceError (eff.UpcastError(), fun res -> (cont res).UpcastError())
+            | DataEvent chan ->
+                DataEvent chan
+            | Success res ->
+                Success res
+            | Failure err ->
+                Failure (err :> obj)
             
         member internal this.Upcast<'R, 'E>() : FIO<obj, obj> = this.UpcastResult().UpcastError()
-
-    let Send<'V, 'E> (value: 'V, chan: Channel<'V>) : FIO<Unit, 'E> =
-        NonBlocking <| fun () -> Ok <| chan.Add value
-
-    let Receive<'R, 'E> (chan: Channel<'R>) : FIO<'R, 'E> =
-        Blocking chan
-
+        
     let (>>) (eff: FIO<'R1, 'E>) (cont: 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
         Sequence (eff.UpcastResult(), fun res -> cont (res :?> 'R1))
 
     let (>>|) (eff: FIO<'R1, 'E>) (cont: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
+        
+    let Send<'V, 'E> (value: 'V, chan: Channel<'V>) : FIO<Unit, 'E> =
+        NonBlocking (fun () -> Ok <| chan.Add value) >> fun _ ->
+        DataEvent chan >> fun _ -> 
+        Success ()
+        
+    let Receive<'R, 'E> (chan: Channel<'R>) : FIO<'R, 'E> =
+        Blocking chan
 
     let Spawn<'R1, 'E1, 'E> (eff: FIO<'R1, 'E1>) : FIO<Fiber<'R1, 'E1>, 'E> =
         let fiber = new Fiber<'R1, 'E1>()
@@ -133,7 +164,9 @@ module FIO =
         Success (res1, res2)
 
     let OnError<'R, 'E> (eff: FIO<'R, 'E>, elseEff: FIO<'R, 'E>) : FIO<'R, 'E> =
-        eff >>| fun _ -> elseEff >> Success
+        eff >>| fun _ ->
+        elseEff >> fun res -> 
+        Success res
 
     let Race<'R, 'E> (eff1: FIO<'R, 'E>, eff2: FIO<'R, 'E>) : FIO<'R, 'E> =
         let rec loop (fiber1: Fiber<'R, 'E>) (fiber2: Fiber<'R, 'E>) =

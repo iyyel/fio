@@ -1,6 +1,8 @@
-﻿// FIO - effectful programming library for F#
-// Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)
-// All rights reserved.
+﻿(**********************************************************************************)
+(* FIO - Effectful programming library for F#                                     *)
+(* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
+(* All rights reserved                                                            *)
+(**********************************************************************************)
 
 namespace Benchmarks
 
@@ -21,44 +23,52 @@ module internal Timer =
         let chan = Channel<TimerMessage>()
         
         let task = (async {
-                let stopwatch = Stopwatch()
+            let stopwatch = Stopwatch()
 
-                let rec loopStart count =
-                    match count with
-                    | 0     ->
-                               #if DEBUG
-                               printfn "DEBUG: TimerTask: Started!"
-                               #endif
-                               stopwatch.Start()
-                    | count -> match chan.Take() with
-                               | Start -> loopStart (count - 1)
-                               | _ -> loopStart count
+            let rec loopStart count =
+                match count with
+                | 0 ->
+                    #if DEBUG
+                    printfn "DEBUG: TimerTask: Started!"
+                    #endif
+                    stopwatch.Start()
+                | count ->
+                    match chan.Take() with
+                    | Start -> loopStart (count - 1)
+                    | _ -> loopStart count
 
-                let rec loopStop count =
-                    match count with
-                    | 0     ->
-                               #if DEBUG
-                               printfn "DEBUG: TimerTask: Stopped!"
-                               #endif
-                               stopwatch.Stop()
-                    | count -> match chan.Take() with
-                               | Stop -> loopStop (count - 1)
-                               | _ -> loopStop count
+            let rec loopStop count =
+                match count with
+                | 0 ->
+                    #if DEBUG
+                    printfn "DEBUG: TimerTask: Stopped!"
+                    #endif
+                    stopwatch.Stop()
+                | count ->
+                    match chan.Take() with
+                    | Stop -> loopStop (count - 1)
+                    | _ -> loopStop count
 
-                loopStart startCount
-                loopStop stopCount
-                return stopwatch.ElapsedMilliseconds
-             } |> Async.StartAsTask)
+            loopStart startCount
+            loopStop stopCount
+            return stopwatch.ElapsedMilliseconds
+            } |> Async.StartAsTask)
         
         member internal _.Chan() = chan
         member internal _.Result() = task.Result
 
-// Pingpong benchmark
-// Measures: Message delivery overhead
-// Savina benchmark #1 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
+(**********************************************************************************)
+(* Pingpong benchmark                                                             *)
+(* Measures: Message delivery overhead                                            *)
+(* Savina benchmark #1                                                            *)
+(* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)       *)
+(**********************************************************************************)
 module Pingpong =
     
-    type private Process = { Name: string; ChanSend: Channel<int>; ChanRecv: Channel<int> }
+    type private Process =
+        { Name: string
+          ChanSend: Channel<int>
+          ChanRecv: Channel<int> }
 
     let private createPingProcess proc roundCount (timerTask: Timer.TimerTask) =
         let rec create msg roundCount =
@@ -101,16 +111,21 @@ module Pingpong =
         let pingProc = { Name = "p0"; ChanSend = pingSendChan; ChanRecv = pongSendChan }
         let pongProc = { Name = "p1"; ChanSend = pongSendChan; ChanRecv = pingSendChan }
         let timerTask = Timer.TimerTask(1, 1)
-
         Parallel(createPingProcess pingProc roundCount timerTask, createPongProcess pongProc roundCount)
         >> fun (res, _) -> Success res
 
-// ThreadRing benchmark
-// Measures: Message sending; Context switching between actors
-// Savina benchmark #5 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
+(**********************************************************************************)
+(* ThreadRing benchmark                                                           *)
+(* Measures: Message sending; Context switching between actors                    *)
+(* Savina benchmark #5                                                            *)
+(* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)       *)
+(**********************************************************************************)
 module ThreadRing =
 
-    type private Process = { Name: string; ChanSend: Channel<int>; ChanRecv: Channel<int> }
+    type private Process =
+        { Name: string
+          ChanSend: Channel<int>
+          ChanRecv: Channel<int> }
 
     let private createSendProcess proc roundCount (timerTask: Timer.TimerTask) =
         let rec create msg roundCount =
@@ -155,34 +170,36 @@ module ThreadRing =
 
         let rec createProcesses chans allChans index acc =
             match chans with
-            | []            -> acc
-            | chan :: chans -> let proc = { Name = $"p{index}"; ChanSend = chan; ChanRecv = getRecvChan index allChans }
-                               createProcesses chans allChans (index + 1) (acc @ [ proc ])
+            | [] -> acc
+            | chan::chans ->
+                let proc = { Name = $"p{index}"; ChanSend = chan; ChanRecv = getRecvChan index allChans }
+                createProcesses chans allChans (index + 1) (acc @ [proc])
 
         let rec createThreadRing procs (timerTask: Timer.TimerTask) acc =
             match procs with
             | [] -> acc
-            | p :: ps -> let eff = Parallel(createRecvProcess p roundCount, acc) >> fun (_, res) -> Success res
-                         createThreadRing ps timerTask eff
+            | p::ps ->
+                let eff = Parallel(createRecvProcess p roundCount, acc) >> fun (_, res) -> Success res
+                createThreadRing ps timerTask eff
 
-        let chans = [ for _ in 1 .. processCount -> Channel<int>() ]
+        let chans = [for _ in 1 .. processCount -> Channel<int>()]
         let procs = createProcesses chans chans 0 []
-
         let pa, pb, ps =
             match procs with
-            | pa :: pb :: ps -> (pa, pb, ps)
-            | _              -> failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
-
+            | pa::pb::ps -> (pa, pb, ps)
+            | _ ->
+                failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let timerTask = Timer.TimerTask(1, 1)
-
         let effEnd = Parallel(createRecvProcess pb roundCount, createSendProcess pa roundCount timerTask)
                      >> fun (_, res) -> Success res
-
         createThreadRing ps timerTask effEnd
 
-// Big benchmark
-// Measures: Contention on mailbox; Many-to-Many message passing
-// Savina benchmark #7 (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)
+(**********************************************************************************)
+(* Big benchmark                                                                  *)
+(* Measures: Contention on mailbox; Many-to-Many message passing                  *)
+(* Savina benchmark #7                                                            *)
+(* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)       *)
+(**********************************************************************************)
 module Big =
 
     type private Message =
@@ -252,53 +269,58 @@ module Big =
         let rec createProcesses processCount =
             let rec createRecvChanProcesses processCount acc =
                 match processCount with
-                | 0     -> acc
-                | count -> let proc = { Name = $"p{count - 1}"
+                | 0 -> acc
+                | count -> 
+                    let proc = { Name = $"p{count - 1}"
                                         ChanRecvPing = Channel<Message>()
                                         ChanRecvPong = Channel<Message>()
                                         ChansSend = [] }
-                           createRecvChanProcesses (count - 1) (acc @ [ proc ])
+                    createRecvChanProcesses (count - 1) (acc @ [proc])
 
             let rec create recvChanProcs prevRecvChanProcs acc =
                 match recvChanProcs with
-                | []      -> acc
-                | p :: ps -> let otherProcs = prevRecvChanProcs @ ps
-                             let chansSend = List.map (fun p -> p.ChanRecvPing) otherProcs
-                             let proc = { Name = p.Name
-                                          ChanRecvPing = p.ChanRecvPing
-                                          ChanRecvPong = p.ChanRecvPong
-                                          ChansSend = chansSend }
-                             create ps (prevRecvChanProcs @ [ p ]) (proc :: acc)
+                | [] -> acc
+                | p::ps -> let otherProcs = prevRecvChanProcs @ ps
+                           let chansSend = List.map (fun p -> p.ChanRecvPing) otherProcs
+                           let proc = { Name = p.Name
+                                        ChanRecvPing = p.ChanRecvPing
+                                        ChanRecvPong = p.ChanRecvPong
+                                        ChansSend = chansSend }
+                           create ps (prevRecvChanProcs @ [p]) (proc::acc)
 
             let recvChanProcesses = createRecvChanProcesses processCount []
             create recvChanProcesses [] []
 
         let rec createBig procs msg timerTask acc =
             match procs with
-            | []      -> acc
-            | p :: ps -> let eff = Parallel(createProcess p msg roundCount timerTask, acc)
-                                   >> fun (res, _) -> Success res
-                         createBig ps (msg + 10) timerTask eff
+            | [] -> acc
+            | p::ps -> let eff = Parallel(createProcess p msg roundCount timerTask, acc)
+                                 >> fun (res, _) -> Success res
+                       createBig ps (msg + 10) timerTask eff
 
         let procs = createProcesses processCount
         let timerTask = Timer.TimerTask(processCount, processCount)
-
-        let pa, pb, ps = match procs with
-                         | pa :: pb :: ps -> (pa, pb, ps)
-                         | _              -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
-
+        let pa, pb, ps = 
+            match procs with
+            | pa::pb::ps -> (pa, pb, ps)
+            | _ -> 
+            failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let effEnd = Parallel(createProcess pa (10 * (processCount - 2)) roundCount timerTask,
                               createProcess pb (10 * (processCount - 1)) roundCount timerTask)
                      >> fun (res, _) -> Success res
-
         createBig ps 0 timerTask effEnd
 
-// Bang benchmark
-// Measures: Contention on mailbox; Many-to-One message passing
-// A Scalability Benchmark Suite for Erlang/OTP (https://dl.acm.org/doi/10.1145/2364489.2364495I)
+(**********************************************************************************)
+(* Bang benchmark                                                                 *)
+(* Measures: Contention on mailbox; Many-to-One message passing                   *)
+(* A Scalability Benchmark Suite for Erlang/OTP                                   *)
+(* (https://dl.acm.org/doi/10.1145/2364489.2364495I)                              *)
+(**********************************************************************************)
 module Bang =
 
-    type private Process = { Name: string; Chan: Channel<int> }
+    type private Process =
+        { Name: string
+          Chan: Channel<int> }
 
     let rec private createSendProcess proc msg roundCount =
         if roundCount = 0 then
@@ -323,42 +345,48 @@ module Bang =
 
     let Create processCount roundCount : FIO<int64, obj> =
         let rec createSendProcesses recvProcChan senderCount =
-            List.map (fun count -> { Name = $"p{count}"; Chan = recvProcChan }) [ 1 .. senderCount ]
+            List.map (fun count -> { Name = $"p{count}"; Chan = recvProcChan }) [1..senderCount]
 
         let rec createBang recvProc sendProcs acc =
             match sendProcs with
-            | []      -> acc
-            | p :: ps -> let eff = Parallel(createSendProcess p 0 roundCount, acc) >> fun (_, res) -> Success res
-                         createBang recvProc ps eff
+            | [] -> acc
+            | p::ps -> let eff = Parallel(createSendProcess p 0 roundCount, acc) >> fun (_, res) -> Success res
+                       createBang recvProc ps eff
 
         let recvProc = { Name = "p0"; Chan = Channel<int>() }
         let sendProcs = createSendProcesses recvProc.Chan processCount
-
-        let p, ps = match List.rev sendProcs with
-                    | p :: ps -> (p, List.rev ps)
-                    | _       -> failwith $"createBig failed! (at least 1 sending process should exist) processCount = %i{processCount}"
-
+        let p, ps = 
+            match List.rev sendProcs with
+            | p::ps -> (p, List.rev ps)
+            | _     -> failwith $"createBig failed! (at least 1 sending process should exist) processCount = %i{processCount}"
         let timerTask = Timer.TimerTask(1, 1)
-
         let effEnd = Parallel(createSendProcess p 0 roundCount,
                               createRecvProcess recvProc (processCount * roundCount) timerTask)
                      >> fun (_, res) -> Success res
-
         Send(Timer.Start, timerTask.Chan()) >> fun _ ->
         createBang recvProc ps effEnd
 
-//
-// Benchmark assessment functions
-//
+(**********************************************************************************)
+(*                                                                                *)
+(* Benchmark infrastructure functionality                                         *)
+(*                                                                                *)
+(**********************************************************************************)
 module Benchmark =
 
-    type PingpongConfig = { RoundCount: int }
+    type PingpongConfig = 
+        { RoundCount: int }
 
-    and ThreadRingConfig = { ProcessCount: int; RoundCount: int }
+    and ThreadRingConfig = 
+        { ProcessCount: int
+          RoundCount: int }
 
-    and BigConfig = { ProcessCount: int; RoundCount: int }
+    and BigConfig = 
+        { ProcessCount: int
+          RoundCount: int }
 
-    and BangConfig = { ProcessCount: int; RoundCount: int }
+    and BangConfig = 
+        { ProcessCount: int
+          RoundCount: int }
 
     and BenchmarkConfig =
         | Pingpong of PingpongConfig
@@ -373,48 +401,44 @@ module Benchmark =
     let private writeResultsToCsv (result: BenchmarkResult) =
         let configStr config =
             match config with
-            | Pingpong config   -> $"roundcount%i{config.RoundCount}"
+            | Pingpong config -> $"roundcount%i{config.RoundCount}"
             | ThreadRing config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-            | Big config        -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-            | Bang config       -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-
-        let headerStr = "Execution Time (ms)"
-
-        let homePath =
-            if (Environment.OSVersion.Platform.Equals(PlatformID.Unix)
-                || Environment.OSVersion.Platform.Equals(PlatformID.MacOSX)) then
-                Environment.GetEnvironmentVariable("HOME")
-            else
-                Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%")
-
-        let benchName, config, runtimeFileName, _, times = result
-        let folderName = DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss")
-        let dirPath = homePath + @"\fio\benchmarks\" + folderName
-        let configStr = configStr config
-        let runStr = times.Length.ToString() + "runs"
-
-        let fileName =
-            runtimeFileName.ToLower()
-            + "-"
-            + benchName.ToLower()
-            + "-"
-            + configStr
-            + "-"
-            + runStr
-            + ".csv"
-
-        let filePath = dirPath + @"\" + fileName
+            | Big config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Bang config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
 
         let rec fileContentStr times acc =
             match times with
             | [] -> acc
             | (_, time) :: ts -> fileContentStr ts (acc + $"%i{time}\n")
 
+        let headerStr = "Execution Time (ms)"
+        let homePath =
+            if (Environment.OSVersion.Platform.Equals(PlatformID.Unix)
+                || Environment.OSVersion.Platform.Equals(PlatformID.MacOSX)) then
+                Environment.GetEnvironmentVariable("HOME")
+            else
+                Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%")
+        let benchName, config, runtimeFileName, _, times = result
+        let simpleRuntimeName = if runtimeFileName.ToLower().Contains("advanced") then "advanced"
+                                else "naive"
+        let folderName = simpleRuntimeName + @"\" + DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss")
+        let dirPath = homePath + @"\fio\benchmarks\" + folderName
+        let configStr = configStr config
+        let runStr = times.Length.ToString() + "runs"
+        let fileName =
+            benchName.ToLower()
+            + "-"
+            + configStr
+            + "-"
+            + runtimeFileName.ToLower()
+            + "-"
+            + runStr
+            + ".csv"
+        let filePath = dirPath + @"\" + fileName
         if (not <| Directory.Exists(dirPath)) then
             Directory.CreateDirectory(dirPath) |> ignore
         else
             ()
-
         let fileContent = fileContentStr times ""
         printfn $"\nSaving benchmark results to '%s{filePath}'"
         File.WriteAllText(filePath, headerStr + "\n" + fileContent)
@@ -422,24 +446,24 @@ module Benchmark =
     let private printResult (result: BenchmarkResult) =
         let benchStr config =
             match config with
-            | Pingpong config   -> $"Pingpong (RoundCount: %i{config.RoundCount})"
+            | Pingpong config -> $"Pingpong (RoundCount: %i{config.RoundCount})"
             | ThreadRing config -> $"ThreadRing (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | Big config        -> $"Big (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | Bang config       -> $"Bang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+            | Big config -> $"Big (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+            | Bang config -> $"Bang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
 
         let rec runExecTimesStr runExecTimes acc =
             match runExecTimes with
-            | []                -> (acc + "└───────────────────────────────────────────────────────────────────────────┘")
-            | (run, time) :: ts -> let str = $"│  #%-10i{run}                       %-35i{time}    │\n"
-                                   runExecTimesStr ts (acc + str)
+            | [] -> (acc + "└───────────────────────────────────────────────────────────────────────────┘")
+            | (run, time)::ts -> let str = $"│  #%-10i{run}                       %-35i{time}    │\n"
+                                 runExecTimesStr ts (acc + str)
 
         let _, config, _, runtimeName, times = result
         let benchName = benchStr config
         let runExecTimesStr = runExecTimesStr times ""
         let headerStr = $"
 ┌───────────────────────────────────────────────────────────────────────────┐
-│  Runtime:    %-50s{runtimeName}           │
 │  Benchmark:  %-50s{benchName}           │
+│  Runtime:    %-50s{runtimeName}           │
 ├───────────────────────────────────────────────────────────────────────────┤
 │  Run                               Execution time (ms)                    │
 │  ────────────────────────────────  ─────────────────────────────────────  │\n"
@@ -449,17 +473,17 @@ module Benchmark =
     let private runBenchmark config runs (runtime: Runtime) : BenchmarkResult =
         let getRuntimeName (runtime: Runtime) =
             match runtime with
-            | :? Naive         -> ("naive", "Naive")
+            | :? Naive -> ("naive", "Naive")
             | :? Advanced as a -> let x, y, z = a.GetConfiguration()
-                                  ($"advanced-%i{x}-%i{y}-%i{z}", $"Advanced (EWC: %i{x} BWC: %i{y} ES: %i{z})")
-            | _                -> failwith "Invalid runtime!"
+                                  ($"advanced-ewc%i{x}-bwc%i{y}-es%i{z}", $"Advanced (EWC: %i{x} BWC: %i{y} ES: %i{z})")
+            | _ -> failwith "runBenchmark: Invalid runtime!"
 
         let createBenchmark config =
             match config with
-            | Pingpong config   -> ("Pingpong", Pingpong.Create config.RoundCount)
+            | Pingpong config -> ("Pingpong", Pingpong.Create config.RoundCount)
             | ThreadRing config -> ("ThreadRing", ThreadRing.Create config.ProcessCount config.RoundCount)
-            | Big config        -> ("Big", Big.Create config.ProcessCount config.RoundCount)
-            | Bang config       -> ("Bang", Bang.Create config.ProcessCount config.RoundCount)
+            | Big config -> ("Big", Big.Create config.ProcessCount config.RoundCount)
+            | Bang config -> ("Bang", Bang.Create config.ProcessCount config.RoundCount)
 
         let rec executeBenchmark (bench, eff) curRun acc =
             match curRun with
@@ -472,7 +496,7 @@ module Benchmark =
                     | Error _ -> -1
                 let runNum = curRun' + 1
                 let result = (runNum, time)
-                executeBenchmark (createBenchmark config) runNum (acc @ [ result ])
+                executeBenchmark (createBenchmark config) runNum (acc @ [result])
 
         let runtimeFileName, runtimeName = getRuntimeName runtime
         let bench, runExecTimes = executeBenchmark (createBenchmark config) 0 []
@@ -481,16 +505,14 @@ module Benchmark =
     let Run configs runtime runs (processCountInc, incTimes) =
         let newConfig config incTime =
             match config with
-            | Pingpong config   -> Pingpong config
+            | Pingpong config -> Pingpong config
             | ThreadRing config -> ThreadRing { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
-            | Big config        -> Big { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
-            | Bang config       -> Bang { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
+            | Big config -> Big { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
+            | Bang config -> Bang { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
 
         let configs = configs @ (List.concat <| List.map (fun incTime ->
             List.map (fun config -> newConfig config incTime) configs) [1..incTimes])
-        
         let results = List.map (fun config -> runBenchmark config runs runtime) configs
-        
         for result in results do
             printResult result
             writeResultsToCsv result

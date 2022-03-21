@@ -1,6 +1,8 @@
-﻿// FIO - effectful programming library for F#
-// Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)
-// All rights reserved.
+﻿(**********************************************************************************)
+(* FIO - Effectful programming library for F#                                     *)
+(* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
+(* All rights reserved                                                            *)
+(**********************************************************************************)
 
 module ArgParser
 
@@ -19,14 +21,22 @@ type Arguments =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-            | Naive_Runtime _         -> "specify naive runtime. (specify only one runtime)"
-            | Advanced_Runtime _      -> "specify eval worker count, blocking worker count and eval steps for advanced runtime. (specify only one runtime)"
-            | Pingpong _              -> "specify round count for pingpong benchmark."
-            | ThreadRing _            -> "specify process count and round count for threadring benchmark."
-            | Big _                   -> "specify process count and round count for big benchmark."
-            | Bang _                  -> "specify process count and round count for bang benchmark."
-            | Runs _                  -> "specify the number of runs for each benchmark."
-            | Process_Count_Increment _ -> "specify the value of process count increment and how many times."
+            | Naive_Runtime _ -> 
+                "specify naive runtime. (specify only one runtime)"
+            | Advanced_Runtime _ ->
+                "specify eval worker count, blocking worker count and eval steps for advanced runtime. (specify only one runtime)"
+            | Pingpong _ ->
+                "specify round count for pingpong benchmark."
+            | ThreadRing _ ->
+                "specify process count and round count for threadring benchmark."
+            | Big _ ->
+                "specify process count and round count for big benchmark."
+            | Bang _ ->
+                "specify process count and round count for bang benchmark."
+            | Runs _ ->
+                "specify the number of runs for each benchmark."
+            | Process_Count_Increment _ ->
+                "specify the value of process count increment and how many times."
 
 type Parser() =
     let parser = ArgumentParser.Create<Arguments>()
@@ -34,6 +44,3 @@ type Parser() =
     member _.GetResults args =
         let results = parser.Parse args
         results
-
-    member _.GetUsage() =
-        parser.PrintUsage()
