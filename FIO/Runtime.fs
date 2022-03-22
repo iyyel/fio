@@ -136,14 +136,13 @@ module Runtime =
                 #if DEBUG
                 printfn $"DEBUG: BlockingWorker(%s{id}): Got new blocking event!"
                 #endif
-                let workItem = WorkItem.Create(Success (), Fiber<obj, obj>().ToLowLevel())
-                match blockingDict.TryRemove(blocker, ref workItem) with
-                | true  ->
-                    #if DEBUG
+                match blockingDict.TryRemove blocker with
+                | true, workItem -> 
+                    //#if DEBUG
                     printfn $"DEBUG: BlockingWorker(%s{id}): The blocking channel or fiber was in the dictionary. Adding back work item."
-                    #endif
+                    //#endif
                     workQueue.Add workItem
-                | false ->
+                | false, _ -> 
                     //#if DEBUG
                     //printfn $"DEBUG: BlockingWorker(%s{id}): The blocking channel or fiber wasn't in the blocking dictionary yet. Adding back."
                     //#endif
@@ -177,9 +176,9 @@ module Runtime =
                     | Ok res -> (Success res, Evaluated, evalSteps - 1)
                     | Error err -> (Failure err, Evaluated, evalSteps - 1)
                 | Blocking chan ->
-                    (*if chan.Count() > 0 then
+                    if chan.Count() > 0 then
                         (Success <| chan.Take(), Evaluated, evalSteps - 1)
-                    else*)
+                    else
                         (Blocking chan, RescheduleBlock (BlockingChannel chan), evalSteps)
                 | Concurrent (eff, fiber, llfiber) ->
                     workItemQueue.Add <| WorkItem.Create(eff, llfiber)
