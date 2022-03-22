@@ -234,7 +234,8 @@ module Runtime =
 
             match evalWorkerCount with
             | Some evalWorkerCount ->
-                createEvalWorkers 0 (evalWorkerCount - 1) |> ignore
+                createEvalWorkers 0 (evalWorkerCount - 1)
+                |> ignore
                 match blockingWorkerCount with
                 | Some blockingWorkerCount ->
                     createBlockingWorkers evalWorkerCount (evalWorkerCount + blockingWorkerCount - 1)
@@ -242,15 +243,15 @@ module Runtime =
                 | _ ->
                     createBlockingWorkers evalWorkerCount (evalWorkerCount + defaultBlockingWorkerCount - 1)
                     |> ignore
-            | _ -> createEvalWorkers 0 (defaultEvalWorkerCount - 1) |> ignore
-
-            match blockingWorkerCount with
-            | Some blockingWorkerCount ->
-                createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + blockingWorkerCount - 1)
-                |> ignore
-            | _ ->
-                createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + defaultBlockingWorkerCount - 1)
-                |> ignore
+            | _ -> createEvalWorkers 0 (defaultEvalWorkerCount - 1)
+                   |> ignore
+                   match blockingWorkerCount with
+                   | Some blockingWorkerCount ->
+                       createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + blockingWorkerCount - 1)
+                       |> ignore
+                   | _ ->
+                       createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + defaultBlockingWorkerCount - 1)
+                       |> ignore
 
         member _.GetConfiguration() =
             let evalWorkerCount =
