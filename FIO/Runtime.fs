@@ -30,6 +30,9 @@ module Runtime =
                 action ()
             | Blocking chan ->
                 Ok <| chan.Take()
+            | Send (value, chan) ->
+                chan.Add value
+                Ok value
             | Concurrent (eff, fiber, llfiber) -> 
                 async { llfiber.Complete <| this.LowLevelEval eff }
                 |> Async.StartAsTask
@@ -45,10 +48,6 @@ module Runtime =
                 match this.LowLevelEval eff with
                 | Ok res -> Ok res
                 | Error err -> this.LowLevelEval <| cont err
-            | DataEvent chan ->
-                let res = chan.Take()
-                chan.Add res
-                Ok res
             | Success res ->
                 Ok res
             | Failure err ->
@@ -130,23 +129,23 @@ module Runtime =
             id,
             workQueue: BlockingCollection<WorkItem>,
             blockingDict: ConcurrentDictionary<Blocker, WorkItem>,
-            blockingEventQueue: BlockingCollection<Blocker>) =
+            dataEventQueue: BlockingCollection<Blocker>) =
         let _ = (async {
-            for blocker in blockingEventQueue.GetConsumingEnumerable() do
-                #if DEBUG
-                printfn $"DEBUG: BlockingWorker(%s{id}): Got new blocking event!"
-                #endif
+            for blocker in dataEventQueue.GetConsumingEnumerable() do
+                //#if DEBUG
+                //printfn $"DEBUG: BlockingWorker(%s{id}): Got new blocking event!"
+                //#endif
                 match blockingDict.TryRemove blocker with
                 | true, workItem -> 
-                    //#if DEBUG
+                    #if DEBUG
                     printfn $"DEBUG: BlockingWorker(%s{id}): The blocking channel or fiber was in the dictionary. Adding back work item."
-                    //#endif
+                    #endif
                     workQueue.Add workItem
                 | false, _ -> 
                     //#if DEBUG
                     //printfn $"DEBUG: BlockingWorker(%s{id}): The blocking channel or fiber wasn't in the blocking dictionary yet. Adding back."
                     //#endif
-                    blockingEventQueue.Add blocker
+                    dataEventQueue.Add blocker
              } |> Async.StartAsTask |> ignore)
 
     and Advanced(
@@ -165,7 +164,7 @@ module Runtime =
         member internal this.LowLevelEval
                 (eff: FIO<obj, obj>)
                 (evalSteps: int)
-                (blockingEventQueue: BlockingCollection<Blocker>)
+                (dataEventQueue: BlockingCollection<Blocker>)
                 : FIO<obj, obj> * Action * int =
             if evalSteps = 0 then
                 (eff, RescheduleRun, 0)
@@ -180,6 +179,10 @@ module Runtime =
                         (Success <| chan.Take(), Evaluated, evalSteps - 1)
                     else
                         (Blocking chan, RescheduleBlock (BlockingChannel chan), evalSteps)
+                | Send (value, chan) ->
+                    chan.Add value
+                    dataEventQueue.Add <| BlockingChannel chan
+                    (Success value, Evaluated, evalSteps - 1)
                 | Concurrent (eff, fiber, llfiber) ->
                     workItemQueue.Add <| WorkItem.Create(eff, llfiber)
                     (Success fiber, Evaluated, evalSteps - 1)
@@ -191,20 +194,15 @@ module Runtime =
                     else
                         (AwaitFiber llfiber, RescheduleBlock (BlockingFiber llfiber), evalSteps)
                 | Sequence (eff, cont) ->
-                    match this.LowLevelEval eff evalSteps blockingEventQueue with
-                    | Success res, Evaluated, evalSteps -> this.LowLevelEval (cont res) evalSteps blockingEventQueue
+                    match this.LowLevelEval eff evalSteps dataEventQueue with
+                    | Success res, Evaluated, evalSteps -> this.LowLevelEval (cont res) evalSteps dataEventQueue
                     | Failure err, Evaluated, evalSteps -> (Failure err, Evaluated, evalSteps)
                     | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                 | SequenceError (eff, cont) ->
-                    match this.LowLevelEval eff evalSteps blockingEventQueue with
-                    | Success res, Evaluated, evalSteps -> this.LowLevelEval (cont res) evalSteps blockingEventQueue
+                    match this.LowLevelEval eff evalSteps dataEventQueue with
+                    | Success res, Evaluated, evalSteps -> this.LowLevelEval (cont res) evalSteps dataEventQueue
                     | Failure err, Evaluated, evalSteps -> (Failure err, Evaluated, evalSteps)
                     | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
-                | DataEvent chan -> 
-                    blockingEventQueue.Add <| BlockingChannel chan
-                    let res = chan.Take()
-                    chan.Add res
-                    (Success res, Evaluated, evalSteps - 1)
                 | Success res ->
                     (Success res, Evaluated, evalSteps - 1)
                 | Failure err ->

@@ -69,11 +69,11 @@ module FIO =
     and FIO<'R, 'E> =
         | NonBlocking of action: (unit -> Result<'R, 'E>)
         | Blocking of chan: Channel<'R>
+        | Send of value: 'R * chan: Channel<'R>
         | Concurrent of effect: FIO<obj, obj> * fiber: obj * llfiber: LowLevelFiber
         | AwaitFiber of llfiber: LowLevelFiber
         | Sequence of effect: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
         | SequenceError of FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
-        | DataEvent of chan: Channel<'R>
         | Success of result: 'R
         | Failure of error: 'E
 
@@ -86,6 +86,8 @@ module FIO =
                 | Error err -> Error err
             | Blocking chan -> 
                 Blocking <| chan.Upcast()
+            | Send (value, chan) ->
+                Send (value :> obj, chan.Upcast())
             | Concurrent (eff, fiber, llfiber) ->
                 Concurrent (eff, fiber, llfiber)
             | AwaitFiber llfiber ->
@@ -94,8 +96,6 @@ module FIO =
                 Sequence (eff, fun res -> (cont res).UpcastResult())
             | SequenceError (eff, cont) ->
                 SequenceError (eff, fun res -> (cont res).UpcastResult())
-            | DataEvent chan ->
-                DataEvent <| chan.Upcast()
             | Success res ->
                 Success (res :> obj)
             | Failure err ->
@@ -110,6 +110,8 @@ module FIO =
                 | Error err -> Error (err :> obj)
             | Blocking chan ->
                 Blocking chan
+            | Send (value, chan) ->
+                Send (value, chan)
             | Concurrent (eff, fiber, llfiber) ->
                 Concurrent (eff, fiber, llfiber)
             | AwaitFiber llfiber ->
@@ -118,8 +120,6 @@ module FIO =
                 Sequence (eff.UpcastError(), fun res -> (cont res).UpcastError())
             | SequenceError (eff, cont) ->
                 SequenceError (eff.UpcastError(), fun res -> (cont res).UpcastError())
-            | DataEvent chan ->
-                DataEvent chan
             | Success res ->
                 Success res
             | Failure err ->
@@ -132,11 +132,6 @@ module FIO =
 
     let (>>|) (eff: FIO<'R1, 'E>) (cont: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
-        
-    let Send<'V, 'E> (value: 'V, chan: Channel<'V>) : FIO<Unit, 'E> =
-        NonBlocking (fun () -> Ok <| chan.Add value) >> fun _ ->
-        DataEvent chan >> fun _ -> 
-        Success ()
         
     let Receive<'R, 'E> (chan: Channel<'R>) : FIO<'R, 'E> =
         Blocking chan
