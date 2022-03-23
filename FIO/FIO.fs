@@ -30,6 +30,7 @@ module FIO =
         member internal _.Upcast() = Channel<obj>(id, chan)
         member _.Add(value: 'R) = chan.Add value
         member _.Take() : 'R = chan.Take() :?> 'R
+        member _.HasData() = chan.Count > 0
         member _.Count() = chan.Count
 
     type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
@@ -48,10 +49,13 @@ module FIO =
             | _ -> false
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
-        member internal _.Complete(res: Result<obj, obj>) =
-            if chan.Count = 0 then chan.Add res
-            else failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
-        member internal _.Await() : Result<obj, obj> =
+        member internal _.Complete(res: Result<obj, obj>) = 
+            if chan.Count = 0 then
+                chan.Add res
+                chan.Add res
+            else
+                failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
+        member internal _.Await() : Result<obj, obj> = 
             let res = chan.Take()
             chan.Add res
             res

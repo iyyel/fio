@@ -23,7 +23,7 @@ let runBenchmarks args =
     let parser = ArgParser.Parser()
     let results = parser.GetResults args
     let runs = results.GetResult ArgParser.Runs
-    let processIncrement = results.GetResult ArgParser.Process_Count_Increment
+    let processIncrement = results.GetResult ArgParser.Process_Increment
 
     let pingpongConfig =
         match results.TryGetResult ArgParser.Pingpong with
@@ -61,29 +61,13 @@ let runBenchmarks args =
     Run configs runtime runs processIncrement
 
 let runSampleEffect () =
-    let pinger chan =
-        let x = 42
-        Send(x, chan) >> fun _ ->
-        printfn $"Pinger sent ping: %i{x}"
-        Succeed "pinger done"
-
-    let ponger chan =
-        Receive chan >> fun x ->
-        printfn $"Ponger received ping: %i{x}"
-        Succeed "ponger done"
-
-    let pingpong =
-        let chan = Channel<int>()
-        Parallel(pinger chan, ponger chan)
-    
     let naive = Naive()
-    let advanced = Advanced(1, 1, 10000)
-    let fiber = advanced.Eval <| Benchmarks.Big.Create 3 1
+    let advanced = Advanced(4, 4, 20)
+    let fiber = naive.Eval <| Benchmarks.Big.Create 500 1
     printfn $"Result: %A{fiber.Await()}"
 
 [<EntryPoint>]
 let main args =
-    //printArgs args
-    //runBenchmarks args
-    runSampleEffect()
+    printArgs args
+    runBenchmarks args
     0

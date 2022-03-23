@@ -16,7 +16,7 @@ type Arguments =
     | Big of processcount: int * roundcount: int
     | Bang of processcount: int * roundcount: int
     | [<Mandatory>] Runs of runs: int
-    | [<Mandatory>] Process_Count_Increment of processcountinc: int * inctimes: int
+    | [<Mandatory>] Process_Increment of processcountinc: int * inctimes: int
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -35,7 +35,7 @@ type Arguments =
                 "specify process count and round count for bang benchmark."
             | Runs _ ->
                 "specify the number of runs for each benchmark."
-            | Process_Count_Increment _ ->
+            | Process_Increment _ ->
                 "specify the value of process count increment and how many times."
 
 type Parser() =
