@@ -208,23 +208,14 @@ module Runtime =
                     (Failure err, Evaluated, evalSteps - 1)
 
         override _.Eval<'R, 'E>(eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
-            while (workItemQueue.Count > 0) do
-                workItemQueue.Take() |> ignore
-
-            blockingDict.Clear()
-
             while (dataEventQueue.Count > 0) do
                 dataEventQueue.Take() |> ignore
 
-            //printfn $"\n\n\n\nworkItemQueue length before eval: %i{workItemQueue.Count}"
-            //printfn $"blockingDict length before eval: %i{blockingDict.Count}"
-            //printfn $"dataEventQueue length before eval: %i{dataEventQueue.Count}\n"
+            //printfn $"\n\ndataEventQueue length before eval: %i{dataEventQueue.Count}"
 
             let fiber = Fiber<'R, 'E>()
             workItemQueue.Add <| WorkItem.Create(eff.Upcast(), fiber.ToLowLevel())
             
-            //printfn $"workItemQueue length after eval: %i{workItemQueue.Count}"
-            //printfn $"blockingDict length after eval: %i{blockingDict.Count}"
             //printfn $"dataEventQueue length after eval: %i{dataEventQueue.Count}"
             fiber
 
