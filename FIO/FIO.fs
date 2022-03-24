@@ -49,7 +49,7 @@ module FIO =
             | _ -> false
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
-        member internal _.Complete(res: Result<obj, obj>) = 
+        member internal _.Complete(res: Result<obj, obj>) =
             if chan.Count = 0 then
                 chan.Add res
                 chan.Add res
