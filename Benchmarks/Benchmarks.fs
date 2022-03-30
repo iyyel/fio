@@ -174,7 +174,7 @@ module ThreadRing =
             match procs with
             | [] -> acc
             | p::ps ->
-                let eff = Parallel(createRecvProcess p roundCount, acc) >> fun (_, res) -> Success res
+                let eff = Parallel(createRecvProcess p roundCount, acc) >> fun (_, _) -> End()
                 createThreadRing ps eff
 
         let chans = [for _ in 1 .. processCount -> Channel<int>()]
@@ -349,8 +349,8 @@ module Bang =
         let rec createBang recvProc sendProcs msg acc =
             match sendProcs with
             | [] -> acc
-            | p::ps -> let eff = Parallel(createSendProcess p msg roundCount, acc) >> fun (_, _) -> 
-                                 End()
+            | p::ps -> let eff = Parallel(createSendProcess p msg roundCount, acc) >> 
+                                 fun (_, _) -> End()
                        createBang recvProc ps (msg + 10) eff
 
         let recvProc = { Name = "p0"; Chan = Channel<int>() }
