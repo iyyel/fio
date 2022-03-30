@@ -60,12 +60,6 @@ let runBenchmarks args =
 
     Run configs runtime runs processIncrement
 
-let runSampleEffect () =
-    let naive = Naive()
-    let advanced = Advanced(4, 4, 20)
-    let fiber = naive.Eval <| Benchmarks.Big.Create 500 1
-    printfn $"Result: %A{fiber.Await()}"
-
 [<EntryPoint>]
 let main args =
     printArgs args

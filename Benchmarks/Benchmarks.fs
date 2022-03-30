@@ -343,29 +343,29 @@ module Bang =
             createRecvProcess proc (roundCount - 1) timerChan
 
     let Create processCount roundCount : FIO<int64, obj> =
-        let rec createSendProcesses recvProcChan senderCount =
-            List.map (fun count -> { Name = $"p{count}"; Chan = recvProcChan }) [1..senderCount]
+        let rec createSendProcesses recvProcChan processCount =
+            List.map (fun count -> { Name = $"p{count}"; Chan = recvProcChan }) [1..processCount]
 
-        let rec createBang recvProc sendProcs acc =
+        let rec createBang recvProc sendProcs msg acc =
             match sendProcs with
             | [] -> acc
-            | p::ps -> let eff = Parallel(createSendProcess p 0 roundCount, acc) >> fun (_, _) -> 
+            | p::ps -> let eff = Parallel(createSendProcess p msg roundCount, acc) >> fun (_, _) -> 
                                  End()
-                       createBang recvProc ps eff
+                       createBang recvProc ps (msg + 10) eff
 
         let recvProc = { Name = "p0"; Chan = Channel<int>() }
         let sendProcs = createSendProcesses recvProc.Chan processCount
         let p, ps = 
             match List.rev sendProcs with
-            | p::ps -> (p, List.rev ps)
-            | _     -> failwith $"createBig failed! (at least 1 sending process should exist) processCount = %i{processCount}"
+            | p::ps -> (p, ps)
+            | _     -> failwith $"createBang failed! (at least 1 sending process should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.TimerMessage>()
         let effEnd = Parallel(createSendProcess p 0 roundCount,
                               createRecvProcess recvProc (processCount * roundCount) timerChan)
                      >> fun (_, _) -> End()
         Spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
         Send(Timer.Start, timerChan) >> fun _ ->
-        createBang recvProc ps effEnd >> fun _ ->
+        createBang recvProc ps 10 effEnd >> fun _ ->
         Await fiber >> fun res ->
         Success res
 
