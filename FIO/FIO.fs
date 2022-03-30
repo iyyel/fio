@@ -30,10 +30,11 @@ module FIO =
         member internal _.Upcast() = Channel<obj>(id, chan)
         member _.Add(value: 'R) = chan.Add value
         member _.Take() : 'R = chan.Take() :?> 'R
-        member _.HasData() = chan.Count > 0
         member _.Count() = chan.Count
 
     type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
+        let _lock = obj()
+        let mutable completed = false
         interface IComparable with
             member this.CompareTo other = 
                 match other with
@@ -50,11 +51,12 @@ module FIO =
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
         member internal _.Complete(res: Result<obj, obj>) =
-            if chan.Count = 0 then
-                chan.Add res
-                chan.Add res
-            else
-                failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
+            lock (_lock) (fun _ ->
+                if not completed then
+                    completed <- true
+                    chan.Add res
+                else
+                    failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!")
         member internal _.Await() : Result<obj, obj> = 
             let res = chan.Take()
             chan.Add res
@@ -65,10 +67,11 @@ module FIO =
         new() = Fiber(Guid.NewGuid(), new BlockingCollection<Result<obj, obj>>())
         member internal _.ToLowLevel() = LowLevelFiber(id, chan)
         member _.Await() : Result<'R, 'E> = 
-            match chan.Take() with
-            | Ok res    -> Ok (res :?> 'R)
+            let res = chan.Take()
+            chan.Add res
+            match res with
+            | Ok res -> Ok (res :?> 'R)
             | Error err -> Error (err :?> 'E)
-        member internal _.Completed() = chan.Count > 0
         
     and FIO<'R, 'E> =
         | NonBlocking of action: (unit -> Result<'R, 'E>)
@@ -168,13 +171,13 @@ module FIO =
         Success res
 
     let Race<'R, 'E> (eff1: FIO<'R, 'E>, eff2: FIO<'R, 'E>) : FIO<'R, 'E> =
-        let rec loop (fiber1: Fiber<'R, 'E>) (fiber2: Fiber<'R, 'E>) =
+        let rec loop (fiber1: LowLevelFiber) (fiber2: LowLevelFiber) =
             if fiber1.Completed() then fiber1
             else if fiber2.Completed() then fiber2
             else loop fiber1 fiber2
         Spawn eff1 >> fun fiber1 ->
         Spawn eff2 >> fun fiber2 ->
-        match (loop fiber1 fiber2).Await() with
-        | Ok res    -> Success res
-        | Error err -> Failure err
+        match (loop (fiber1.ToLowLevel()) (fiber2.ToLowLevel())).Await() with
+        | Ok res    -> Success (res :?> 'R)
+        | Error err -> Failure (err :?> 'E)
         

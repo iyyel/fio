@@ -85,45 +85,26 @@ module Runtime =
             workItemQueue: BlockingCollection<WorkItem>,
             blockingWorkItemMap: ConcurrentDictionary<Blocker, WorkItem>,
             dataEventQueue: BlockingCollection<Blocker>,
+            userFibersMap: ConcurrentDictionary<LowLevelFiber, Unit>,
             evalSteps) =
         let _ = (async {
             for workItem in workItemQueue.GetConsumingEnumerable() do
-                #if DEBUG
-                printfn $"DEBUG: EvalWorker(%s{id}): Found new work. Executing LowLevelEval..."
-                #endif
                 match runtime.LowLevelEval workItem.Eff workItem.PrevAction evalSteps with
-                | Success res, Finished, evalSteps ->
-                    #if DEBUG
-                    printfn $"DEBUG: EvalWorker(%s{id}): Got success result (%A{res}) with (%i{evalSteps}) steps left. Completing work item."
-                    #endif
+                | Success res, Finished, _ ->
                     workItem.LLFiber.Complete <| Ok res
-                    dataEventQueue.Add <| BlockingFiber workItem.LLFiber
-                | Failure err, Finished, evalSteps ->
-                    #if DEBUG
-                    printfn $"DEBUG: EvalWorker(%s{id}): Got error result (%A{err}) with (%i{evalSteps}) steps left. Completing work item."
-                    #endif
+                    if userFibersMap.ContainsKey workItem.LLFiber then
+                        dataEventQueue.Add <| BlockingFiber workItem.LLFiber
+                        userFibersMap.TryRemove workItem.LLFiber |> ignore
+                | Failure err, Finished, _ ->
                     workItem.LLFiber.Complete <| Error err
-                    dataEventQueue.Add <| BlockingFiber workItem.LLFiber
+                    if userFibersMap.ContainsKey workItem.LLFiber then
+                        dataEventQueue.Add <| BlockingFiber workItem.LLFiber
+                        userFibersMap.TryRemove workItem.LLFiber |> ignore
                 | eff, RescheduleRun, _ ->
-                    #if DEBUG
-                    printfn $"DEBUG: EvalWorker(%s{id}): Finished evaluation steps. Rescheduling rest of effect."
-                    #endif
                     workItemQueue.Add <| WorkItem.Create(eff, workItem.LLFiber, RescheduleRun)
                 | eff, RescheduleBlock blocker, _ ->
-                    #if DEBUG
-                    printfn $"DEBUG: EvalWorker(%s{id}): Got blocking effect. Rescheduling to blocking dictionary."
-                    #endif
-                    match blockingWorkItemMap.TryAdd (blocker, WorkItem.Create(eff, workItem.LLFiber, RescheduleBlock blocker)) with
-                    | true ->
-                        #if DEBUG
-                        printfn $"DEBUG: EvalWorker(%s{id}): Added blocker to dictionary successfully!"
-                        #endif
-                        ()
-                    | _ -> 
-                        #if DEBUG
-                        printfn $"DEBUG: EvalWorker(%s{id}): Failed to add blocker to dictionary!"
-                        #endif
-                        ()
+                    blockingWorkItemMap.TryAdd (blocker, WorkItem.Create(eff, workItem.LLFiber, RescheduleBlock blocker))
+                    |> ignore
                 | _ -> failwith $"EvalWorker(%s{id}): Error occurred while evaluating effect!"
             } |> Async.StartAsTask |> ignore)
         
@@ -134,20 +115,9 @@ module Runtime =
             dataEventQueue: BlockingCollection<Blocker>) =
         let _ = (async {
             for blocker in dataEventQueue.GetConsumingEnumerable() do
-                //#if DEBUG
-                //printfn $"DEBUG: BlockingWorker(%s{id}): Got new blocking event!"
-                //#endif
                 match blockingWorkItemMap.TryRemove blocker with
-                | true, workItem -> 
-                    //#if DEBUG
-                    //printfn $"DEBUG: BlockingWorker(%s{id}): The blocking channel or fiber was in the dictionary. Adding back work item."
-                    //#endif
-                    workItemQueue.Add workItem
-                | false, _ -> 
-                    //#if DEBUG
-                    //printfn $"DEBUG: BlockingWorker(%s{id}): The blocking channel or fiber wasn't in the blocking dictionary yet. Adding back."
-                    //#endif
-                    dataEventQueue.Add blocker
+                | true, workItem -> workItemQueue.Add workItem
+                | false, _ -> dataEventQueue.Add blocker
              } |> Async.StartAsTask |> ignore)
 
     and Advanced(?evalWorkerCount, ?blockingWorkerCount, ?evalSteps) as self =
@@ -159,6 +129,7 @@ module Runtime =
         let workItemQueue = new BlockingCollection<WorkItem>()
         let blockingWorkItemMap = new ConcurrentDictionary<Blocker, WorkItem>()
         let dataEventQueue = new BlockingCollection<Blocker>()
+        let userFibersMap = new ConcurrentDictionary<LowLevelFiber, Unit>()
 
         do self.CreateWorkers()
 
@@ -182,6 +153,7 @@ module Runtime =
                     (Success value, Finished, evalSteps - 1)
                 | Concurrent (eff, fiber, llfiber) ->
                     workItemQueue.Add <| WorkItem.Create(eff, llfiber, prevAction)
+                    userFibersMap.TryAdd (llfiber, ()) |> ignore
                     (Success fiber, Finished, evalSteps - 1)
                 | AwaitFiber llfiber ->
                     if prevAction = RescheduleBlock (BlockingFiber llfiber) then
@@ -197,8 +169,8 @@ module Runtime =
                     | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                 | SequenceError (eff, cont) ->
                     match this.LowLevelEval eff prevAction evalSteps with
-                    | Success res, Finished, evalSteps -> this.LowLevelEval (cont res) Finished evalSteps
-                    | Failure err, Finished, evalSteps -> (Failure err, Finished, evalSteps)
+                    | Success res, Finished, evalSteps -> (Success res, Finished, evalSteps)
+                    | Failure err, Finished, evalSteps -> this.LowLevelEval (cont err) Finished evalSteps
                     | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                 | Success res ->
                     (Success res, Finished, evalSteps - 1)
@@ -206,13 +178,12 @@ module Runtime =
                     (Failure err, Finished, evalSteps - 1)
 
         override _.Eval<'R, 'E>(eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
-            //while (dataEventQueue.Count > 0) do
-            //    dataEventQueue.Take() |> ignore
-
+            
             printfn $"\n\n\n\nworkItemQueue length before interpreting: %i{workItemQueue.Count}"
             printfn $"blockingDict length before interpreting: %i{blockingWorkItemMap.Count}"
             printfn $"dataEventQueue length before interpreting: %i{dataEventQueue.Count}"
-
+            printfn $"userFibersList length before interpreting: %i{userFibersMap.Count}"
+            
             let fiber = Fiber<'R, 'E>()
             workItemQueue.Add <| WorkItem.Create(eff.Upcast(), fiber.ToLowLevel(), None)
             let _ = fiber.Await()
@@ -220,45 +191,24 @@ module Runtime =
             printfn $"\nworkItemQueue length after interpreting: %i{workItemQueue.Count}"
             printfn $"blockingDict length after interpreting: %i{blockingWorkItemMap.Count}"
             printfn $"dataEventQueue length after interpreting: %i{dataEventQueue.Count}"
+            printfn $"userFibersList length after interpreting: %i{userFibersMap.Count}"
+            
             fiber
 
-        member private _.CreateWorkers() =
-            let createEvalWorkers startId endId =
-                match evalSteps with
-                | Some steps ->
-                    List.map (fun id -> 
-                        EvalWorker(id.ToString(), self, workItemQueue, blockingWorkItemMap, dataEventQueue, steps))
-                        [startId..endId]
-                | _ -> 
-                    List.map (fun id ->
-                        EvalWorker(id.ToString(), self, workItemQueue, blockingWorkItemMap, dataEventQueue, defaultEvalSteps))
-                        [startId..endId]
-
+        member private this.CreateWorkers() =
+            let createEvalWorkers evalSteps startId endId =
+                List.map (fun id ->
+                    EvalWorker(id.ToString(), self, workItemQueue, blockingWorkItemMap,
+                    dataEventQueue, userFibersMap, evalSteps)) [startId..endId]
+               
             let createBlockingWorkers startId endId =
-                List.map (fun id -> 
+                List.map (fun id ->
                     BlockingWorker(id.ToString(), workItemQueue, blockingWorkItemMap, dataEventQueue))
                     [startId..endId]
 
-            match evalWorkerCount with
-            | Some evalWorkerCount ->
-                createEvalWorkers 0 (evalWorkerCount - 1)
-                |> ignore
-                match blockingWorkerCount with
-                | Some blockingWorkerCount ->
-                    createBlockingWorkers evalWorkerCount (evalWorkerCount + blockingWorkerCount - 1)
-                    |> ignore
-                | _ ->
-                    createBlockingWorkers evalWorkerCount (evalWorkerCount + defaultBlockingWorkerCount - 1)
-                    |> ignore
-            | _ -> createEvalWorkers 0 (defaultEvalWorkerCount - 1)
-                   |> ignore
-                   match blockingWorkerCount with
-                   | Some blockingWorkerCount ->
-                       createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + blockingWorkerCount - 1)
-                       |> ignore
-                   | _ ->
-                       createBlockingWorkers defaultEvalWorkerCount (defaultEvalWorkerCount + defaultBlockingWorkerCount - 1)
-                       |> ignore
+            let (evalWorkerCount, blockingWorkerCount, evalSteps) = this.GetConfiguration()
+            createEvalWorkers evalSteps 0 (evalWorkerCount - 1) |> ignore
+            createBlockingWorkers evalWorkerCount (evalWorkerCount + blockingWorkerCount - 1) |> ignore
 
         member _.GetConfiguration() =
             let evalWorkerCount =
