@@ -10,11 +10,12 @@ open Argu
 
 type Arguments =
     | Naive_Runtime
-    | Advanced_Runtime of evalworkercount: int * blockingworkercount: int * evalsteps: int
+    | Advanced_Runtime of evalworkercount: int * evalsteps: int
     | Pingpong of roundcount: int
     | ThreadRing of processcount: int * roundcount: int
     | Big of processcount: int * roundcount: int
     | Bang of processcount: int * roundcount: int
+    | ReverseBang of processcount: int * roundcount: int
     | [<Mandatory>] Runs of runs: int
     | [<Mandatory>] Process_Increment of processcountinc: int * inctimes: int
 
@@ -33,6 +34,8 @@ type Arguments =
                 "specify process count and round count for big benchmark."
             | Bang _ ->
                 "specify process count and round count for bang benchmark."
+            | ReverseBang _ ->
+                "specify process count and round count for reversebang benchmark."
             | Runs _ ->
                 "specify the number of runs for each benchmark."
             | Process_Increment _ ->

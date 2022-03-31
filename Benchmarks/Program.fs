@@ -48,15 +48,22 @@ let runBenchmarks args =
             [Bang { ProcessCount = processCount; RoundCount = roundCount }]
         | _ -> []
 
-    let configs = pingpongConfig @ threadRingConfig @ bigConfig @ bangConfig
+    let reverseBangConfig =
+        match results.TryGetResult ArgParser.ReverseBang with
+        | Some (processCount, roundCount) ->
+            [ReverseBang { ProcessCount = processCount; RoundCount = roundCount }]
+        | _ -> []
+
+    let configs = pingpongConfig @ threadRingConfig @
+                  bigConfig @ bangConfig @ reverseBangConfig
 
     let runtime : Runtime = 
         match results.TryGetResult ArgParser.Naive_Runtime with
         | Some _ -> Naive()
         | _      -> 
             match results.TryGetResult ArgParser.Advanced_Runtime with
-            | Some (x, y, z) -> Advanced(x, y, z)
-            | _              -> failwith "ArgParser: Invalid runtime specified!"
+            | Some (x, y) -> Advanced(x, y)
+            | _ -> failwith "ArgParser: Invalid runtime specified!"
 
     Run configs runtime runs processIncrement
 
