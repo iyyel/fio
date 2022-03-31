@@ -1,5 +1,5 @@
 ﻿(**********************************************************************************)
-(* FIO - Effectful programming library for F#                                     *)
+(* FIO - A type-safe, highly concurrent programming library for F#                *)
 (* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
 (* All rights reserved                                                            *)
 (**********************************************************************************)
@@ -62,7 +62,7 @@ let runBenchmarks args =
         | Some _ -> Naive()
         | _      -> 
             match results.TryGetResult ArgParser.Advanced_Runtime with
-            | Some (x, y) -> Advanced(x, y)
+            | Some (ewc, esc) -> Advanced(ewc, esc)
             | _ -> failwith "ArgParser: Invalid runtime specified!"
 
     Run configs runtime runs processIncrement

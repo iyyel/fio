@@ -1,5 +1,5 @@
 ﻿(**********************************************************************************)
-(* FIO - Effectful programming library for F#                                     *)
+(* FIO - A type-safe, highly concurrent programming library for F#                *)
 (* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
 (* All rights reserved                                                            *)
 (**********************************************************************************)
@@ -65,19 +65,21 @@ module Runtime =
 (* Advanced runtime                                                               *)
 (*                                                                                *)
 (**********************************************************************************)
-    type BlockingItem =
+    type Action =
+        | RescheduleRunning
+        | RescheduleBlocking of BlockingItem
+        | Evaluated
+
+    and BlockingItem =
         | BlockingChannel of Channel<obj>
         | BlockingFiber of LowLevelFiber
 
-    and Action =
-        | RescheduleRunning
-        | RescheduleBlocking of BlockingItem
-        | Finished
-
     and WorkItem = { Eff: FIO<obj, obj>; LLFiber: LowLevelFiber; PrevAction: Action }
-                   static member Create(eff, llfiber,prevAction ) =
+                   static member Create(eff, llfiber, prevAction) =
                        { Eff = eff; LLFiber = llfiber; PrevAction = prevAction }
-
+                   member this.Complete res =
+                       this.LLFiber.Complete <| res
+                       
     and EvalWorker(
             runtime: Advanced,
             workItemQueue: BlockingCollection<WorkItem>,
@@ -87,51 +89,51 @@ module Runtime =
         let _ = (async {
             for workItem in workItemQueue.GetConsumingEnumerable() do
                 match runtime.LowLevelEval workItem.Eff workItem.PrevAction evalSteps with
-                | Success res, Finished, _ ->
+                | Success res, Evaluated, _ ->
                     self.CompleteWorkItem(workItem, Ok res)
-                | Failure err, Finished, _ ->
+                | Failure err, Evaluated, _ ->
                     self.CompleteWorkItem(workItem, Error err)
                 | eff, RescheduleRunning, _ ->
                     let workItem = WorkItem.Create(eff, workItem.LLFiber, RescheduleRunning)
                     self.RescheduleWorkItem workItem
-                | eff, RescheduleBlocking blocker, _ ->
-                    let workItem = WorkItem.Create(eff, workItem.LLFiber, RescheduleBlocking blocker)
+                | eff, RescheduleBlocking blockingItem, _ ->
+                    let workItem = WorkItem.Create(eff, workItem.LLFiber, RescheduleBlocking blockingItem)
                     blockingWorker.RescheduleWorkItem(workItem)
                 | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
             } |> Async.StartAsTask |> ignore)
 
-        member internal _.CompleteWorkItem(workItem: WorkItem, res: Result<obj, obj>) =
-            workItem.LLFiber.Complete <| res
+        member private _.CompleteWorkItem(workItem, res) =
+            workItem.Complete res
             dataEventQueue.Add <| BlockingFiber workItem.LLFiber
 
-        member internal _.RescheduleWorkItem(workItem: WorkItem) =
+        member private _.RescheduleWorkItem(workItem) =
             workItemQueue.Add workItem
             
     and BlockingWorker(
             workItemQueue: BlockingCollection<WorkItem>,
-            dataEventQueue: BlockingCollection<BlockingItem>) as self =
+            blockingEventQueue: BlockingCollection<BlockingItem>) as self =
         let blockingWorkItemMap = new BlockingWorkItemMap()
-        let _ = (async {
-            for blocker in dataEventQueue.GetConsumingEnumerable() do
-                self.HandleBlocker blocker
-            } |> Async.StartAsTask |> ignore)
 
-        member internal _.RescheduleWorkItem(workItem: WorkItem) =
+        let _ = (async {
+            for blockingItem in blockingEventQueue.GetConsumingEnumerable() do
+                self.HandleBlockingItem blockingItem
+        } |> Async.StartAsTask |> ignore)
+
+        member internal _.RescheduleWorkItem(workItem) =
             blockingWorkItemMap.RescheduleWorkItem workItem
 
-        member private this.HandleBlocker(blocker: BlockingItem) =
-            match blockingWorkItemMap.TryRemove blocker with
-                | true, blockingQueue -> 
-                    match blocker with
-                    | BlockingChannel _ -> this.HandleBlockingChannel(blocker, blockingQueue)
-                    | BlockingFiber _ -> this.HandleBlockingFiber(blockingQueue)
-                | false, _ -> dataEventQueue.Add blocker
+        member private _.HandleBlockingItem(blockingItem) =
+            match blockingWorkItemMap.TryRemove blockingItem with
+                | true, blockingQueue ->
+                    match blockingItem with
+                    | BlockingChannel _ -> self.HandleBlockingChannel(blockingItem, blockingQueue)
+                    | BlockingFiber _ -> self.HandleBlockingFiber(blockingQueue)
+                | false, _ -> blockingEventQueue.Add blockingItem
 
-        member private _.HandleBlockingChannel(blocker: BlockingItem, blockingQueue: BlockingCollection<WorkItem>) =
+        member private _.HandleBlockingChannel(blockingItem, blockingQueue: BlockingCollection<WorkItem>) =
             workItemQueue.Add <| blockingQueue.Take()
             if blockingQueue.Count > 0 then
-                blockingWorkItemMap.AddOrUpdate(blocker, blockingQueue)
-                |> ignore
+                blockingWorkItemMap.Add(blockingItem, blockingQueue)
 
         member private _.HandleBlockingFiber(blockingQueue: BlockingCollection<WorkItem>) =
             while blockingQueue.Count > 0 do
@@ -140,91 +142,92 @@ module Runtime =
     and BlockingWorkItemMap() =
         let blockingWorkItemMap = new ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>>()
 
-        member internal _.RescheduleWorkItem(workItem: WorkItem) =
-            let blocker = match workItem.PrevAction with
-                          | RescheduleBlocking blocker -> blocker
-                          | _ -> failwith "BlockingWorkItemMap: Attempted to reschedule a work item with wrong previous action!"
-            let newQueue = new BlockingCollection<WorkItem>()
-            newQueue.Add <| workItem
-            blockingWorkItemMap.AddOrUpdate(blocker, newQueue, fun _ oldQueue -> oldQueue.Add workItem; oldQueue)
+        member internal _.RescheduleWorkItem(workItem) =
+            let blockingItem =
+                match workItem.PrevAction with
+                | RescheduleBlocking blockingItem -> blockingItem
+                | _ -> failwith "BlockingWorkItemMap: Attempted to reschedule a work item with illegal previous action!"
+            let newBlockingQueue = new BlockingCollection<WorkItem>()
+            newBlockingQueue.Add <| workItem
+            blockingWorkItemMap.AddOrUpdate(blockingItem, newBlockingQueue, fun _ oldQueue -> oldQueue.Add workItem; oldQueue)
             |> ignore
 
-        member internal _.TryRemove(blocker: BlockingItem) =
-            blockingWorkItemMap.TryRemove blocker
+        member internal _.TryRemove(blockingItem) =
+            blockingWorkItemMap.TryRemove blockingItem
 
-        member internal _.AddOrUpdate(blocker: BlockingItem, blockingQueue: BlockingCollection<WorkItem>) =
-            blockingWorkItemMap.AddOrUpdate(blocker, blockingQueue, fun _ queue -> queue)
+        member internal _.Add(blockingItem, blockingQueue) =
+            blockingWorkItemMap.AddOrUpdate(blockingItem, blockingQueue, fun _ queue -> queue) 
+            |> ignore
 
     and Advanced(?evalWorkerCount, ?evalStepCount) as self =
         inherit Runtime()
 
-        let defaultEvalWorkerCount = System.Environment.ProcessorCount / 2
+        let defaultEvalWorkerCount = System.Environment.ProcessorCount
         let defaultBlockingWorkerCount = 1
         let defaultEvalStepCount = 15
 
         let workItemQueue = new BlockingCollection<WorkItem>()
-        let dataEventQueue = new BlockingCollection<BlockingItem>()
+        let blockingEventQueue = new BlockingCollection<BlockingItem>()
 
         do self.CreateWorkers()
 
-        member internal _.LowLevelEval (eff: FIO<obj, obj>) (prevAction : Action) 
-                (evalSteps: int) : FIO<obj, obj> * Action * int =
+        member internal _.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
             if evalSteps = 0 then
                 (eff, RescheduleRunning, 0)
             else
                 match eff with
                 | NonBlocking action ->
                     match action() with
-                    | Ok res -> (Success res, Finished, evalSteps - 1)
-                    | Error err -> (Failure err, Finished, evalSteps - 1)
+                    | Ok res -> (Success res, Evaluated, evalSteps - 1)
+                    | Error err -> (Failure err, Evaluated, evalSteps - 1)
                 | Blocking chan ->
                     if prevAction = RescheduleBlocking (BlockingChannel chan) then
-                        (Success <| chan.Take(), Finished, evalSteps - 1)
+                        (Success <| chan.Take(), Evaluated, evalSteps - 1)
                     else
                         (Blocking chan, RescheduleBlocking (BlockingChannel chan), evalSteps)
                 | Send (value, chan) ->
                     chan.Add value
-                    dataEventQueue.Add <| BlockingChannel chan
-                    (Success value, Finished, evalSteps - 1)
+                    blockingEventQueue.Add <| BlockingChannel chan
+                    (Success value, Evaluated, evalSteps - 1)
                 | Concurrent (eff, fiber, llfiber) ->
                     workItemQueue.Add <| WorkItem.Create(eff, llfiber, prevAction)
-                    (Success fiber, Finished, evalSteps - 1)
+                    (Success fiber, Evaluated, evalSteps - 1)
                 | AwaitFiber llfiber ->
                     if prevAction = RescheduleBlocking (BlockingFiber llfiber) then
                         match llfiber.Await() with
-                        | Ok res -> (Success res, Finished, evalSteps - 1)
-                        | Error err -> (Failure err, Finished, evalSteps - 1)
+                        | Ok res -> (Success res, Evaluated, evalSteps - 1)
+                        | Error err -> (Failure err, Evaluated, evalSteps - 1)
                     else
                         (AwaitFiber llfiber, RescheduleBlocking (BlockingFiber llfiber), evalSteps)
                 | Sequence (eff, cont) ->
                     match self.LowLevelEval eff prevAction evalSteps with
-                    | Success res, Finished, evalSteps -> self.LowLevelEval (cont res) Finished evalSteps
-                    | Failure err, Finished, evalSteps -> (Failure err, Finished, evalSteps)
+                    | Success res, Evaluated, evalSteps -> self.LowLevelEval (cont res) Evaluated evalSteps
+                    | Failure err, Evaluated, evalSteps -> (Failure err, Evaluated, evalSteps)
                     | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                 | SequenceError (eff, cont) ->
                     match self.LowLevelEval eff prevAction evalSteps with
-                    | Success res, Finished, evalSteps -> (Success res, Finished, evalSteps)
-                    | Failure err, Finished, evalSteps -> self.LowLevelEval (cont err) Finished evalSteps
+                    | Success res, Evaluated, evalSteps -> (Success res, Evaluated, evalSteps)
+                    | Failure err, Evaluated, evalSteps -> self.LowLevelEval (cont err) Evaluated evalSteps
                     | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                 | Success res ->
-                    (Success res, Finished, evalSteps - 1)
+                    (Success res, Evaluated, evalSteps - 1)
                 | Failure err ->
-                    (Failure err, Finished, evalSteps - 1)
+                    (Failure err, Evaluated, evalSteps - 1)
 
         override _.Eval<'R, 'E>(eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
             let fiber = Fiber<'R, 'E>()
-            workItemQueue.Add <| WorkItem.Create(eff.Upcast(), fiber.ToLowLevel(), Finished)
+            workItemQueue.Add <| WorkItem.Create(eff.Upcast(), fiber.ToLowLevel(), Evaluated)
             fiber
 
         member private _.CreateWorkers() =
             let createEvalWorkers blockingWorker evalSteps start final =
                 List.map (fun _ ->
-                EvalWorker(self, workItemQueue, dataEventQueue, blockingWorker, evalSteps)) 
+                EvalWorker(self, workItemQueue, blockingEventQueue, blockingWorker, evalSteps)) 
                     [start..final]
 
             let (evalWorkerCount, _, evalSteps) = self.GetConfiguration()
 
-            let blockingWorker = BlockingWorker(workItemQueue, dataEventQueue)
+            let blockingWorker = BlockingWorker(workItemQueue, blockingEventQueue)
             createEvalWorkers blockingWorker evalSteps 0 (evalWorkerCount - 1) |> ignore
             
         member _.GetEvalWorkerCount() =
@@ -243,5 +246,5 @@ module Runtime =
         member _.GetConfiguration() =
             let evalWorkerCount = self.GetEvalWorkerCount()
             let blockingWorkerCount = self.GetBlockingWorkerCount()
-            let evalSteps = self.GetEvalStepCount()
-            (evalWorkerCount, blockingWorkerCount, evalSteps)
+            let evalStepCount = self.GetEvalStepCount()
+            (evalWorkerCount, blockingWorkerCount, evalStepCount)

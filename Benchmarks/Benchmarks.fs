@@ -1,5 +1,5 @@
 ﻿(**********************************************************************************)
-(* FIO - Effectful programming library for F#                                     *)
+(* FIO - A type-safe, highly concurrent programming library for F#                *)
 (* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
 (* All rights reserved                                                            *)
 (**********************************************************************************)
@@ -468,11 +468,16 @@ module Benchmark =
     let private writeResultsToCsv (result: BenchmarkResult) =
         let configStr config =
             match config with
-            | Pingpong config -> $"roundcount%i{config.RoundCount}"
-            | ThreadRing config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-            | Big config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-            | Bang config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
-            | ReverseBang config -> $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Pingpong config ->
+                $"roundcount%i{config.RoundCount}"
+            | ThreadRing config ->
+                $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Big config ->
+                $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | Bang config ->
+                $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
+            | ReverseBang config ->
+                $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
 
         let rec fileContentStr times acc =
             match times with
@@ -495,11 +500,9 @@ module Benchmark =
             + "-"
             + configStr
             + "-"
-            + runtimeFileName.ToLower()
-            + "-"
             + runStr
         let fileName = "results-" + DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss") + ".csv"
-        let dirPath = homePath + @"\fio\benchmarks\" + folderName
+        let dirPath = homePath + @"\fio\benchmarks\" + folderName + @"\" + runtimeFileName.ToLower()
         let filePath = dirPath + @"\" + fileName
         if (not <| Directory.Exists(dirPath)) then Directory.CreateDirectory(dirPath) |> ignore
         else ()
@@ -510,17 +513,23 @@ module Benchmark =
     let private printResult (result: BenchmarkResult) =
         let benchStr config =
             match config with
-            | Pingpong config -> $"Pingpong (RoundCount: %i{config.RoundCount})"
-            | ThreadRing config -> $"ThreadRing (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | Big config -> $"Big (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | Bang config -> $"Bang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | ReverseBang config -> $"ReverseBang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+            | Pingpong config ->
+                $"Pingpong (RoundCount: %i{config.RoundCount})"
+            | ThreadRing config ->
+                $"ThreadRing (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+            | Big config ->
+                $"Big (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+            | Bang config ->
+                $"Bang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+            | ReverseBang config ->
+                $"ReverseBang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
 
         let rec runExecTimesStr runExecTimes acc =
             match runExecTimes with
             | [] -> (acc + "└───────────────────────────────────────────────────────────────────────────┘")
-            | (run, time)::ts -> let str = $"│  #%-10i{run}                       %-35i{time}    │\n"
-                                 runExecTimesStr ts (acc + str)
+            | (run, time)::ts -> 
+                let str = $"│  #%-10i{run}                       %-35i{time}    │\n"
+                runExecTimesStr ts (acc + str)
 
         let _, config, _, runtimeName, times = result
         let benchName = benchStr config
@@ -539,17 +548,23 @@ module Benchmark =
         let getRuntimeName (runtime: Runtime) =
             match runtime with
             | :? Naive -> ("naive", "Naive")
-            | :? Advanced as a -> let x, y, z = a.GetConfiguration()
-                                  ($"advanced-ewc%i{x}-bwc%i{y}-es%i{z}", $"Advanced (EWC: %i{x} BWC: %i{y} ES: %i{z})")
+            | :? Advanced as a -> 
+                let ewc, bwc, esc = a.GetConfiguration()
+                ($"advanced-ewc%i{ewc}-bwc%i{bwc}-esc%i{esc}", $"Advanced (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})")
             | _ -> failwith "runBenchmark: Invalid runtime!"
 
         let createBenchmark config =
             match config with
-            | Pingpong config -> ("Pingpong", Pingpong.Create config.RoundCount)
-            | ThreadRing config -> ("ThreadRing", ThreadRing.Create config.ProcessCount config.RoundCount)
-            | Big config -> ("Big", Big.Create config.ProcessCount config.RoundCount)
-            | Bang config -> ("Bang", Bang.Create config.ProcessCount config.RoundCount)
-            | ReverseBang config -> ("ReverseBang", ReverseBang.Create config.ProcessCount config.RoundCount)
+            | Pingpong config ->
+                ("Pingpong", Pingpong.Create config.RoundCount)
+            | ThreadRing config ->
+                ("ThreadRing", ThreadRing.Create config.ProcessCount config.RoundCount)
+            | Big config ->
+                ("Big", Big.Create config.ProcessCount config.RoundCount)
+            | Bang config ->
+                ("Bang", Bang.Create config.ProcessCount config.RoundCount)
+            | ReverseBang config ->
+                ("ReverseBang", ReverseBang.Create config.ProcessCount config.RoundCount)
 
         let rec executeBenchmark config curRun acc =
             let (bench, eff) = createBenchmark config
@@ -572,15 +587,26 @@ module Benchmark =
     let Run configs runtime runs (processCountInc, incTimes) =
         let newConfig config incTime =
             match config with
-            | Pingpong config -> Pingpong config
-            | ThreadRing config -> ThreadRing { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
-            | Big config -> Big { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
-            | Bang config -> Bang { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
-            | ReverseBang config -> ReverseBang { RoundCount = config.RoundCount; ProcessCount = config.ProcessCount + (processCountInc * incTime) }
+            | Pingpong config ->
+                Pingpong config
+            | ThreadRing config ->
+                ThreadRing { RoundCount = config.RoundCount; 
+                             ProcessCount = config.ProcessCount + (processCountInc * incTime) }
+            | Big config ->
+                Big { RoundCount = config.RoundCount; 
+                      ProcessCount = config.ProcessCount + (processCountInc * incTime) }
+            | Bang config ->
+                Bang { RoundCount = config.RoundCount; 
+                       ProcessCount = config.ProcessCount + (processCountInc * incTime) }
+            | ReverseBang config ->
+                ReverseBang { RoundCount = config.RoundCount;
+                              ProcessCount = config.ProcessCount + (processCountInc * incTime) }
 
         let configs = configs @ (List.concat <| List.map (fun incTime ->
             List.map (fun config -> newConfig config incTime) configs) [1..incTimes])
+
         let results = List.map (fun config -> runBenchmark config runs runtime) configs
+
         for result in results do
             printResult result
             writeResultsToCsv result
