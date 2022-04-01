@@ -6,6 +6,7 @@
 
 module Program
 
+open System.Collections.Concurrent
 open System.Threading
 
 open Benchmarks.Benchmark
@@ -23,7 +24,11 @@ let runBenchmarks args =
     let parser = ArgParser.Parser()
     let results = parser.GetResults args
     let runs = results.GetResult ArgParser.Runs
-    let processIncrement = results.GetResult ArgParser.Process_Increment
+
+    let processIncrement =
+        match results.TryGetResult ArgParser.Process_Increment with
+        | Some (x, y) -> x, y
+        | _ -> 0, 0
 
     let pingpongConfig =
         match results.TryGetResult ArgParser.Pingpong with
@@ -66,6 +71,20 @@ let runBenchmarks args =
             | _ -> failwith "ArgParser: Invalid runtime specified!"
 
     Run configs runtime runs processIncrement
+
+let runSampleEffect() =
+    let chan = Channel<string>()
+    let pinger = 
+        Send("ping", chan) >> fun _ ->
+        End()
+    let ponger =
+        Receive chan >> fun x ->
+        Success x
+    let program = Parallel(pinger, ponger) >> fun (_, x) ->
+                  Success x
+
+    let result = Advanced(2, 5).Eval(program).Await()
+    printfn $"Result: %A{result}"
 
 [<EntryPoint>]
 let main args =

@@ -32,9 +32,15 @@ module FIO =
         member _.Take() : 'R = chan.Take() :?> 'R
         member _.Count() = chan.Count
 
-    type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
-        let _lock = obj()
+    and FiberStatus internal () =
         let mutable completed = false
+        member internal _.Complete() =
+            completed <- true
+        member internal _.Completed() =
+            completed
+
+    type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>, fiberStatus: FiberStatus) =
+        let _lock = obj()
         interface IComparable with
             member this.CompareTo other = 
                 match other with
@@ -52,21 +58,23 @@ module FIO =
         member internal _.Id = id
         member internal _.Complete(res: Result<obj, obj>) =
             lock (_lock) (fun _ ->
-                if not completed then
-                    completed <- true
+                if not <| fiberStatus.Completed() then
+                    fiberStatus.Complete()
                     chan.Add res
                 else
                     failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!")
-        member internal _.Await() : Result<obj, obj> = 
+        member internal _.Await() : Result<obj, obj> =
             let res = chan.Take()
             chan.Add res
             res
-        member internal _.Completed() = chan.Count > 0
+        member internal _.Completed() =
+            fiberStatus.Completed()
 
     and Fiber<'R, 'E> private (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
+        let fiberStatus = FiberStatus()
         new() = Fiber(Guid.NewGuid(), new BlockingCollection<Result<obj, obj>>())
-        member internal _.ToLowLevel() = LowLevelFiber(id, chan)
-        member _.Await() : Result<'R, 'E> = 
+        member internal _.ToLowLevel() = LowLevelFiber(id, chan, fiberStatus)
+        member _.Await() : Result<'R, 'E> =
             let res = chan.Take()
             chan.Add res
             match res with

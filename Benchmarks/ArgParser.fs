@@ -17,7 +17,7 @@ type Arguments =
     | Bang of processcount: int * roundcount: int
     | ReverseBang of processcount: int * roundcount: int
     | [<Mandatory>] Runs of runs: int
-    | [<Mandatory>] Process_Increment of processcountinc: int * inctimes: int
+    | Process_Increment of processcountinc: int * inctimes: int
 
     interface IArgParserTemplate with
         member this.Usage =
