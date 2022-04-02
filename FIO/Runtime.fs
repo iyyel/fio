@@ -81,6 +81,41 @@ module Runtime =
         member this.Complete res =
             this.LLFiber.Complete <| res
 
+    and Monitor(
+        workItemQueue: BlockingCollection<WorkItem>,
+        blockingEventQueue: BlockingCollection<Channel<obj>>,
+        blockingWorkItemMap: BlockingWorkItemMap) as self =
+        let _ = (async {
+            while true do
+                printfn $"\n\nMONITOR: workItemQueue count: %i{workItemQueue.Count}"
+                printfn $"MONITOR: blockingWorkItemMap count: %i{blockingWorkItemMap.GetMap().Count}"
+                printfn $"MONITOR: blockingEventQueue count: %i{blockingEventQueue.Count}\n"
+                self.PrintBlockingWorkItemMapContent()
+                printfn "\n\n"
+                System.Threading.Thread.Sleep(1000)
+        } |> Async.StartAsTask |> ignore)
+
+        member private _.PrintBlockingWorkItemMapContent() =
+            let map = blockingWorkItemMap.GetMap()
+            printfn "MONITOR: ------------ blockingWorkItemMap contents ------------"
+            for key in map.Keys do
+                match key with
+                | BlockingChannel chan -> 
+                    printfn $"MONITOR: key: BlockingChannel with count: %A{chan.Count()}"
+                | BlockingFiber llfiber ->
+                    printfn $"MONITOR: key: BlockingFiber with: Completed: %A{llfiber.Completed()}, Id: %A{llfiber.Id}"
+             
+                let queue = match map.TryGetValue(key) with
+                            | true, value -> value
+                            | false, _    -> failwith "MONITOR: Couldn't find a value for the key."
+                for workItem in queue do
+                    printfn "MONITOR: -------------------- work item --------------------"
+                    printfn $"MONITOR: Effect: %A{workItem.Eff}"
+                    printfn $"MONITOR: llfiber completed: %A{workItem.LLFiber.Completed()}"
+                    printfn $"MONITOR: llfiber id: %A{workItem.LLFiber.Id}"
+                    printfn $"MONITOR: PrevAction: %A{workItem.PrevAction}"
+            printfn "MONITOR: ------------ blockingWorkItemMap contents ------------"
+
     and EvalWorker(
             runtime: Advanced,
             workItemQueue: BlockingCollection<WorkItem>,
@@ -100,7 +135,7 @@ module Runtime =
                     let workItem = WorkItem.Create(eff, workItem.LLFiber, RescheduleForBlocking blockingItem)
                     blockingWorker.RescheduleForBlocking(workItem)
                 | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
-            } |> Async.StartAsTask |> ignore)
+        } |> Async.StartAsTask |> ignore)
 
         member private _.CompleteWorkItem(workItem, res) =
             workItem.Complete res
@@ -158,6 +193,9 @@ module Runtime =
             blockingWorkItemMap.AddOrUpdate(blockingItem, blockingQueue, fun _ queue -> queue)
             |> ignore
 
+        member internal _.GetMap() : ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>> =
+            blockingWorkItemMap
+
     and Advanced(evalWorkerCount, evalStepCount) as self =
         inherit Runtime()
 
@@ -167,6 +205,7 @@ module Runtime =
 
         do let blockingWorker = self.CreateBlockingWorker()
            self.CreateEvalWorkers(blockingWorker) |> ignore
+           Monitor(workItemQueue, blockingEventQueue, blockingWorkItemMap) |> ignore
 
         new() = Advanced(System.Environment.ProcessorCount, 15)
 
