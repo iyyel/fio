@@ -14,7 +14,7 @@ module FIO =
     type Channel<'R> private (id: Guid, chan: BlockingCollection<obj>) =
         new() = Channel(Guid.NewGuid(), new BlockingCollection<obj>())
         interface IComparable with
-            member this.CompareTo other = 
+            member this.CompareTo other =
                 match other with
                 | :? Channel<'R> as chan -> 
                     if this.Id = chan.Id then 1 else -1
@@ -28,7 +28,7 @@ module FIO =
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
         member internal _.Upcast() = Channel<obj>(id, chan)
-        member _.Add(value: 'R) = chan.Add value
+        member _.Add (value: 'R) = chan.Add value
         member _.Take() : 'R = chan.Take() :?> 'R
         member _.Count() = chan.Count
 
@@ -56,14 +56,14 @@ module FIO =
             | _ -> false
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
-        member internal _.Complete(res: Result<obj, obj>) =
+        member internal _.Complete res =
             lock (_lock) (fun _ ->
                 if not <| fiberStatus.Completed() then
                     fiberStatus.Complete()
                     chan.Add res
                 else
                     failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!")
-        member internal _.Await() : Result<obj, obj> =
+        member internal _.Await() =
             let res = chan.Take()
             chan.Add res
             res
@@ -140,46 +140,47 @@ module FIO =
             | Failure err ->
                 Failure (err :> obj)
             
-        member internal this.Upcast<'R, 'E>() : FIO<obj, obj> = this.UpcastResult().UpcastError()
+        member internal this.Upcast<'R, 'E>() : FIO<obj, obj> =
+            this.UpcastResult().UpcastError()
         
-    let (>>) (eff: FIO<'R1, 'E>) (cont: 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
+    let (>>) (eff : FIO<'R1, 'E>) (cont : 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
         Sequence (eff.UpcastResult(), fun res -> cont (res :?> 'R1))
 
-    let (>>|) (eff: FIO<'R1, 'E>) (cont: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
+    let (>>|) (eff : FIO<'R1, 'E>) (cont : 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
         
-    let Receive<'R, 'E> (chan: Channel<'R>) : FIO<'R, 'E> =
+    let Receive<'R, 'E> (chan : Channel<'R>) : FIO<'R, 'E> =
         Blocking chan
 
-    let Spawn<'R1, 'E1, 'E> (eff: FIO<'R1, 'E1>) : FIO<Fiber<'R1, 'E1>, 'E> =
+    let Spawn<'R1, 'E1, 'E> (eff : FIO<'R1, 'E1>) : FIO<Fiber<'R1, 'E1>, 'E> =
         let fiber = new Fiber<'R1, 'E1>()
         Concurrent (eff.Upcast(), fiber, fiber.ToLowLevel())
 
-    let Await<'R, 'E> (fiber: Fiber<'R, 'E>) : FIO<'R, 'E> =
+    let Await<'R, 'E> (fiber : Fiber<'R, 'E>) : FIO<'R, 'E> =
         AwaitFiber <| fiber.ToLowLevel()
 
-    let Succeed<'R, 'E> (res: 'R) : FIO<'R, 'E> =
+    let Succeed<'R, 'E> (res : 'R) : FIO<'R, 'E> =
         Success res
 
-    let Fail<'R, 'E> (err: 'E) : FIO<'R, 'E> =
+    let Fail<'R, 'E> (err : 'E) : FIO<'R, 'E> =
         Failure err
 
     let End<'E> () : FIO<Unit, 'E> =
         Success ()
 
-    let Parallel<'R1, 'R2, 'E> (eff1: FIO<'R1, 'E>, eff2: FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
+    let Parallel<'R1, 'R2, 'E> (eff1 : FIO<'R1, 'E>, eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         Spawn eff1 >> fun fiber1 ->
         eff2 >> fun res2 ->
         Await fiber1 >> fun res1 ->
         Success (res1, res2)
 
-    let OnError<'R, 'E> (eff: FIO<'R, 'E>, elseEff: FIO<'R, 'E>) : FIO<'R, 'E> =
+    let OnError<'R, 'E> (eff : FIO<'R, 'E>, elseEff : FIO<'R, 'E>) : FIO<'R, 'E> =
         eff >>| fun _ ->
         elseEff >> fun res -> 
         Success res
 
-    let Race<'R, 'E> (eff1: FIO<'R, 'E>, eff2: FIO<'R, 'E>) : FIO<'R, 'E> =
-        let rec loop (fiber1: LowLevelFiber) (fiber2: LowLevelFiber) =
+    let Race<'R, 'E> (eff1 : FIO<'R, 'E>, eff2 : FIO<'R, 'E>) : FIO<'R, 'E> =
+        let rec loop (fiber1 : LowLevelFiber) (fiber2 : LowLevelFiber) =
             if fiber1.Completed() then fiber1
             else if fiber2.Completed() then fiber2
             else loop fiber1 fiber2
