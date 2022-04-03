@@ -101,7 +101,7 @@ module Runtime =
             for key in map.Keys do
                 match key with
                 | BlockingChannel chan -> 
-                    printfn $"MONITOR: key: BlockingChannel with count: %A{chan.Count()}"
+                    printfn $"MONITOR: key: BlockingChannel with availableData: %A{chan.DataAvailable()}"
                 | BlockingFiber llfiber ->
                     printfn $"MONITOR: key: BlockingFiber with: Completed: %A{llfiber.Completed()}, Id: %A{llfiber.Id}"
              
@@ -201,7 +201,7 @@ module Runtime =
 
         do let blockingWorker = self.CreateBlockingWorker()
            self.CreateEvalWorkers blockingWorker |> ignore
-           Monitor(workItemQueue, blockingEventQueue, blockingWorkItemMap) |> ignore
+           //Monitor(workItemQueue, blockingEventQueue, blockingWorkItemMap) |> ignore
 
         new() = Advanced(System.Environment.ProcessorCount, 15)
 

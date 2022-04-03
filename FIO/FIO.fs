@@ -7,12 +7,13 @@
 namespace FSharp.FIO
 
 open System
+open System.Threading
 open System.Collections.Concurrent
 
 module FIO =
     
-    type Channel<'R> private (id: Guid, chan: BlockingCollection<obj>) =
-        new() = Channel(Guid.NewGuid(), new BlockingCollection<obj>())
+    type Channel<'R> private (id: Guid, chan: BlockingCollection<obj>, dataCounter: int64 ref) =
+        new() = Channel(Guid.NewGuid(), new BlockingCollection<obj>(), ref 0)
         interface IComparable with
             member this.CompareTo other =
                 match other with
@@ -27,19 +28,18 @@ module FIO =
             | _ -> false
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
-        member internal _.Upcast() = Channel<obj>(id, chan)
-        member _.Add (value: 'R) = chan.Add value
-        member _.Take() : 'R = chan.Take() :?> 'R
-        member _.Count() = chan.Count
+        member internal _.Upcast() = Channel<obj>(id, chan, dataCounter)
+        member _.Add (value: 'R) =
+            Interlocked.Increment dataCounter |> ignore
+            chan.Add value
+        member _.Take() : 'R =
+            chan.Take() :?> 'R
+        member _.UseAvailableData() =
+            Interlocked.Decrement dataCounter |> ignore
+        member _.DataAvailable() =
+            Interlocked.Read dataCounter > 0
 
-    and FiberStatus internal () =
-        let mutable completed = false
-        member internal _.Complete() =
-            completed <- true
-        member internal _.Completed() =
-            completed
-
-    type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>, fiberStatus: FiberStatus) =
+    type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>, completed: int64 ref) =
         let _lock = obj()
         interface IComparable with
             member this.CompareTo other = 
@@ -58,8 +58,8 @@ module FIO =
         member internal _.Id = id
         member internal _.Complete res =
             lock (_lock) (fun _ ->
-                if not <| fiberStatus.Completed() then
-                    fiberStatus.Complete()
+                if Interlocked.Read completed = 0 then
+                    Interlocked.Exchange(completed, 1) |> ignore
                     chan.Add res
                 else
                     failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!")
@@ -68,12 +68,12 @@ module FIO =
             chan.Add res
             res
         member internal _.Completed() =
-            fiberStatus.Completed()
+            Interlocked.Read completed = 1
 
     and Fiber<'R, 'E> private (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
-        let fiberStatus = FiberStatus()
+        let completed : int64 ref = ref 0
         new() = Fiber(Guid.NewGuid(), new BlockingCollection<Result<obj, obj>>())
-        member internal _.ToLowLevel() = LowLevelFiber(id, chan, fiberStatus)
+        member internal _.ToLowLevel() = LowLevelFiber(id, chan, completed)
         member _.Await() : Result<'R, 'E> =
             let res = chan.Take()
             chan.Add res
