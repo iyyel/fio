@@ -501,7 +501,7 @@ module Benchmark =
             + configStr
             + "-"
             + runStr
-        let fileName = "results-" + DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss") + ".csv"
+        let fileName = folderName + "-" + runtimeFileName.ToLower() + "-" + DateTime.Now.ToString("dd-MM-yyyy-HH-mm-ss") + ".csv"
         let dirPath = homePath + @"\fio\benchmarks\" + folderName + @"\" + runtimeFileName.ToLower()
         let filePath = dirPath + @"\" + fileName
         if (not <| Directory.Exists(dirPath)) then Directory.CreateDirectory(dirPath) |> ignore
@@ -510,20 +510,20 @@ module Benchmark =
         printfn $"\nSaving benchmark results to '%s{filePath}'"
         File.WriteAllText(filePath, headerStr + "\n" + fileContent)
 
-    let private printResult (result: BenchmarkResult) =
-        let benchStr config =
-            match config with
-            | Pingpong config ->
-                $"Pingpong (RoundCount: %i{config.RoundCount})"
-            | ThreadRing config ->
-                $"ThreadRing (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | Big config ->
-                $"Big (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | Bang config ->
-                $"Bang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
-            | ReverseBang config ->
-                $"ReverseBang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+    let private benchStr config =
+        match config with
+        | Pingpong config ->
+            $"Pingpong (RoundCount: %i{config.RoundCount})"
+        | ThreadRing config ->
+            $"ThreadRing (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+        | Big config ->
+            $"Big (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+        | Bang config ->
+            $"Bang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
+        | ReverseBang config ->
+            $"ReverseBang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
 
+    let private printResult (result: BenchmarkResult) =
         let rec runExecTimesStr runExecTimes acc =
             match runExecTimes with
             | [] -> (acc + "└───────────────────────────────────────────────────────────────────────────┘")
@@ -578,6 +578,7 @@ module Benchmark =
                     | Error _ -> -1
                 let runNum = curRun' + 1
                 let result = (runNum, time)
+                printfn $"Completed run #%-5i{runNum} ── Time %-10i{time} (ms) ── %s{benchStr config}"
                 executeBenchmark config runNum (acc @ [result])
 
         let runtimeFileName, runtimeName = getRuntimeName runtime

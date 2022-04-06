@@ -2,7 +2,7 @@
   "profiles": {
     "Benchmarks": {
       "commandName": "Project",
-      "commandLineArgs": "--advanced-runtime 2 15 --runs 100 --pingpong 1"
+      "commandLineArgs": "--advanced-runtime 1 15 --runs 100 --reversebang 10 1"
     }
   }
 }

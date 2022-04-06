@@ -12,7 +12,10 @@ open System.Collections.Concurrent
 
 module FIO =
     
-    type Channel<'R> private (id: Guid, chan: BlockingCollection<obj>, dataCounter: int64 ref) =
+    type Channel<'R> private (
+        id: Guid,
+        chan: BlockingCollection<obj>,
+        dataCounter: int64 ref) =
         new() = Channel(Guid.NewGuid(), new BlockingCollection<obj>(), ref 0)
         interface IComparable with
             member this.CompareTo other =
@@ -22,7 +25,7 @@ module FIO =
                 | _ -> -1
         interface System.IComparable<Channel<'R>> with
             member this.CompareTo other = this.Id.CompareTo other.Id.CompareTo
-        override this.Equals other = 
+        override this.Equals other =
             match other with
             | :? Channel<'R> as chan -> this.Id = chan.Id
             | _ -> false
@@ -38,8 +41,12 @@ module FIO =
             Interlocked.Decrement dataCounter |> ignore
         member _.DataAvailable() =
             Interlocked.Read dataCounter > 0
+        member _.Count() = chan.Count
 
-    type LowLevelFiber internal (id: Guid, chan: BlockingCollection<Result<obj, obj>>, completed: int64 ref) =
+    type LowLevelFiber internal (
+        id: Guid,
+        chan: BlockingCollection<Result<obj, obj>>,
+        completed: int64 ref) =
         let _lock = obj()
         interface IComparable with
             member this.CompareTo other = 
@@ -70,9 +77,12 @@ module FIO =
         member internal _.Completed() =
             Interlocked.Read completed = 1
 
-    and Fiber<'R, 'E> private (id: Guid, chan: BlockingCollection<Result<obj, obj>>) =
+    and Fiber<'R, 'E> private (
+        id: Guid, 
+        chan: BlockingCollection<Result<obj, obj>>) =
         let completed : int64 ref = ref 0
-        new() = Fiber(Guid.NewGuid(), new BlockingCollection<Result<obj, obj>>())
+        new() = Fiber(Guid.NewGuid(),
+                      new BlockingCollection<Result<obj, obj>>())
         member internal _.ToLowLevel() = LowLevelFiber(id, chan, completed)
         member _.Await() : Result<'R, 'E> =
             let res = chan.Take()
@@ -187,6 +197,6 @@ module FIO =
         Spawn eff1 >> fun fiber1 ->
         Spawn eff2 >> fun fiber2 ->
         match (loop (fiber1.ToLowLevel()) (fiber2.ToLowLevel())).Await() with
-        | Ok res    -> Success (res :?> 'R)
+        | Ok res -> Success (res :?> 'R)
         | Error err -> Failure (err :?> 'E)
         

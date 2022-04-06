@@ -6,7 +6,6 @@
 
 module Program
 
-open System.Collections.Concurrent
 open System.Threading
 
 open Benchmarks.Benchmark
@@ -72,18 +71,27 @@ let runBenchmarks args =
 
     Run configs runtime runs processIncrement
 
-let runSampleEffect() =
-    let chan = Channel<string>()
-    let pinger = 
-        Send("ping", chan) >> fun _ ->
-        End()
-    let ponger =
-        Receive chan >> fun x ->
-        Success x
-    let program = Parallel(pinger, ponger) >> fun (_, x) ->
-                  Success x
+let runSingleProgram() =
+    let sendProcess chan =
+        Send(10, chan) >> fun _ -> Send(10, chan) >> fun _ ->
+        Send(10, chan) >> fun _ -> Send(10, chan) >> fun _ ->
+        Send(10, chan) >> fun _ -> Send(10, chan) >> fun _ ->
+        Send(10, chan) >> fun _ -> Send(10, chan) >> fun _ ->
+        Send(10, chan) >> fun _ -> Send(10, chan) >> fun _ ->
+        Send(10, chan) >> fun _ -> End()
 
-    let result = Advanced(2, 5).Eval(program).Await()
+    let recvProcess chan =
+        Receive chan >> fun _ -> End()
+
+    let chan = Channel<int>()
+    let eff = Parallel(recvProcess chan, Parallel(recvProcess chan,
+              Parallel(recvProcess chan, Parallel(recvProcess chan,
+              Parallel(recvProcess chan, Parallel(recvProcess chan,
+              Parallel(recvProcess chan, Parallel(recvProcess chan,
+              Parallel(recvProcess chan, Parallel(recvProcess chan,
+              Parallel(recvProcess chan, sendProcess chan))))))))))) >> fun (_, _) -> End()
+
+    let result = Advanced(1, 10000).Eval(eff).Await()
     printfn $"Result: %A{result}"
 
 [<EntryPoint>]

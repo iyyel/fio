@@ -90,31 +90,44 @@ module Runtime =
                 printfn $"\n\nMONITOR: workItemQueue count: %i{workItemQueue.Count}"
                 printfn $"MONITOR: blockingWorkItemMap count: %i{blockingWorkItemMap.GetMap().Count}"
                 printfn $"MONITOR: blockingEventQueue count: %i{blockingEventQueue.Count}\n"
+                self.PrintBlockingEventQueueContent()
+                printfn "\n\n"
                 self.PrintBlockingWorkItemMapContent()
                 printfn "\n\n"
                 System.Threading.Thread.Sleep(1000)
         } |> Async.StartAsTask |> ignore)
 
+        member private _.PrintBlockingEventQueueContent() =
+            printfn "MONITOR: ------------ blockingEventQueue contents start ------------"
+            for blockingChan in blockingEventQueue.ToArray() do
+                printfn "MONITOR: ------------ blockingChan start ------------"
+                printfn $"MONITOR: Id: %A{blockingChan.Id}"
+                printfn $"MONITOR: Count: %A{blockingChan.Count()}"
+                printfn "MONITOR: ------------ blockingChan end ------------"
+            printfn "MONITOR: ------------ blockingEventQueue contents end ------------"
+            
         member private _.PrintBlockingWorkItemMapContent() =
             let map = blockingWorkItemMap.GetMap()
-            printfn "MONITOR: ------------ blockingWorkItemMap contents ------------"
+            printfn "MONITOR: ------------ blockingWorkItemMap contents start ------------"
             for key in map.Keys do
                 match key with
-                | BlockingChannel chan -> 
-                    printfn $"MONITOR: key: BlockingChannel with availableData: %A{chan.DataAvailable()}"
+                | BlockingChannel chan ->
+                    printfn $"MONITOR: key: BlockingChannel with count: %i{chan.Count()}, Id: %A{chan.Id}"
                 | BlockingFiber llfiber ->
-                    printfn $"MONITOR: key: BlockingFiber with: Completed: %A{llfiber.Completed()}, Id: %A{llfiber.Id}"
+                    printfn $"MONITOR: key: BlockingFiber with: Completed: %b{llfiber.Completed()}, Id: %A{llfiber.Id}"
              
                 let queue = match map.TryGetValue(key) with
                             | true, value -> value
-                            | false, _    -> failwith "MONITOR: Couldn't find a value for the key."
+                            | false, _ -> new BlockingCollection<WorkItem>()
                 for workItem in queue do
-                    printfn "MONITOR: -------------------- work item --------------------"
+                    printfn "MONITOR: -------------------- work item start --------------------"
                     printfn $"MONITOR: Effect: %A{workItem.Eff}"
-                    printfn $"MONITOR: llfiber completed: %A{workItem.LLFiber.Completed()}"
+                    printfn $"MONITOR: llfiber completed: %b{workItem.LLFiber.Completed()}"
                     printfn $"MONITOR: llfiber id: %A{workItem.LLFiber.Id}"
                     printfn $"MONITOR: PrevAction: %A{workItem.PrevAction}"
-            printfn "MONITOR: ------------ blockingWorkItemMap contents ------------"
+                    printfn "MONITOR: -------------------- work item end ----------------------"
+                printfn "MONITOR: -------------------- key end ----------------------"
+            printfn "MONITOR: ------------ blockingWorkItemMap contents end ------------"
 
     and EvalWorker(
         runtime: Advanced,
@@ -134,6 +147,7 @@ module Runtime =
                 | eff, RescheduleForBlocking blockingItem, _ ->
                     let workItem = WorkItem.Create eff workItem.LLFiber (RescheduleForBlocking blockingItem)
                     blockingWorker.RescheduleForBlocking blockingItem workItem
+                    self.RescheduleBlockingFiberIfCompleted blockingItem
                 | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
         } |> Async.StartAsTask |> ignore)
 
@@ -143,6 +157,13 @@ module Runtime =
 
         member private _.RescheduleForRunning workItem =
             workItemQueue.Add workItem
+
+        member private _.RescheduleBlockingFiberIfCompleted blockingItem =
+            match blockingItem with
+            | BlockingFiber llfiber ->
+                if llfiber.Completed() then
+                    blockingWorker.RescheduleBlockingEffects llfiber
+            | _ -> ()
             
     and BlockingWorker(
         workItemQueue: BlockingCollection<WorkItem>,
@@ -154,15 +175,16 @@ module Runtime =
         } |> Async.StartAsTask |> ignore)
 
         member internal _.RescheduleForBlocking blockingItem workItem =
-            blockingWorkItemMap.RescheduleWorkItem blockingItem workItem
+            blockingWorkItemMap.RescheduleForBlocking blockingItem workItem
 
         member private _.HandleBlockingChannel blockingChan =
             let blockingItem = BlockingChannel blockingChan
             match blockingWorkItemMap.TryRemove blockingItem with
                 | true, (blockingQueue: BlockingCollection<WorkItem>) ->
-                    workItemQueue.Add <| blockingQueue.Take()
                     if blockingQueue.Count > 0 then
-                        blockingWorkItemMap.Add blockingItem blockingQueue
+                        workItemQueue.Add <| blockingQueue.Take()
+                        if blockingQueue.Count > 0 then
+                            blockingWorkItemMap.Add blockingItem blockingQueue
                 | false, _ -> blockingEventQueue.Add blockingChan
 
         member internal _.RescheduleBlockingEffects llfiber =
@@ -176,7 +198,7 @@ module Runtime =
     and BlockingWorkItemMap() =
         let blockingWorkItemMap = new ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>>()
 
-        member internal _.RescheduleWorkItem blockingItem workItem =
+        member internal _.RescheduleForBlocking blockingItem workItem =
             let newBlockingQueue = new BlockingCollection<WorkItem>()
             newBlockingQueue.Add <| workItem
             blockingWorkItemMap.AddOrUpdate(blockingItem, newBlockingQueue, fun _ oldQueue -> oldQueue.Add workItem; oldQueue)
