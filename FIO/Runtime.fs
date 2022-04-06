@@ -65,23 +65,23 @@ module Runtime =
 (* Advanced runtime                                                               *)
 (*                                                                                *)
 (**********************************************************************************)
-    type Action =
+    type internal Action =
         | RescheduleForRunning
         | RescheduleForBlocking of BlockingItem
         | Evaluated
 
-    and BlockingItem =
+    and internal BlockingItem =
         | BlockingChannel of Channel<obj>
         | BlockingFiber of LowLevelFiber
 
-    and WorkItem =
+    and internal WorkItem =
         { Eff: FIO<obj, obj>; LLFiber: LowLevelFiber; PrevAction: Action }
         static member Create eff llfiber prevAction =
             { Eff = eff; LLFiber = llfiber; PrevAction = prevAction }
         member this.Complete res =
             this.LLFiber.Complete <| res
 
-    and Monitor(
+    and internal Monitor(
         workItemQueue: BlockingCollection<WorkItem>,
         blockingEventQueue: BlockingCollection<Channel<obj>>,
         blockingWorkItemMap: BlockingWorkItemMap) as self =
@@ -129,7 +129,7 @@ module Runtime =
                 printfn "MONITOR: -------------------- key end ----------------------"
             printfn "MONITOR: ------------ blockingWorkItemMap contents end ------------"
 
-    and EvalWorker(
+    and internal EvalWorker(
         runtime: Advanced,
         workItemQueue: BlockingCollection<WorkItem>,
         blockingWorker: BlockingWorker,
@@ -165,7 +165,7 @@ module Runtime =
                     blockingWorker.RescheduleBlockingEffects llfiber
             | _ -> ()
             
-    and BlockingWorker(
+    and internal BlockingWorker(
         workItemQueue: BlockingCollection<WorkItem>,
         blockingWorkItemMap: BlockingWorkItemMap,
         blockingEventQueue: BlockingCollection<Channel<obj>>) as self =
@@ -195,7 +195,7 @@ module Runtime =
                         workItemQueue.Add <| blockingQueue.Take()
                 | false, _ -> ()
 
-    and BlockingWorkItemMap() =
+    and internal BlockingWorkItemMap() =
         let blockingWorkItemMap = new ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>>()
 
         member internal _.RescheduleForBlocking blockingItem workItem =
