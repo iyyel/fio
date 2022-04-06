@@ -91,7 +91,7 @@ let runSingleProgram() =
               Parallel(recvProcess chan, Parallel(recvProcess chan,
               Parallel(recvProcess chan, sendProcess chan))))))))))) >> fun (_, _) -> End()
 
-    let result = Advanced(1, 10000).Eval(eff).Await()
+    let result = Advanced(1, 1, 10000).Eval(eff).Await()
     printfn $"Result: %A{result}"
 
 [<EntryPoint>]

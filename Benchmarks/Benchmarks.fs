@@ -579,7 +579,13 @@ module Benchmark =
                     | Error _ -> -1
                 let runNum = curRun' + 1
                 let result = (runNum, time)
-                printfn $"Completed run #%-5i{runNum} ── Time %-10i{time} (ms) ── %s{benchStr config}"
+                match runtime with
+                | :? Advanced as a ->
+                    let (ewc, bwc, esc) = a.GetConfiguration()
+                    printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Advanced runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
+                | :? Naive ->
+                    printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Naive runtime"
+                | _ -> failwith "executeBenchmark: Unknown runtime specified!"
                 executeBenchmark config runNum (acc @ [result])
 
         let runtimeFileName, runtimeName = getRuntimeName runtime
