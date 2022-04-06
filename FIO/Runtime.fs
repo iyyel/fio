@@ -213,7 +213,9 @@ module Runtime =
         member internal _.GetMap() : ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>> =
             blockingWorkItemMap
 
-    and Advanced(evalWorkerCount, blockingWorkerCount, evalStepCount) as self =
+    and Advanced(evalWorkerCount,
+                 blockingWorkerCount,
+                 evalStepCount) as self =
         inherit Runtime()
 
         let workItemQueue = new BlockingCollection<WorkItem>()
@@ -279,6 +281,7 @@ module Runtime =
                 List.map (fun _ ->
                 BlockingWorker(workItemQueue, blockingWorkItemMap, blockingEventQueue))
                     [start..final]
+            let (_, blockingWorkerCount, _) = self.GetConfiguration()
             createBlockingWorkers 0 (blockingWorkerCount - 1)
 
         member private this.CreateEvalWorkers blockingWorker =
@@ -286,8 +289,17 @@ module Runtime =
                 List.map (fun _ ->
                 EvalWorker(this, workItemQueue, blockingWorker, evalSteps))
                     [start..final]
-            let (evalWorkerCount, _, evalSteps) = this.GetConfiguration()
-            createEvalWorkers blockingWorker evalSteps 0 (evalWorkerCount - 1)
+            let (evalWorkerCount, _, evalStepCount) = this.GetConfiguration()
+            createEvalWorkers blockingWorker evalStepCount 0 (evalWorkerCount - 1)
 
         member _.GetConfiguration() =
+            let evalWorkerCount =
+                if evalWorkerCount <= 0 then System.Environment.ProcessorCount
+                else evalWorkerCount
+            let blockingWorkerCount =
+                if blockingWorkerCount <= 0 then 1
+                else blockingWorkerCount
+            let evalStepCount =
+                if evalStepCount <= 0 then 15
+                else evalStepCount
             (evalWorkerCount, blockingWorkerCount, evalStepCount)
