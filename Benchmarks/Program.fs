@@ -66,7 +66,7 @@ let runBenchmarks args =
         | Some _ -> Naive()
         | _      -> 
             match results.TryGetResult ArgParser.Advanced_Runtime with
-            | Some (ewc, esc) -> Advanced(ewc, esc)
+            | Some (ewc, bwc, esc) -> Advanced(ewc, bwc, esc)
             | _ -> failwith "ArgParser: Invalid runtime specified!"
 
     Run configs runtime runs processIncrement

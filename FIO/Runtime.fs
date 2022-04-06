@@ -65,6 +65,7 @@ module Runtime =
 (* Advanced runtime                                                               *)
 (*                                                                                *)
 (**********************************************************************************)
+
     type internal Action =
         | RescheduleForRunning
         | RescheduleForBlocking of BlockingItem
@@ -143,11 +144,11 @@ module Runtime =
                     self.CompleteWorkItem workItem (Error err)
                 | eff, RescheduleForRunning, _ ->
                     let workItem = WorkItem.Create eff workItem.LLFiber RescheduleForRunning
-                    self.RescheduleForRunning workItem
+                    workItemQueue.Add workItem
                 | eff, RescheduleForBlocking blockingItem, _ ->
                     let workItem = WorkItem.Create eff workItem.LLFiber (RescheduleForBlocking blockingItem)
                     blockingWorker.RescheduleForBlocking blockingItem workItem
-                    self.RescheduleBlockingFiberIfCompleted blockingItem
+                    self.HandleBlockingFiber blockingItem
                 | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
         } |> Async.StartAsTask |> ignore)
 
@@ -155,10 +156,7 @@ module Runtime =
             workItem.Complete res
             blockingWorker.RescheduleBlockingEffects workItem.LLFiber
 
-        member private _.RescheduleForRunning workItem =
-            workItemQueue.Add workItem
-
-        member private _.RescheduleBlockingFiberIfCompleted blockingItem =
+        member private _.HandleBlockingFiber blockingItem =
             match blockingItem with
             | BlockingFiber llfiber ->
                 if llfiber.Completed() then
@@ -201,7 +199,8 @@ module Runtime =
         member internal _.RescheduleForBlocking blockingItem workItem =
             let newBlockingQueue = new BlockingCollection<WorkItem>()
             newBlockingQueue.Add <| workItem
-            blockingWorkItemMap.AddOrUpdate(blockingItem, newBlockingQueue, fun _ oldQueue -> oldQueue.Add workItem; oldQueue)
+            blockingWorkItemMap.AddOrUpdate(blockingItem, newBlockingQueue,
+                fun _ oldQueue -> oldQueue.Add workItem; oldQueue)
             |> ignore
 
         member internal _.TryRemove blockingItem =
@@ -214,18 +213,18 @@ module Runtime =
         member internal _.GetMap() : ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>> =
             blockingWorkItemMap
 
-    and Advanced(evalWorkerCount, evalStepCount) as self =
+    and Advanced(evalWorkerCount, blockingWorkerCount, evalStepCount) as self =
         inherit Runtime()
 
         let workItemQueue = new BlockingCollection<WorkItem>()
         let blockingEventQueue = new BlockingCollection<Channel<obj>>()
         let blockingWorkItemMap = new BlockingWorkItemMap()
 
-        do let blockingWorker = self.CreateBlockingWorker()
-           self.CreateEvalWorkers blockingWorker |> ignore
+        do let blockingWorkers = self.CreateBlockingWorkers()
+           self.CreateEvalWorkers (List.head blockingWorkers) |> ignore
            //Monitor(workItemQueue, blockingEventQueue, blockingWorkItemMap) |> ignore
 
-        new() = Advanced(System.Environment.ProcessorCount, 15)
+        new() = Advanced(System.Environment.ProcessorCount, 1, 15)
 
         member internal this.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
             if evalSteps = 0 then
@@ -275,8 +274,12 @@ module Runtime =
             workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
             fiber
 
-        member private _.CreateBlockingWorker() =
-            BlockingWorker(workItemQueue, blockingWorkItemMap, blockingEventQueue)
+        member private _.CreateBlockingWorkers() =
+            let createBlockingWorkers start final =
+                List.map (fun _ ->
+                BlockingWorker(workItemQueue, blockingWorkItemMap, blockingEventQueue))
+                    [start..final]
+            createBlockingWorkers 0 (blockingWorkerCount - 1)
 
         member private this.CreateEvalWorkers blockingWorker =
             let createEvalWorkers blockingWorker evalSteps start final =
@@ -287,4 +290,4 @@ module Runtime =
             createEvalWorkers blockingWorker evalSteps 0 (evalWorkerCount - 1)
 
         member _.GetConfiguration() =
-            (evalWorkerCount, 1, evalStepCount)
+            (evalWorkerCount, blockingWorkerCount, evalStepCount)

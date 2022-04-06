@@ -10,7 +10,7 @@ open Argu
 
 type Arguments =
     | Naive_Runtime
-    | Advanced_Runtime of evalworkercount: int * evalstepcount: int
+    | Advanced_Runtime of evalworkercount: int * blockingworkercount: int * evalstepcount: int
     | Pingpong of roundcount: int
     | ThreadRing of processcount: int * roundcount: int
     | Big of processcount: int * roundcount: int
@@ -25,7 +25,7 @@ type Arguments =
             | Naive_Runtime _ -> 
                 "specify naive runtime. (specify only one runtime)"
             | Advanced_Runtime _ ->
-                "specify eval worker count and eval step count for advanced runtime. (specify only one runtime)"
+                "specify eval worker count, blocking worker count and eval step count for advanced runtime. (specify only one runtime)"
             | Pingpong _ ->
                 "specify round count for pingpong benchmark."
             | ThreadRing _ ->
