@@ -137,7 +137,6 @@ module ThreadRing =
                 printfn $"DEBUG: %s{proc.Name} received: %i{x}"
                 #endif
                 create x (roundCount - 1)
-        Send(Timer.Start, timerChan) >> fun _ ->
         create 0 roundCount
 
     let private createRecvProcess proc roundCount =
@@ -161,7 +160,7 @@ module ThreadRing =
         let getRecvChan index (chans: Channel<int> list) =
             match index with
             | index when index - 1 < 0 -> chans.Item(List.length chans - 1)
-            | index                    -> chans.Item(index - 1)
+            | index -> chans.Item(index - 1)
 
         let rec createProcesses chans allChans index acc =
             match chans with
@@ -188,6 +187,7 @@ module ThreadRing =
         let effEnd = Parallel(createRecvProcess pb roundCount, createSendProcess pa roundCount timerChan)
                      >> fun (_, _) -> End()
         Spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
+        Send(Timer.Start, timerChan) >> fun _ ->
         createThreadRing ps effEnd >> fun _ ->
         Await fiber >> fun res ->
         Success res
@@ -349,9 +349,10 @@ module Bang =
         let rec createBang recvProc sendProcs msg acc =
             match sendProcs with
             | [] -> acc
-            | p::ps -> let eff = Parallel(createSendProcess p msg roundCount, acc) >> 
-                                 fun (_, _) -> End()
-                       createBang recvProc ps (msg + 10) eff
+            | p::ps ->
+                let eff = Parallel(createSendProcess p msg roundCount, acc) >> 
+                          fun (_, _) -> End()
+                createBang recvProc ps (msg + 10) eff
 
         let recvProc = { Name = "p0"; Chan = Channel<int>() }
         let sendProcs = createSendProcesses recvProc.Chan processCount
@@ -407,9 +408,10 @@ module ReverseBang =
         let rec createReverseBang sendProc sendProcs timerChan acc =
             match sendProcs with
             | [] -> acc
-            | p::ps -> let eff = Parallel(createRecvProcess p roundCount timerChan, acc) >> 
-                                 fun (_, _) -> End()
-                       createReverseBang sendProc ps timerChan eff
+            | p::ps -> 
+                let eff = Parallel(createRecvProcess p roundCount timerChan, acc) >> 
+                          fun (_, _) -> End()
+                createReverseBang sendProc ps timerChan eff
 
         let sendProc = { Name = "p0"; Chan = Channel<int>() }
         let recvProcs = createRecvProcesses sendProc.Chan processCount
@@ -482,15 +484,14 @@ module Benchmark =
         let rec fileContentStr times acc =
             match times with
             | [] -> acc
-            | (_, time) :: ts -> fileContentStr ts (acc + $"%i{time}\n")
+            | (_, time)::ts -> fileContentStr ts (acc + $"%i{time}\n")
 
         let headerStr = "Execution Time (ms)"
         let homePath =
             if (Environment.OSVersion.Platform.Equals(PlatformID.Unix)
                 || Environment.OSVersion.Platform.Equals(PlatformID.MacOSX)) then
                 Environment.GetEnvironmentVariable("HOME")
-            else
-                Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%")
+            else Environment.ExpandEnvironmentVariables("%HOMEDRIVE%%HOMEPATH%")
         let benchName, config, runtimeFileName, _, times = result
 
         let configStr = configStr config
@@ -548,7 +549,7 @@ module Benchmark =
         let getRuntimeName (runtime: Runtime) =
             match runtime with
             | :? Naive -> ("naive", "Naive")
-            | :? Advanced as a -> 
+            | :? Advanced as a ->
                 let ewc, bwc, esc = a.GetConfiguration()
                 ($"advanced-ewc%i{ewc}-bwc%i{bwc}-esc%i{esc}", $"Advanced (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})")
             | _ -> failwith "runBenchmark: Invalid runtime!"
@@ -591,13 +592,13 @@ module Benchmark =
             | Pingpong config ->
                 Pingpong config
             | ThreadRing config ->
-                ThreadRing { RoundCount = config.RoundCount; 
+                ThreadRing { RoundCount = config.RoundCount;
                              ProcessCount = config.ProcessCount + (processCountInc * incTime) }
             | Big config ->
-                Big { RoundCount = config.RoundCount; 
+                Big { RoundCount = config.RoundCount;
                       ProcessCount = config.ProcessCount + (processCountInc * incTime) }
             | Bang config ->
-                Bang { RoundCount = config.RoundCount; 
+                Bang { RoundCount = config.RoundCount;
                        ProcessCount = config.ProcessCount + (processCountInc * incTime) }
             | ReverseBang config ->
                 ReverseBang { RoundCount = config.RoundCount;
