@@ -60,10 +60,10 @@ let runBenchmarks args =
     let configs = pingpongConfig @ threadRingConfig @
                   bigConfig @ bangConfig @ reverseBangConfig
 
-    let runtime : Runtime = 
+    let runtime : Runtime =
         match results.TryGetResult ArgParser.Naive_Runtime with
         | Some _ -> Naive()
-        | _      -> 
+        | _      ->
             match results.TryGetResult ArgParser.Advanced_Runtime with
             | Some (ewc, bwc, esc) -> Advanced(ewc, bwc, esc)
             | _ -> failwith "ArgParser: Invalid runtime specified!"
