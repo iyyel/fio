@@ -8,24 +8,34 @@ module ArgParser
 
 open Argu
 
+open Benchmarks
+open FSharp.FIO.Runtime
+
 type Arguments =
     | Naive_Runtime
+    | Intermediate_Runtime of evalworkercount: int * blockingworkercount: int * evalstepcount: int
     | Advanced_Runtime of evalworkercount: int * blockingworkercount: int * evalstepcount: int
+    | [<Mandatory>] Runs of runs: int
+    | Process_Increment of processcountinc: int * inctimes: int
     | Pingpong of roundcount: int
     | ThreadRing of processcount: int * roundcount: int
     | Big of processcount: int * roundcount: int
     | Bang of processcount: int * roundcount: int
     | ReverseBang of processcount: int * roundcount: int
-    | [<Mandatory>] Runs of runs: int
-    | Process_Increment of processcountinc: int * inctimes: int
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Naive_Runtime _ -> 
                 "specify naive runtime. (specify only one runtime)"
+            | Intermediate_Runtime _ ->
+                "specify eval worker count, blocking worker count and eval step count for intermediate runtime. (specify only one runtime)"
             | Advanced_Runtime _ ->
                 "specify eval worker count, blocking worker count and eval step count for advanced runtime. (specify only one runtime)"
+            | Runs _ ->
+                "specify the number of runs for each benchmark."
+            | Process_Increment _ ->
+                "specify the value of process count increment and how many times."
             | Pingpong _ ->
                 "specify round count for pingpong benchmark."
             | ThreadRing _ ->
@@ -36,14 +46,64 @@ type Arguments =
                 "specify process count and round count for bang benchmark."
             | ReverseBang _ ->
                 "specify process count and round count for reversebang benchmark."
-            | Runs _ ->
-                "specify the number of runs for each benchmark."
-            | Process_Increment _ ->
-                "specify the value of process count increment and how many times."
 
 type Parser() =
     let parser = ArgumentParser.Create<Arguments>()
 
-    member _.GetResults args =
+    member _.PrintArgs args =
+        let args = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
+        printfn $"benchmark arguments:%s{args}"
+
+    member _.ParseArgs args =
         let results = parser.Parse args
-        results
+        let runs = results.GetResult Runs
+
+        let processIncrement =
+            match results.TryGetResult Process_Increment with
+            | Some (x, y) -> x, y
+            | _ -> 0, 0
+
+        let pingpongConfig =
+            match results.TryGetResult Pingpong with
+            | Some roundCount -> [Benchmark.Pingpong { RoundCount = roundCount }]
+            | _ -> []
+
+        let threadRingConfig =
+            match results.TryGetResult ThreadRing with
+            | Some (processCount, roundCount) -> 
+                [Benchmark.ThreadRing { ProcessCount = processCount; RoundCount = roundCount }]
+            | _ -> []
+
+        let bigConfig =
+            match results.TryGetResult Big with
+            | Some (processCount, roundCount) ->
+                [Benchmark.Big { ProcessCount = processCount; RoundCount = roundCount }]
+            | _ -> []
+
+        let bangConfig =
+            match results.TryGetResult Bang with
+            | Some (processCount, roundCount) ->
+                [Benchmark.Bang { ProcessCount = processCount; RoundCount = roundCount }]
+            | _ -> []
+
+        let reverseBangConfig =
+            match results.TryGetResult ReverseBang with
+            | Some (processCount, roundCount) ->
+                [Benchmark.ReverseBang { ProcessCount = processCount; RoundCount = roundCount }]
+            | _ -> []
+
+        let configs = pingpongConfig @ threadRingConfig @
+                      bigConfig @ bangConfig @ reverseBangConfig
+
+        let runtime : Evaluator =
+            match results.TryGetResult Naive_Runtime with
+            | Some _ -> Naive.Runtime()
+            | _ ->
+                match results.TryGetResult Intermediate_Runtime with
+                | Some (ewc, bwc, esc) -> Intermediate.Runtime(ewc, bwc, esc)
+                | _ ->
+                    match results.TryGetResult Advanced_Runtime with
+                    | Some (ewc, bwc, esc) -> Advanced.Runtime(ewc, bwc, esc)
+                    | _ -> failwith "ArgParser: Invalid runtime specified!"
+    
+        (configs, runtime, runs, processIncrement)

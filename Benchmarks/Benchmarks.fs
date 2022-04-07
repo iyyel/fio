@@ -545,12 +545,15 @@ module Benchmark =
         let toPrint = headerStr + runExecTimesStr
         printfn $"%s{toPrint}"
 
-    let private runBenchmark config runs (runtime: Runtime) : BenchmarkResult =
-        let getRuntimeName (runtime: Runtime) =
+    let private runBenchmark config runs (runtime: Evaluator) : BenchmarkResult =
+        let getRuntimeName (runtime: Evaluator) =
             match runtime with
-            | :? Naive -> ("naive", "Naive")
-            | :? Advanced as a ->
-                let ewc, bwc, esc = a.GetConfiguration()
+            | :? Naive.Runtime -> ("naive", "Naive")
+            | :? Intermediate.Runtime as r ->
+                let ewc, bwc, esc = r.GetConfiguration()
+                ($"intermediate-ewc%i{ewc}-bwc%i{bwc}-esc%i{esc}", $"Intermediate (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})")
+            | :? Advanced.Runtime as r ->
+                let ewc, bwc, esc = r.GetConfiguration()
                 ($"advanced-ewc%i{ewc}-bwc%i{bwc}-esc%i{esc}", $"Advanced (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})")
             | _ -> failwith "runBenchmark: Invalid runtime!"
 
@@ -580,11 +583,14 @@ module Benchmark =
                 let runNum = curRun' + 1
                 let result = (runNum, time)
                 match runtime with
-                | :? Advanced as a ->
-                    let (ewc, bwc, esc) = a.GetConfiguration()
-                    printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Advanced runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
-                | :? Naive ->
+                | :? Naive.Runtime ->
                     printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Naive runtime"
+                | :? Intermediate.Runtime as r ->
+                    let (ewc, bwc, esc) = r.GetConfiguration()
+                    printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Intermediate runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
+                | :? Advanced.Runtime as r ->
+                    let (ewc, bwc, esc) = r.GetConfiguration()
+                    printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Advanced runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
                 | _ -> failwith "executeBenchmark: Unknown runtime specified!"
                 executeBenchmark config runNum (acc @ [result])
 

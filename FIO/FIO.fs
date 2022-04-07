@@ -11,12 +11,32 @@ open System.Threading
 open System.Collections.Concurrent
 
 module FIO =
+
+    type internal Action =
+        | RescheduleForRunning
+        | RescheduleForBlocking of BlockingItem
+        | Evaluated
+
+    and internal BlockingItem =
+        | BlockingChannel of Channel<obj>
+        | BlockingFiber of LowLevelFiber
+
+    and internal WorkItem =
+        { Eff: FIO<obj, obj>; LLFiber: LowLevelFiber; PrevAction: Action }
+        static member Create eff llfiber prevAction =
+            { Eff = eff; LLFiber = llfiber; PrevAction = prevAction }
+        member this.Complete res =
+            this.LLFiber.Complete <| res
     
-    type Channel<'R> private (
+    and Channel<'R> private (
         id: Guid,
         chan: BlockingCollection<obj>,
+        blockingWorkItems: BlockingCollection<WorkItem>,
         dataCounter: int64 ref) =
-        new() = Channel(Guid.NewGuid(), new BlockingCollection<obj>(), ref 0)
+        new() = Channel(Guid.NewGuid(),
+                        new BlockingCollection<obj>(),
+                        new BlockingCollection<WorkItem>(),
+                        ref 0)
         interface IComparable with
             member this.CompareTo other =
                 match other with
@@ -31,21 +51,28 @@ module FIO =
             | _ -> false
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
-        member internal _.Upcast() = Channel<obj>(id, chan, dataCounter)
+        member internal _.AddBlockingWorkItem workItem =
+            blockingWorkItems.Add workItem
+        member internal _.RescheduleBlockingWorkItem (workItemQueue: BlockingCollection<WorkItem>) =
+            if blockingWorkItems.Count > 0 then
+                workItemQueue.Add <| blockingWorkItems.Take()
+        member internal _.HasBlockingWorkItems() =
+            blockingWorkItems.Count > 0
+        member internal _.Upcast() = Channel<obj>(id, chan, blockingWorkItems, dataCounter)
         member _.Add (value: 'R) =
             Interlocked.Increment dataCounter |> ignore
             chan.Add value
-        member _.Take() : 'R =
-            chan.Take() :?> 'R
+        member _.Take() : 'R = chan.Take() :?> 'R
+        member _.Count() = chan.Count
         member _.UseAvailableData() =
             Interlocked.Decrement dataCounter |> ignore
         member _.DataAvailable() =
             Interlocked.Read dataCounter > 0
-        member _.Count() = chan.Count
 
-    type LowLevelFiber internal (
+    and LowLevelFiber internal (
         id: Guid,
         chan: BlockingCollection<Result<obj, obj>>,
+        blockingWorkItems: BlockingCollection<WorkItem>,
         completed: int64 ref) =
         let _lock = obj()
         interface IComparable with
@@ -76,14 +103,21 @@ module FIO =
             res
         member internal _.Completed() =
             Interlocked.Read completed = 1
+        member internal _.AddBlockingWorkItem workItem =
+            blockingWorkItems.Add workItem
+        member internal _.RescheduleBlockingWorkItems (workItemQueue: BlockingCollection<WorkItem>) =
+            while blockingWorkItems.Count > 0 do
+                workItemQueue.Add <| blockingWorkItems.Take()
 
     and Fiber<'R, 'E> private (
         id: Guid, 
-        chan: BlockingCollection<Result<obj, obj>>) =
+        chan: BlockingCollection<Result<obj, obj>>,
+        blockingWorkItems: BlockingCollection<WorkItem>) =
         let completed : int64 ref = ref 0
         new() = Fiber(Guid.NewGuid(),
-                      new BlockingCollection<Result<obj, obj>>())
-        member internal _.ToLowLevel() = LowLevelFiber(id, chan, completed)
+                      new BlockingCollection<Result<obj, obj>>(),
+                      new BlockingCollection<WorkItem>())
+        member internal _.ToLowLevel() = LowLevelFiber(id, chan, blockingWorkItems, completed)
         member _.Await() : Result<'R, 'E> =
             let res = chan.Take()
             chan.Add res

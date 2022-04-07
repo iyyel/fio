@@ -7,21 +7,21 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="ArgParser.fs"/>
-        <Compile Include="Benchmarks.fs"/>
-        <Compile Include="Program.fs"/>
+        <Compile Include="Benchmarks.fs" />
+        <Compile Include="ArgParser.fs" />
+        <Compile Include="Program.fs" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Argu" Version="6.1.1"/>
+        <PackageReference Include="Argu" Version="6.1.1" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\FIO\FIO.fsproj"/>
+        <ProjectReference Include="..\FIO\FIO.fsproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Update="FSharp.Core" Version="6.0.3"/>
+        <PackageReference Update="FSharp.Core" Version="6.0.3" />
     </ItemGroup>
 
 </Project>
