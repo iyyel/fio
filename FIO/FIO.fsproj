@@ -6,13 +6,21 @@
         <WarnOn>3390;$(WarnOn)</WarnOn>
     </PropertyGroup>
 
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+      <DefineConstants>TRACE;DETECT_DEADLOCK;MONITOR</DefineConstants>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+      <DefineConstants>TRACE;DETECT_DEADLOCK;MONITOR</DefineConstants>
+    </PropertyGroup>
+
     <ItemGroup>
-        <Compile Include="FIO.fs"/>
-        <Compile Include="Runtime.fs"/>
+        <Compile Include="FIO.fs" />
+        <Compile Include="Runtime.fs" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Update="FSharp.Core" Version="6.0.3"/>
+        <PackageReference Update="FSharp.Core" Version="6.0.3" />
     </ItemGroup>
 
 </Project>

@@ -236,12 +236,54 @@ module Runtime =
 
 (**********************************************************************************)
 (*                                                                                *)
-(* (arguments: EWC, BWC, ESC)                                                     *)
+(* Advanced runtime (arguments: EWC, BWC, ESC)                                    *)
 (*                                                                                *)
 (**********************************************************************************)
     module Advanced =
 
-        type internal Monitor(
+        type internal DeadlockDetector(
+            workItemQueue: BlockingCollection<WorkItem>,
+            blockingEventQueue: BlockingCollection<Channel<obj>>) as self =
+            let blockingItems = new ConcurrentDictionary<BlockingItem, Unit>()
+            let mutable evalWorkers : EvalWorker list = []
+            let mutable blockingWorkers : BlockingWorker list = []
+            let dataEventQueue = new BlockingCollection<Unit>()
+            let _ = (async {
+                for _ in dataEventQueue.GetConsumingEnumerable() do
+                    //printfn "DEADLOCK_DETECTOR: Awake."
+
+                    (*
+                     * If there's no work left in the work queue and no eval workers are working,
+                     * BUT there are still blocking items, then we know we have a deadlock.
+                     *)
+                    if workItemQueue.Count <= 0 
+                        && self.AllWorkersIdle()
+                        && blockingItems.Count > 0
+                    then
+                        printfn "DEADLOCK_DETECTOR: ############ DEADLOCK DETECTED! ############"
+            } |> Async.StartAsTask |> ignore)
+
+            member _.AddBlockingItem blockingItem =
+                match blockingItems.TryAdd (blockingItem, ()) with
+                | true -> dataEventQueue.Add <| ()
+                | false -> ()
+                
+            member _.RemoveBlockingItem (blockingItem: BlockingItem) =
+                blockingItems.TryRemove blockingItem
+                |> ignore
+
+            member private _.AllWorkersIdle() =
+                not (List.contains true <| 
+                    List.map (fun (evalWorker: EvalWorker) ->
+                        evalWorker.Working()) evalWorkers)
+
+            member _.SetEvalWorkers workers =
+                evalWorkers <- workers
+
+            member _.SetBlockingWorkers workers =
+                blockingWorkers <- workers
+
+        and internal Monitor(
             workItemQueue: BlockingCollection<WorkItem>,
             blockingEventQueue: BlockingCollection<Channel<obj>>) as self =
             let _ = (async {
@@ -266,9 +308,14 @@ module Runtime =
             runtime: Runtime,
             workItemQueue: BlockingCollection<WorkItem>,
             blockingWorker: BlockingWorker,
+            #if DETECT_DEADLOCK
+            deadlockDetector: DeadlockDetector,
+            #endif
             evalSteps) as self =
+            let mutable working = false
             let _ = (async {
                 for workItem in workItemQueue.GetConsumingEnumerable() do
+                    working <- true
                     match runtime.LowLevelEval workItem.Eff workItem.PrevAction evalSteps with
                     | Success res, Evaluated, _ ->
                         self.CompleteWorkItem workItem (Ok res)
@@ -282,11 +329,15 @@ module Runtime =
                         blockingWorker.RescheduleForBlocking blockingItem workItem
                         self.HandleBlockingFiber blockingItem
                     | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
+                    working <- false
             } |> Async.StartAsTask |> ignore)
 
             member private _.CompleteWorkItem workItem res =
                 workItem.Complete res
                 workItem.LLFiber.RescheduleBlockingWorkItems workItemQueue
+                #if DETECT_DEADLOCK
+                deadlockDetector.RemoveBlockingItem (BlockingFiber workItem.LLFiber)
+                #endif
 
             member private _.HandleBlockingFiber blockingItem =
                 match blockingItem with
@@ -294,9 +345,14 @@ module Runtime =
                     if llfiber.Completed() then
                         llfiber.RescheduleBlockingWorkItems workItemQueue
                 | _ -> ()
+
+            member _.Working() = working
             
         and internal BlockingWorker(
             workItemQueue: BlockingCollection<WorkItem>,
+            #if DETECT_DEADLOCK
+            deadlockDetector: DeadlockDetector,
+            #endif
             blockingEventQueue: BlockingCollection<Channel<obj>>) =
             let _ = (async {
                 for blockingChan in blockingEventQueue.GetConsumingEnumerable() do
@@ -312,6 +368,9 @@ module Runtime =
                     chan.AddBlockingWorkItem workItem
                 | BlockingFiber llfiber ->
                     llfiber.AddBlockingWorkItem workItem
+                #if DETECT_DEADLOCK
+                deadlockDetector.AddBlockingItem blockingItem
+                #endif
 
         and Runtime(evalWorkerCount,
                      blockingWorkerCount,
@@ -321,9 +380,19 @@ module Runtime =
             let workItemQueue = new BlockingCollection<WorkItem>()
             let blockingEventQueue = new BlockingCollection<Channel<obj>>()
 
+            #if DETECT_DEADLOCK
+            let deadlockDetector = new DeadlockDetector(workItemQueue, blockingEventQueue)
+            #endif
+
             do let blockingWorkers = self.CreateBlockingWorkers()
-               self.CreateEvalWorkers (List.head blockingWorkers) |> ignore
-               //Monitor(workItemQueue, blockingEventQueue, blockingWorkItemMap) |> ignore
+               let evalWorkers = self.CreateEvalWorkers (List.head blockingWorkers)
+               #if DETECT_DEADLOCK
+               deadlockDetector.SetBlockingWorkers blockingWorkers
+               deadlockDetector.SetEvalWorkers evalWorkers
+               #endif
+               #if MONITOR
+               Monitor(workItemQueue, blockingEventQueue) |> ignore
+               #endif
 
             new() = Runtime(System.Environment.ProcessorCount, 1, 15)
 
@@ -344,6 +413,9 @@ module Runtime =
                     | Send (value, chan) ->
                         chan.Add value
                         blockingEventQueue.Add <| chan
+                        #if DETECT_DEADLOCK
+                        deadlockDetector.RemoveBlockingItem (BlockingChannel chan)
+                        #endif
                         (Success value, Evaluated, evalSteps - 1)
                     | Concurrent (eff, fiber, llfiber) ->
                         workItemQueue.Add <| WorkItem.Create eff llfiber prevAction
@@ -375,19 +447,26 @@ module Runtime =
                 workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
                 fiber
 
-            member private _.CreateBlockingWorkers() =
+            member private this.CreateBlockingWorkers() =
                 let createBlockingWorkers start final =
                     List.map (fun _ ->
-                    BlockingWorker(workItemQueue, blockingEventQueue))
-                        [start..final]
-                let _, blockingWorkerCount, _ = self.GetConfiguration()
+                    #if DETECT_DEADLOCK
+                    BlockingWorker(workItemQueue, deadlockDetector, blockingEventQueue)) [start..final]
+                    #else
+                    BlockingWorker(workItemQueue, blockingEventQueue)) [start..final]
+                    #endif
+                let _, blockingWorkerCount, _ = this.GetConfiguration()
                 createBlockingWorkers 0 (blockingWorkerCount - 1)
 
             member private this.CreateEvalWorkers blockingWorker =
                 let createEvalWorkers blockingWorker evalSteps start final =
                     List.map (fun _ ->
-                    EvalWorker(this, workItemQueue, blockingWorker, evalSteps))
-                        [start..final]
+                    #if DETECT_DEADLOCK
+                    EvalWorker(this, workItemQueue, blockingWorker, deadlockDetector, evalSteps)
+                    #else
+                    EvalWorker(this, workItemQueue, blockingWorker, evalSteps)
+                    #endif
+                    ) [start..final]
                 let evalWorkerCount, _, evalStepCount = this.GetConfiguration()
                 createEvalWorkers blockingWorker evalStepCount 0 (evalWorkerCount - 1)
 
