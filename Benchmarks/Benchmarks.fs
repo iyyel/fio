@@ -30,7 +30,7 @@ module internal Timer =
                 #endif
                 NonBlocking (fun () -> stopwatch.Start(); Ok ())
             | count ->
-                Blocking (chan) >> fun res ->
+                Blocking chan >> fun res ->
                 match res with
                 | Start -> loopStart (count - 1)
                 | _ -> loopStart count
@@ -43,7 +43,7 @@ module internal Timer =
                 #endif
                 NonBlocking (fun () -> stopwatch.Stop(); Ok ())
             | count ->
-                Blocking (chan) >> fun res ->
+                Blocking chan >> fun res ->
                 match res with
                 | Stop -> loopStop (count - 1)
                 | _ -> loopStop count
@@ -571,7 +571,7 @@ module Benchmark =
                 ("ReverseBang", ReverseBang.Create config.ProcessCount config.RoundCount)
 
         let rec executeBenchmark config curRun acc =
-            let (bench, eff) = createBenchmark config
+            let bench, eff = createBenchmark config
             match curRun with
             | curRun' when curRun' = runs -> (bench, acc)
             | curRun' ->
@@ -586,10 +586,10 @@ module Benchmark =
                 | :? Naive.Runtime ->
                     printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Naive runtime"
                 | :? Intermediate.Runtime as r ->
-                    let (ewc, bwc, esc) = r.GetConfiguration()
+                    let ewc, bwc, esc = r.GetConfiguration()
                     printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Intermediate runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
                 | :? Advanced.Runtime as r ->
-                    let (ewc, bwc, esc) = r.GetConfiguration()
+                    let ewc, bwc, esc = r.GetConfiguration()
                     printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Advanced runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
                 | _ -> failwith "executeBenchmark: Unknown runtime specified!"
                 executeBenchmark config runNum (acc @ [result])

@@ -91,7 +91,7 @@ module FIO =
         override _.GetHashCode() = id.GetHashCode()
         member internal _.Id = id
         member internal _.Complete res =
-            lock (_lock) (fun _ ->
+            lock _lock (fun _ ->
                 if Interlocked.Read completed = 0 then
                     Interlocked.Exchange(completed, 1) |> ignore
                     chan.Add res

@@ -14,7 +14,7 @@ ThreadPool.SetMaxThreads(32767, 32767) |> ignore
 ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 let runBenchmarks parsedArgs =
-    let (configs, runtime, runs, processIncrement) = parsedArgs
+    let configs, runtime, runs, processIncrement = parsedArgs
     Run configs runtime runs processIncrement
 
 [<EntryPoint>]

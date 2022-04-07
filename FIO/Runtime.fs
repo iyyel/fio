@@ -127,7 +127,7 @@ module Runtime =
             workItemQueue: BlockingCollection<WorkItem>,
             blockingItemQueue: BlockingCollection<BlockingItem * WorkItem>) as self =
             let _ = (async {
-                for (blockingItem, workItem) in blockingItemQueue.GetConsumingEnumerable() do
+                for blockingItem, workItem in blockingItemQueue.GetConsumingEnumerable() do
                     self.HandleBlockingItem blockingItem workItem
             } |> Async.StartAsTask |> ignore)
 
@@ -211,7 +211,7 @@ module Runtime =
                     List.map (fun _ ->
                     BlockingWorker(workItemQueue, blockingItemQueue))
                         [start..final]
-                let (_, blockingWorkerCount, _) = self.GetConfiguration()
+                let _, blockingWorkerCount, _ = self.GetConfiguration()
                 createBlockingWorkers 0 (blockingWorkerCount - 1)
 
             member private this.CreateEvalWorkers blockingWorker =
@@ -219,7 +219,7 @@ module Runtime =
                     List.map (fun _ ->
                     EvalWorker(this, workItemQueue, blockingWorker, evalSteps))
                         [start..final]
-                let (evalWorkerCount, _, evalStepCount) = this.GetConfiguration()
+                let evalWorkerCount, _, evalStepCount = this.GetConfiguration()
                 createEvalWorkers blockingWorker evalStepCount 0 (evalWorkerCount - 1)
 
             member _.GetConfiguration() =
@@ -380,7 +380,7 @@ module Runtime =
                     List.map (fun _ ->
                     BlockingWorker(workItemQueue, blockingEventQueue))
                         [start..final]
-                let (_, blockingWorkerCount, _) = self.GetConfiguration()
+                let _, blockingWorkerCount, _ = self.GetConfiguration()
                 createBlockingWorkers 0 (blockingWorkerCount - 1)
 
             member private this.CreateEvalWorkers blockingWorker =
@@ -388,7 +388,7 @@ module Runtime =
                     List.map (fun _ ->
                     EvalWorker(this, workItemQueue, blockingWorker, evalSteps))
                         [start..final]
-                let (evalWorkerCount, _, evalStepCount) = this.GetConfiguration()
+                let evalWorkerCount, _, evalStepCount = this.GetConfiguration()
                 createEvalWorkers blockingWorker evalStepCount 0 (evalWorkerCount - 1)
 
             member _.GetConfiguration() =
