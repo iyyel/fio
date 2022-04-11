@@ -2,7 +2,7 @@
   "profiles": {
     "Benchmarks": {
       "commandName": "Project",
-      "commandLineArgs": "--advanced-runtime 8 1 15 --runs 100 --pingpong 100"
+      "commandLineArgs": "--deadlocking-runtime 8 1 15 --runs 100 --pingpong 20000"
     }
   }
 }

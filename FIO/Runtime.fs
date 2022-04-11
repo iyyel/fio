@@ -31,14 +31,15 @@ module Runtime =
 
         #if DETECT_DEADLOCK
         type internal DeadlockDetector<'B, 'E when 'B :> Worker and 'E :> Worker>(
-            workItemQueue: BlockingCollection<WorkItem>) as self =
+            workItemQueue: BlockingCollection<WorkItem>,
+            intervalMs: int) as self =
             let blockingItems = new ConcurrentDictionary<BlockingItem, Unit>()
             let mutable blockingWorkers : List<'B> = []
             let mutable evalWorkers : List<'E> = []
             let dataEventQueue = new BlockingCollection<Unit>()
-            let mutable suspicious = false 
+            let mutable countDown = 10
             let _ = (async {
-                for _ in dataEventQueue.GetConsumingEnumerable() do
+                while true do
                     (*
                      * If there's no work left in the work queue and no eval workers are working,
                      * BUT there are still blocking items, then we know we have a deadlock.
@@ -47,11 +48,14 @@ module Runtime =
                         && self.AllEvalWorkersIdle()
                         && blockingItems.Count > 0
                     then
-                        suspicious <- true
-                        if dataEventQueue.Count <= 0 then
+                        if countDown <= 0 then
                             printfn "DEADLOCK_DETECTOR: ############ WARNING: Potential deadlock detected! ############"
+                            printfn "DEADLOCK_DETECTOR:     Suspicion: No work items left, All EvalWorkers idling, Existing blocking items"
+                        else
+                            countDown <- countDown - 1
                     else
-                        suspicious <- false
+                        countDown <- 10
+                    System.Threading.Thread.Sleep(intervalMs)
             } |> Async.StartAsTask |> ignore)
 
             member _.AddBlockingItem blockingItem =
@@ -319,7 +323,7 @@ module Runtime =
             let blockingItemQueue = new BlockingCollection<BlockingItem * WorkItem>()
 
             #if DETECT_DEADLOCK
-            let deadlockDetector = new Utils.DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue)
+            let deadlockDetector = new Utils.DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue, 500)
             #endif
 
             do let blockingWorkers = self.CreateBlockingWorkers()
@@ -527,7 +531,7 @@ module Runtime =
             let blockingEventQueue = new BlockingCollection<Channel<obj>>()
 
             #if DETECT_DEADLOCK
-            let deadlockDetector = new Utils.DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue)
+            let deadlockDetector = new Utils.DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue, 500)
             #endif
 
             do let blockingWorkers = self.CreateBlockingWorkers()
@@ -766,7 +770,7 @@ module Runtime =
             let blockingWorkItemMap = new BlockingWorkItemMap()
 
             #if DETECT_DEADLOCK
-            let deadlockDetector = new Utils.DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue)
+            let deadlockDetector = new Utils.DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue, 500)
             #endif
 
             do let blockingWorkers = self.CreateBlockingWorkers()
