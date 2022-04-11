@@ -15,6 +15,7 @@ type Arguments =
     | Naive_Runtime
     | Intermediate_Runtime of evalworkercount: int * blockingworkercount: int * evalstepcount: int
     | Advanced_Runtime of evalworkercount: int * blockingworkercount: int * evalstepcount: int
+    | Deadlocking_Runtime of evalworkercount: int * blockingworkercount: int * evalstepcount: int
     | [<Mandatory>] Runs of runs: int
     | Process_Increment of processcountinc: int * inctimes: int
     | Pingpong of roundcount: int
@@ -32,6 +33,8 @@ type Arguments =
                 "specify eval worker count, blocking worker count and eval step count for intermediate runtime. (specify only one runtime)"
             | Advanced_Runtime _ ->
                 "specify eval worker count, blocking worker count and eval step count for advanced runtime. (specify only one runtime)"
+            | Deadlocking_Runtime _ ->
+                "specify eval worker count, blocking worker count and eval step count for deadlocking runtime. (specify only one runtime)"
             | Runs _ ->
                 "specify the number of runs for each benchmark."
             | Process_Increment _ ->
@@ -104,6 +107,9 @@ type Parser() =
                 | _ ->
                     match results.TryGetResult Advanced_Runtime with
                     | Some (ewc, bwc, esc) -> Advanced.Runtime(ewc, bwc, esc)
-                    | _ -> failwith "ArgParser: Invalid runtime specified!"
+                    | _ -> 
+                        match results.TryGetResult Deadlocking_Runtime with
+                        | Some (ewc, bwc, esc) -> Deadlocking.Runtime(ewc, bwc, esc)
+                        | _ -> failwith "ArgParser: Invalid runtime specified!"
     
         (configs, runtime, runs, processIncrement)

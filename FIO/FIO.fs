@@ -105,6 +105,8 @@ module FIO =
             Interlocked.Read completed = 1
         member internal _.AddBlockingWorkItem workItem =
             blockingWorkItems.Add workItem
+        member internal _.BlockingWorkItemsCount() =
+            blockingWorkItems.Count
         member internal _.RescheduleBlockingWorkItems (workItemQueue: BlockingCollection<WorkItem>) =
             while blockingWorkItems.Count > 0 do
                 workItemQueue.Add <| blockingWorkItems.Take()

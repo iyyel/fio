@@ -555,6 +555,9 @@ module Benchmark =
             | :? Advanced.Runtime as r ->
                 let ewc, bwc, esc = r.GetConfiguration()
                 ($"advanced-ewc%i{ewc}-bwc%i{bwc}-esc%i{esc}", $"Advanced (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})")
+            | :? Deadlocking.Runtime as r ->
+                let ewc, bwc, esc = r.GetConfiguration()
+                ($"deadlocking-ewc%i{ewc}-bwc%i{bwc}-esc%i{esc}", $"Deadlocking (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})")
             | _ -> failwith "runBenchmark: Invalid runtime!"
 
         let createBenchmark config =
@@ -582,6 +585,7 @@ module Benchmark =
                     | Error _ -> -1
                 let runNum = curRun' + 1
                 let result = (runNum, time)
+                (*
                 match runtime with
                 | :? Naive.Runtime ->
                     printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Naive runtime"
@@ -591,7 +595,11 @@ module Benchmark =
                 | :? Advanced.Runtime as r ->
                     let ewc, bwc, esc = r.GetConfiguration()
                     printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Advanced runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
+                | :? Deadlocking.Runtime as r ->
+                    let ewc, bwc, esc = r.GetConfiguration()
+                    printfn $"Completed run #%-5i{runNum} ──── Time %-8i{time} (ms) ──── %s{benchStr config} ──── Deadlocking runtime (EWC: %i{ewc} BWC: %i{bwc} ESC: %i{esc})"
                 | _ -> failwith "executeBenchmark: Unknown runtime specified!"
+                *)
                 executeBenchmark config runNum (acc @ [result])
 
         let runtimeFileName, runtimeName = getRuntimeName runtime
