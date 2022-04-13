@@ -21,6 +21,7 @@ module internal Timer =
 
     let Effect startCount stopCount chan =
         // IsHighResolution: true
+        // Frequency: 10000000
         let stopwatch = Stopwatch()
 
         let rec loopStart count =

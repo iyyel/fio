@@ -57,13 +57,13 @@ module Runtime =
                         countDown <- 10
                     System.Threading.Thread.Sleep(intervalMs)
             } |> Async.StartAsTask |> ignore)
-
-            member _.AddBlockingItem blockingItem =
+                    
+            member internal _.AddBlockingItem blockingItem =
                 match blockingItems.TryAdd (blockingItem, ()) with
                 | true -> dataEventQueue.Add <| ()
                 | false -> ()
                 
-            member _.RemoveBlockingItem (blockingItem: BlockingItem) =
+            member internal _.RemoveBlockingItem (blockingItem: BlockingItem) =
                 blockingItems.TryRemove blockingItem
                 |> ignore
 
@@ -77,10 +77,10 @@ module Runtime =
                     List.map (fun (evalWorker: 'B) ->
                         evalWorker.Working()) blockingWorkers)
 
-            member _.SetEvalWorkers workers =
+            member internal _.SetEvalWorkers workers =
                 evalWorkers <- workers
 
-            member _.SetBlockingWorkers workers =
+            member internal _.SetBlockingWorkers workers =
                 blockingWorkers <- workers
          #endif
 
@@ -258,7 +258,7 @@ module Runtime =
 
             #if DETECT_DEADLOCK
             override _.Working() =
-                working
+                working && workItemQueue.Count > 0
             #endif
             
         and internal BlockingWorker(
@@ -310,7 +310,7 @@ module Runtime =
 
             #if DETECT_DEADLOCK
             override _.Working() =
-                working
+                working && workItemQueue.Count > 0
             #endif
 
         and Runtime(
@@ -476,7 +476,7 @@ module Runtime =
 
             #if DETECT_DEADLOCK
             override _.Working() =
-                working
+                working && workItemQueue.Count > 0
             #endif
             
         and internal BlockingWorker(
@@ -518,7 +518,7 @@ module Runtime =
 
             #if DETECT_DEADLOCK
             override _.Working() =
-                working
+                working && workItemQueue.Count > 0
             #endif
 
         and Runtime(
@@ -675,13 +675,16 @@ module Runtime =
             member private _.CompleteWorkItem(workItem, res) =
                 workItem.Complete res
                 blockingWorker.RescheduleBlockingEffects workItem.LLFiber
+                #if DETECT_DEADLOCK
+                deadlockDetector.RemoveBlockingItem (BlockingFiber workItem.LLFiber)
+                #endif
 
             member private _.RescheduleForRunning(workItem) =
                 workItemQueue.Add workItem
 
             #if DETECT_DEADLOCK
             override _.Working() =
-                working
+                working && workItemQueue.Count > 0
             #endif
             
         and internal BlockingWorker(
@@ -731,13 +734,10 @@ module Runtime =
                         while blockingQueue.Count > 0 do
                             workItemQueue.Add <| blockingQueue.Take()
                     | false, _ -> ()
-                #if DETECT_DEADLOCK
-                deadlockDetector.RemoveBlockingItem blockingItem
-                #endif
 
             #if DETECT_DEADLOCK
             override _.Working() =
-                working
+                working && workItemQueue.Count > 0
             #endif
 
         and internal BlockingWorkItemMap() =
