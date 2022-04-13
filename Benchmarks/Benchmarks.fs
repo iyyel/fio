@@ -20,6 +20,7 @@ module internal Timer =
         | Stop
 
     let Effect startCount stopCount chan =
+        // IsHighResolution: true
         let stopwatch = Stopwatch()
 
         let rec loopStart count =
@@ -486,7 +487,7 @@ module Benchmark =
             | [] -> acc
             | (_, time)::ts -> fileContentStr ts (acc + $"%i{time}\n")
 
-        let headerStr = "Execution Time (ms)"
+        let headerStr = "Time"
         let homePath =
             if (Environment.OSVersion.Platform.Equals(PlatformID.Unix)
                 || Environment.OSVersion.Platform.Equals(PlatformID.MacOSX)) then
@@ -540,7 +541,7 @@ module Benchmark =
 │  Benchmark:  %-50s{benchName}           │
 │  Runtime:    %-50s{runtimeName}           │
 ├───────────────────────────────────────────────────────────────────────────┤
-│  Run                               Execution time (ms)                    │
+│  Run                               Time (ms)                              │
 │  ────────────────────────────────  ─────────────────────────────────────  │\n"
         let toPrint = headerStr + runExecTimesStr
         printfn $"%s{toPrint}"

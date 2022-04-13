@@ -338,7 +338,7 @@ module Runtime =
                |> ignore
                #endif
 
-            new() = Runtime(System.Environment.ProcessorCount, 1, 15)
+            new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
             member internal this.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
                 if evalSteps = 0 then
@@ -408,7 +408,7 @@ module Runtime =
 
             member _.GetConfiguration() =
                 let evalWorkerCount =
-                    if evalWorkerCount <= 0 then System.Environment.ProcessorCount
+                    if evalWorkerCount <= 0 then System.Environment.ProcessorCount - 1
                     else evalWorkerCount
                 let blockingWorkerCount =
                     if blockingWorkerCount <= 0 then 1
@@ -546,7 +546,7 @@ module Runtime =
                |> ignore
                #endif
 
-            new() = Runtime(System.Environment.ProcessorCount, 1, 15)
+            new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
             member internal this.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
                 if evalSteps = 0 then
@@ -621,7 +621,7 @@ module Runtime =
 
             member _.GetConfiguration() =
                 let evalWorkerCount =
-                    if evalWorkerCount <= 0 then System.Environment.ProcessorCount
+                    if evalWorkerCount <= 0 then System.Environment.ProcessorCount - 1
                     else evalWorkerCount
                 let blockingWorkerCount =
                     if blockingWorkerCount <= 0 then 1
@@ -785,7 +785,7 @@ module Runtime =
                |> ignore
                #endif
 
-            new() = Runtime(System.Environment.ProcessorCount, 1, 15)
+            new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
             member internal this.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
                 if evalSteps = 0 then
@@ -860,7 +860,7 @@ module Runtime =
 
             member _.GetConfiguration() =
                 let evalWorkerCount =
-                    if evalWorkerCount <= 0 then System.Environment.ProcessorCount
+                    if evalWorkerCount <= 0 then System.Environment.ProcessorCount - 1
                     else evalWorkerCount
                 let blockingWorkerCount =
                     if blockingWorkerCount <= 0 then 1
