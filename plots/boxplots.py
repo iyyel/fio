@@ -13,9 +13,6 @@ matplotlib.rcParams.update({
 })
 """
 
-
-plt.locator_params(axis="y", nbins=1)
-
 for runtime_data in loader.all_runtime_data:
     fig, axd = plt.subplot_mosaic([['topleft', 'topright'],['midleft', 'midright'],['bottom', 'bottom']])
     for key in runtime_data.keys():
@@ -52,4 +49,4 @@ for runtime_data in loader.all_runtime_data:
 
         plt.tight_layout()
         plt.savefig('plots/boxplots/' + key + '-boxplot.png', bbox_inches='tight')
-       
+           
