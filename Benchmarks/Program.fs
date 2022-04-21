@@ -8,6 +8,7 @@ module Program
 
 open System.Threading
 
+open FSharp.FIO
 open Benchmarks.Benchmark
 
 ThreadPool.SetMaxThreads(32767, 32767) |> ignore
@@ -19,6 +20,15 @@ let runBenchmarks parsedArgs =
 
 [<EntryPoint>]
 let main args =
+    (*
+    let res = fio {
+        let! x = 2
+        let! y = 4
+        return x + y
+    }
+    printfn $"Result: %A{res}"
+    *)
+
     let parser = ArgParser.Parser()
     parser.PrintArgs args
     runBenchmarks <| parser.ParseArgs args

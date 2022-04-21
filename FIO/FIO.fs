@@ -10,6 +10,7 @@ open System
 open System.Threading
 open System.Collections.Concurrent
 
+[<AutoOpen>]
 module FIO =
 
     type internal Action =
@@ -27,7 +28,7 @@ module FIO =
             { Eff = eff; LLFiber = llfiber; PrevAction = prevAction }
         member this.Complete res =
             this.LLFiber.Complete <| res
-    
+
     /// A channel represents a communication queue that holds
     /// data of the type ('R). Data can be both be sent and 
     /// retrieved (blocking) on a channel.
@@ -284,4 +285,3 @@ module FIO =
         match (loop (fiber1.ToLowLevel()) (fiber2.ToLowLevel())).Await() with
         | Ok res -> Success (res :?> 'R)
         | Error err -> Failure (err :?> 'E)
-        

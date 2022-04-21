@@ -6,8 +6,7 @@
 
 namespace Benchmarks
 
-open FSharp.FIO.FIO
-open FSharp.FIO.Runtime
+open FSharp.FIO
 
 open System
 open System.IO
@@ -437,6 +436,7 @@ module ReverseBang =
 (* Benchmark infrastructure functionality                                         *)
 (*                                                                                *)
 (**********************************************************************************)
+[<AutoOpen>]
 module Benchmark =
 
     type PingpongConfig = 

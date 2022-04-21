@@ -8,8 +8,8 @@ module ArgParser
 
 open Argu
 
+open FSharp.FIO
 open Benchmarks
-open FSharp.FIO.Runtime
 
 type Arguments =
     | Naive_Runtime

@@ -6,10 +6,11 @@
 
 namespace FSharp.FIO
 
-open FSharp.FIO.FIO
+open FSharp.FIO
 
 open System.Collections.Concurrent
 
+[<AutoOpen>]
 module Runtime =
 
     [<AbstractClass>]
