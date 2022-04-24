@@ -57,6 +57,9 @@ type Parser() =
         let args = List.fold (fun s acc -> s + " " + acc) "" (List.ofArray args)
         printfn $"benchmark arguments:%s{args}"
 
+    member _.PrintUsage() =
+        printfn $"%s{parser.PrintUsage()}"
+
     member _.ParseArgs args =
         let results = parser.Parse args
         let runs = results.GetResult Runs
