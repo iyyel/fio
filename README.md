@@ -191,7 +191,7 @@ Additionally, the **FIO** project supports two conditional compilation options
 <!-- LICENSE -->
 ## License
 
-Distributed under the GNU General Public License v3.0. See [LICENSE.md)(LICENSE.md) for more information.
+Distributed under the GNU General Public License v3.0. See [LICENSE.md](LICENSE.md) for more information.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -200,9 +200,7 @@ Distributed under the GNU General Public License v3.0. See [LICENSE.md)(LICENSE.
 <!-- CONTACT -->
 ## Contact
 
-Your Name - [@your_twitter](https://twitter.com/your_username) - email@example.com
-
-Project Link: [https://github.com/your_username/repo_name](https://github.com/your_username/repo_name)
+Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [mail@iyyel.io](mailto:mail@iyyel.io)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -211,7 +209,7 @@ Project Link: [https://github.com/your_username/repo_name](https://github.com/yo
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-...
+TBA.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
