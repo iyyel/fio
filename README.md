@@ -180,6 +180,11 @@ OPTIONS:
     --help                display this list of options.
 ```
 
+Additionally, the **FIO** project supports two conditional compilation options
+
+* DETECT_DEADLOCK: Enables a deadlock detecting thread that attempts to detect if a deadlock has occurred when running the benchmarks
+* MONITOR: Enables a monitoring thread that prints out value data structure content during a run of the benchmarks
+
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
