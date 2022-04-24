@@ -547,8 +547,8 @@ module Benchmark =
         let toPrint = headerStr + runExecTimesStr
         printfn $"%s{toPrint}"
 
-    let private runBenchmark config runs (runtime: Evaluator) : BenchmarkResult =
-        let getRuntimeName (runtime: Evaluator) =
+    let private runBenchmark config runs (runtime: Runner) : BenchmarkResult =
+        let getRuntimeName (runtime: Runner) =
             match runtime with
             | :? Naive.Runtime -> ("naive", "Naive")
             | :? Intermediate.Runtime as r ->
@@ -580,7 +580,7 @@ module Benchmark =
             match curRun with
             | curRun' when curRun' = runs -> (bench, acc)
             | curRun' ->
-                let res: Result<int64, obj> = runtime.Eval(eff).Await()
+                let res: Result<int64, obj> = runtime.Run(eff).Await()
                 let time =
                     match res with
                     | Ok time -> time

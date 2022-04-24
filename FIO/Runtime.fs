@@ -14,8 +14,8 @@ open System.Collections.Concurrent
 module Runtime =
 
     [<AbstractClass>]
-    type Evaluator() =
-        abstract Eval<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
+    type Runner() =
+        abstract Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
 
     #if DETECT_DEADLOCK
     [<AbstractClass>]
@@ -178,9 +178,9 @@ module Runtime =
     module Naive =
 
         type Runtime() =
-            inherit Evaluator()
+            inherit Runner()
 
-            member internal this.LowLevelEval eff : Result<obj, obj> =
+            member internal this.LowLevelRun eff : Result<obj, obj> =
                 match eff with
                 | NonBlocking action ->
                     action ()
@@ -190,28 +190,28 @@ module Runtime =
                     chan.Add value
                     Ok value
                 | Concurrent (eff, fiber, llfiber) ->
-                    async { llfiber.Complete <| this.LowLevelEval eff }
+                    async { llfiber.Complete <| this.LowLevelRun eff }
                     |> Async.StartAsTask
                     |> ignore
                     Ok fiber
                 | AwaitFiber llfiber ->
                     llfiber.Await()
                 | Sequence (eff, cont) ->
-                    match this.LowLevelEval eff with
-                    | Ok res -> this.LowLevelEval <| cont res
+                    match this.LowLevelRun eff with
+                    | Ok res -> this.LowLevelRun <| cont res
                     | Error err -> Error err
                 | SequenceError (eff, cont) ->
-                    match this.LowLevelEval eff with
+                    match this.LowLevelRun eff with
                     | Ok res -> Ok res
-                    | Error err -> this.LowLevelEval <| cont err
+                    | Error err -> this.LowLevelRun <| cont err
                 | Success res ->
                     Ok res
                 | Failure err ->
                     Error err
 
-            override this.Eval<'R, 'E> (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
+            override this.Run<'R, 'E> (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = new Fiber<'R, 'E>()
-                async { fiber.ToLowLevel().Complete <| this.LowLevelEval (eff.Upcast()) }
+                async { fiber.ToLowLevel().Complete <| this.LowLevelRun (eff.Upcast()) }
                 |> Async.StartAsTask
                 |> ignore
                 fiber
@@ -237,7 +237,7 @@ module Runtime =
                     #if DETECT_DEADLOCK
                     working <- true
                     #endif
-                    match runtime.LowLevelEval workItem.Eff workItem.PrevAction evalSteps with
+                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps with
                     | Success res, Evaluated, _ ->
                         self.CompleteWorkItem workItem (Ok res)
                     | Failure err, Evaluated, _ ->
@@ -318,7 +318,7 @@ module Runtime =
             evalWorkerCount,
             blockingWorkerCount,
             evalStepCount) as self =
-            inherit Evaluator()
+            inherit Runner()
 
             let workItemQueue = new BlockingCollection<WorkItem>()
             let blockingItemQueue = new BlockingCollection<BlockingItem * WorkItem>()
@@ -341,7 +341,7 @@ module Runtime =
 
             new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
-            member internal this.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
+            member internal this.LowLevelRun eff prevAction evalSteps : FIO<obj, obj> * Action * int =
                 if evalSteps = 0 then
                     (eff, RescheduleForRunning, 0)
                 else
@@ -369,21 +369,21 @@ module Runtime =
                         else
                             (AwaitFiber llfiber, RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | Sequence (eff, cont) ->
-                        match this.LowLevelEval eff prevAction evalSteps with
-                        | Success res, Evaluated, evalSteps -> this.LowLevelEval (cont res) Evaluated evalSteps
+                        match this.LowLevelRun eff prevAction evalSteps with
+                        | Success res, Evaluated, evalSteps -> this.LowLevelRun (cont res) Evaluated evalSteps
                         | Failure err, Evaluated, evalSteps -> (Failure err, Evaluated, evalSteps)
                         | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                     | SequenceError (eff, cont) ->
-                        match this.LowLevelEval eff prevAction evalSteps with
+                        match this.LowLevelRun eff prevAction evalSteps with
                         | Success res, Evaluated, evalSteps -> (Success res, Evaluated, evalSteps)
-                        | Failure err, Evaluated, evalSteps -> this.LowLevelEval (cont err) Evaluated evalSteps
+                        | Failure err, Evaluated, evalSteps -> this.LowLevelRun (cont err) Evaluated evalSteps
                         | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                     | Success res ->
                         (Success res, Evaluated, evalSteps - 1)
                     | Failure err ->
                         (Failure err, Evaluated, evalSteps - 1)
 
-            override _.Eval<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
+            override _.Run<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
                 workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
                 fiber
@@ -443,7 +443,7 @@ module Runtime =
                     #if DETECT_DEADLOCK
                     working <- true
                     #endif
-                    match runtime.LowLevelEval workItem.Eff workItem.PrevAction evalSteps with
+                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps with
                     | Success res, Evaluated, _ ->
                         self.CompleteWorkItem workItem (Ok res)
                     | Failure err, Evaluated, _ ->
@@ -526,7 +526,7 @@ module Runtime =
             evalWorkerCount,
             blockingWorkerCount,
             evalStepCount) as self =
-            inherit Evaluator()
+            inherit Runner()
 
             let workItemQueue = new BlockingCollection<WorkItem>()
             let blockingEventQueue = new BlockingCollection<Channel<obj>>()
@@ -549,7 +549,7 @@ module Runtime =
 
             new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
-            member internal this.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
+            member internal this.LowLevelRun eff prevAction evalSteps : FIO<obj, obj> * Action * int =
                 if evalSteps = 0 then
                     (eff, RescheduleForRunning, 0)
                 else
@@ -578,21 +578,21 @@ module Runtime =
                         else
                             (AwaitFiber llfiber, RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | Sequence (eff, cont) ->
-                        match this.LowLevelEval eff prevAction evalSteps with
-                        | Success res, Evaluated, evalSteps -> this.LowLevelEval (cont res) Evaluated evalSteps
+                        match this.LowLevelRun eff prevAction evalSteps with
+                        | Success res, Evaluated, evalSteps -> this.LowLevelRun (cont res) Evaluated evalSteps
                         | Failure err, Evaluated, evalSteps -> (Failure err, Evaluated, evalSteps)
                         | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                     | SequenceError (eff, cont) ->
-                        match this.LowLevelEval eff prevAction evalSteps with
+                        match this.LowLevelRun eff prevAction evalSteps with
                         | Success res, Evaluated, evalSteps -> (Success res, Evaluated, evalSteps)
-                        | Failure err, Evaluated, evalSteps -> this.LowLevelEval (cont err) Evaluated evalSteps
+                        | Failure err, Evaluated, evalSteps -> this.LowLevelRun (cont err) Evaluated evalSteps
                         | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                     | Success res ->
                         (Success res, Evaluated, evalSteps - 1)
                     | Failure err ->
                         (Failure err, Evaluated, evalSteps - 1)
 
-            override _.Eval<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
+            override _.Run<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
                 workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
                 fiber
@@ -656,7 +656,7 @@ module Runtime =
                     #if DETECT_DEADLOCK
                     working <- true
                     #endif
-                    match runtime.LowLevelEval workItem.Eff workItem.PrevAction evalSteps with
+                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps with
                     | Success res, Evaluated, _ ->
                         self.CompleteWorkItem(workItem, Ok res)
                     | Failure err, Evaluated, _ ->
@@ -764,7 +764,7 @@ module Runtime =
             evalWorkerCount,
             blockingWorkerCount,
             evalStepCount) as self =
-            inherit Evaluator()
+            inherit Runner()
 
             let workItemQueue = new BlockingCollection<WorkItem>()
             let blockingEventQueue = new BlockingCollection<Channel<obj>>()
@@ -788,7 +788,7 @@ module Runtime =
 
             new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
-            member internal this.LowLevelEval eff prevAction evalSteps : FIO<obj, obj> * Action * int =
+            member internal this.LowLevelRun eff prevAction evalSteps : FIO<obj, obj> * Action * int =
                 if evalSteps = 0 then
                     (eff, RescheduleForRunning, 0)
                 else
@@ -817,21 +817,21 @@ module Runtime =
                         else
                             (AwaitFiber llfiber, RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | Sequence (eff, cont) ->
-                        match this.LowLevelEval eff prevAction evalSteps with
-                        | Success res, Evaluated, evalSteps -> this.LowLevelEval (cont res) Evaluated evalSteps
+                        match this.LowLevelRun eff prevAction evalSteps with
+                        | Success res, Evaluated, evalSteps -> this.LowLevelRun (cont res) Evaluated evalSteps
                         | Failure err, Evaluated, evalSteps -> (Failure err, Evaluated, evalSteps)
                         | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                     | SequenceError (eff, cont) ->
-                        match this.LowLevelEval eff prevAction evalSteps with
+                        match this.LowLevelRun eff prevAction evalSteps with
                         | Success res, Evaluated, evalSteps -> (Success res, Evaluated, evalSteps)
-                        | Failure err, Evaluated, evalSteps -> this.LowLevelEval (cont err) Evaluated evalSteps
+                        | Failure err, Evaluated, evalSteps -> this.LowLevelRun (cont err) Evaluated evalSteps
                         | eff, action, evalSteps -> (Sequence (eff, cont), action, evalSteps)
                     | Success res ->
                         (Success res, Evaluated, evalSteps - 1)
                     | Failure err ->
                         (Failure err, Evaluated, evalSteps - 1)
 
-            override _.Eval<'R, 'E>(eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
+            override _.Run<'R, 'E>(eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
                 workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
                 fiber

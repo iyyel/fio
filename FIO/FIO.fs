@@ -227,8 +227,8 @@ module FIO =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
 
     /// Encapsulate any kind of action that returns a result into a FIO
-    let toFIO<'R, 'E> (action : Result<'R, 'E>) : FIO<'R, 'E> =
-        NonBlocking (fun () -> action)
+    let toFIO<'R, 'E> (action : 'R) : FIO<'R, 'E> =
+        NonBlocking (fun () -> Ok action)
         
     /// Receive creates a blocking effect that awaits data retrieval on the given channel chan
     let Receive<'R, 'E> (chan : Channel<'R>) : FIO<'R, 'E> =

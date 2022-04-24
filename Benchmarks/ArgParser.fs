@@ -98,7 +98,7 @@ type Parser() =
         let configs = pingpongConfig @ threadRingConfig @
                       bigConfig @ bangConfig @ reverseBangConfig
 
-        let runtime : Evaluator =
+        let runtime : Runner =
             match results.TryGetResult Naive_Runtime with
             | Some _ -> Naive.Runtime()
             | _ ->

@@ -11,19 +11,17 @@ open FSharp.FIO
 [<AutoOpen>]
 module FIOBuilder =
 
-    let runtime = Advanced.Runtime()
-
-    let internal bind (eff : FIO<'R, 'E>) (func : Result<'R, 'E> -> FIO<'R, 'E>) : FIO<'R, 'E> =
-        toFIO(Ok 2)
+    let internal bind (eff : FIO<obj, 'E>) (func : obj -> FIO<'R, 'E>) : FIO<'R, 'E> =
+        Sequence (eff, func)
 
     let internal delay (func : unit -> FIO<'R, 'E>) : FIO<'R, 'E> =
         func ()
 
-    let internal returnFunc () =
-        ()
+    let internal returnFunc value =
+        Success value
 
-    let internal returnFrom () =
-        ()
+    let internal returnFrom eff =
+        eff
 
     let internal run () =
         ()
