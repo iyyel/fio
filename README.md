@@ -180,7 +180,13 @@ OPTIONS:
     --help                display this list of options.
 ```
 
-Additionally, the **FIO** project supports two conditional compilation options
+For example, running 30 runs of each of the benchmarks using the advanced runtime with 7 evaluation workers, 1 blocking worker and 15 evaluation steps would look as so:
+
+```
+--advanced-runtime 7 1 15 --runs 30 --pingpong 120000 --threadring 2000 1 --big 500 1 --bang 3000 1 --reversebang 3000 2
+```
+
+Additionally, the **FIO** project supports two conditional compilation options:
 
 * DETECT_DEADLOCK: Enables a deadlock detecting thread that attempts to detect if a deadlock has occurred when running the benchmarks
 * MONITOR: Enables a monitoring thread that prints out value data structure content during a run of the benchmarks
