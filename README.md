@@ -191,7 +191,7 @@ Additionally, the **FIO** project supports two conditional compilation options
 <!-- LICENSE -->
 ## License
 
-Distributed under the MIT License. See `LICENSE.txt` for more information.
+Distributed under the GNU General Public License v3.0. See [LICENSE.md)(LICENSE.md) for more information.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
