@@ -27,7 +27,7 @@
 
   <p align="center">
     <br />
-    An effectful programming library for F#
+    :wrench: A type-safe, highly concurrent library for F# based on pure functional programming
     <br />
     <!--
     <a href="https://github.com/othneildrew/Best-README-Template"><strong>Explore the docs »</strong></a>
