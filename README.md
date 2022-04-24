@@ -80,7 +80,7 @@
 
 <!-- [![Celestial Outbreak][product-screenshot]](https://github.com/iyyel/fio) -->
 
-**FIO** is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling functions with side effects. It is a highly concurrent and efficient library using the concept of "green threads" also known as "fibers".
+**FIO** is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling expressions with side effects. It uses the concept of "green threads" also known as "fibers" to provide a high level of efficient concurrency.
 
 **FIO** is an attempt creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
 [ZIO](https://zio.dev/) and [Cats Effect](https://typelevel.org/cats-effect/).
@@ -140,7 +140,45 @@ let main _ =
 
 ## Benchmarks
 
-Explain here how to run and interpret the benchmarks, where they're saved, etc.
+This repository contains five benchmarks that each stress test a different scenario of concurrent computing.
+All benchmarks reside from the [Savina - An Actor Benchmark Suite](http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf) paper.
+
+* Pingpong (Measures delivery overhead)
+* ThreadRing (Measures message sending and context switching between actors)
+* Big (Measures contention on mailbox and many-to-many message passing)
+* Bang (Measures contention on mailbox and many-to-one message passing)
+* ReverseBang (Measures contention on mailbox and many-to-one message retrieval)
+
+The benchmarks can be through the following command line options:
+
+```
+OPTIONS:
+
+    --naive-runtime       specify naive runtime. (specify only one runtime)
+    --intermediate-runtime <evalworkercount> <blockingworkercount> <evalstepcount>
+                          specify eval worker count, blocking worker count and eval step count for intermediate
+                          runtime. (specify only one runtime)
+    --advanced-runtime <evalworkercount> <blockingworkercount> <evalstepcount>
+                          specify eval worker count, blocking worker count and eval step count for advanced runtime.
+                          (specify only one runtime)
+    --deadlocking-runtime <evalworkercount> <blockingworkercount> <evalstepcount>
+                          specify eval worker count, blocking worker count and eval step count for deadlocking
+                          runtime. (specify only one runtime)
+    --runs <runs>         specify the number of runs for each benchmark.
+    --process-increment <processcountinc> <inctimes>
+                          specify the value of process count increment and how many times.
+    --pingpong <roundcount>
+                          specify round count for pingpong benchmark.
+    --threadring <processcount> <roundcount>
+                          specify process count and round count for threadring benchmark.
+    --big <processcount> <roundcount>
+                          specify process count and round count for big benchmark.
+    --bang <processcount> <roundcount>
+                          specify process count and round count for bang benchmark.
+    --reversebang <processcount> <roundcount>
+                          specify process count and round count for reversebang benchmark.
+    --help                display this list of options.
+```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
