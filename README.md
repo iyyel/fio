@@ -105,17 +105,14 @@
 
 It is quite simple to get started with installing or developing for **FIO**.
 
-
-
 ### Prerequisites
 
-...
-
-
+* Download and install [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/6.0)
+* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/)
 
 ### Installation
 
-...
+* Download this repository and open it in your favorite IDE
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -123,7 +120,19 @@ It is quite simple to get started with installing or developing for **FIO**.
 
 ## Usage
 
-Explain here how to use the library. Import it, etc.
+Create a new F# class and import the library using "open FSharp.FIO". For example:
+
+```fsharp
+open FSharp.FIO
+
+[<EntryPoint>]
+let main _ =
+    let effect = toFIO(printfn "Hello! What is your name?"
+                       let name = System.Console.ReadLine()
+                       printfn $"Hello, %s{name}, welcome to FIO!")
+    Advanced.Runtime().Run effect |> ignore
+    0
+```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
