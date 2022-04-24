@@ -27,7 +27,7 @@
 
   <p align="center">
     <br />
-    :wrench: A type-safe, highly concurrent library for F# based on pure functional programming
+    :wrench: A type-safe, highly concurrent and asynchronous library for F# based on pure functional programming
     <br />
     <!--
     <a href="https://github.com/othneildrew/Best-README-Template"><strong>Explore the docs »</strong></a>
@@ -80,7 +80,9 @@
 
 <!-- [![Celestial Outbreak][product-screenshot]](https://github.com/iyyel/fio) -->
 
-FIO is an effectful programming library for F#.
+FIO is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming.
+FIO is an attempt at trying to create a similar environment to that of [ZIO](https://zio.dev/) for Scala. FIO is both inspired by
+[ZIO](https://zio.dev/) and [Cats Effect](https://typelevel.org/cats-effect/).
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
