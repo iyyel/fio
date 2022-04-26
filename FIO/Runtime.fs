@@ -186,7 +186,7 @@ module Runtime =
                     action ()
                 | Blocking chan ->
                     Ok <| chan.Take()
-                | Send (value, chan) ->
+                | SendMessage (value, chan) ->
                     chan.Add value
                     Ok value
                 | Concurrent (eff, fiber, llfiber) ->
@@ -355,7 +355,7 @@ module Runtime =
                             (Success <| chan.Take(), Evaluated, evalSteps - 1)
                         else
                             (Blocking chan, RescheduleForBlocking (BlockingChannel chan), evalSteps)
-                    | Send (value, chan) ->
+                    | SendMessage (value, chan) ->
                         chan.Add value
                         (Success value, Evaluated, evalSteps - 1)
                     | Concurrent (eff, fiber, llfiber) ->
@@ -563,7 +563,7 @@ module Runtime =
                             (Success <| chan.Take(), Evaluated, evalSteps - 1)
                         else
                             (Blocking chan, RescheduleForBlocking (BlockingChannel chan), evalSteps)
-                    | Send (value, chan) ->
+                    | SendMessage (value, chan) ->
                         chan.Add value
                         blockingEventQueue.Add <| chan
                         (Success value, Evaluated, evalSteps - 1)
@@ -802,7 +802,7 @@ module Runtime =
                             (Success <| chan.Take(), Evaluated, evalSteps - 1)
                         else
                             (Blocking chan, RescheduleForBlocking (BlockingChannel chan), evalSteps)
-                    | Send (value, chan) ->
+                    | SendMessage (value, chan) ->
                         chan.Add value
                         blockingEventQueue.Add <| chan
                         (Success value, Evaluated, evalSteps - 1)

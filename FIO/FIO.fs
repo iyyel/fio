@@ -73,7 +73,7 @@ module FIO =
         member _.DataAvailable() =
             Interlocked.Read dataCounter > 0
 
-    and LowLevelFiber internal (
+    and internal LowLevelFiber internal (
         id: Guid,
         chan: BlockingCollection<Result<obj, obj>>,
         blockingWorkItems: BlockingCollection<WorkItem>,
@@ -137,15 +137,16 @@ module FIO =
     /// FIO is an effect that can either succeed with a result ('R)
     /// or fail with an error ('E) when interpreted.
     and FIO<'R, 'E> =
+        internal
           /// The NonBlocking effect models a
           /// non-blocking action (action)
         | NonBlocking of action: (unit -> Result<'R, 'E>)
           /// The Blocking effect models a blocking retrieval
           /// of data on the channel (chan)
         | Blocking of chan: Channel<'R>
-          /// The Send effect models the sending of data (value)
+          /// The SendMessage effect models the sending of data (msg)
           /// on the channel (chan)
-        | Send of value: 'R * chan: Channel<'R>
+        | SendMessage of msg: 'R * chan: Channel<'R>
           /// The Concurrent effect models the concurrent execution of 
           /// the effect (effect) in the fiber (fiber)
         | Concurrent of effect: FIO<obj, obj> * fiber: obj * llfiber: LowLevelFiber
@@ -178,8 +179,8 @@ module FIO =
                 | Error err -> Error err
             | Blocking chan -> 
                 Blocking <| chan.Upcast()
-            | Send (value, chan) ->
-                Send (value :> obj, chan.Upcast())
+            | SendMessage (msg, chan) ->
+                SendMessage (msg :> obj, chan.Upcast())
             | Concurrent (eff, fiber, llfiber) ->
                 Concurrent (eff, fiber, llfiber)
             | AwaitFiber llfiber ->
@@ -202,8 +203,8 @@ module FIO =
                 | Error err -> Error (err :> obj)
             | Blocking chan ->
                 Blocking chan
-            | Send (value, chan) ->
-                Send (value, chan)
+            | SendMessage (value, chan) ->
+                SendMessage (value, chan)
             | Concurrent (eff, fiber, llfiber) ->
                 Concurrent (eff, fiber, llfiber)
             | AwaitFiber llfiber ->
@@ -226,9 +227,13 @@ module FIO =
     let (>>|) (eff : FIO<'R1, 'E>) (cont : 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
 
-    /// Encapsulate any kind of action that returns a result into a FIO
-    let toFIO<'R, 'E> (action : 'R) : FIO<'R, 'E> =
+    /// Encapsulate any kind of expressions into a FIO
+    let IO<'R, 'E> (action : 'R) : FIO<'R, 'E> =
         NonBlocking (fun () -> Ok action)
+
+    /// Send sends a message (value) on the given channel (chan)
+    let Send<'R, 'E> (value : 'R) (chan : Channel<'R>) : FIO<'R, 'E> =
+        SendMessage (value, chan)
         
     /// Receive creates a blocking effect that awaits data retrieval on the given channel chan
     let Receive<'R, 'E> (chan : Channel<'R>) : FIO<'R, 'E> =
@@ -260,7 +265,7 @@ module FIO =
 
     /// Parallel models the parallel execution of effect (eff1) and
     /// (eff2) and returns their result in a tuple
-    let Parallel<'R1, 'R2, 'E> (eff1 : FIO<'R1, 'E>, eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
+    let Parallel<'R1, 'R2, 'E> (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         Spawn eff1 >> fun fiber1 ->
         eff2 >> fun res2 ->
         Await fiber1 >> fun res1 ->
@@ -268,14 +273,14 @@ module FIO =
 
     /// Parallel models the parallel execution of effect (eff1) and
     /// (eff2) and returns their result in a tuple
-    let OnError<'R, 'E> (eff : FIO<'R, 'E>, elseEff : FIO<'R, 'E>) : FIO<'R, 'E> =
+    let OnError<'R, 'E> (eff : FIO<'R, 'E>) (elseEff : FIO<'R, 'E>) : FIO<'R, 'E> =
         eff >>| fun _ ->
         elseEff >> fun res -> 
         Success res
 
     /// Race models the parallel execution of two effects (eff1) and (eff2)
     /// where the result of the effect that completes first is returned
-    let Race<'R, 'E> (eff1 : FIO<'R, 'E>, eff2 : FIO<'R, 'E>) : FIO<'R, 'E> =
+    let Race<'R, 'E> (eff1 : FIO<'R, 'E>) (eff2 : FIO<'R, 'E>) : FIO<'R, 'E> =
         let rec loop (fiber1 : LowLevelFiber) (fiber2 : LowLevelFiber) =
             if fiber1.Completed() then fiber1
             else if fiber2.Completed() then fiber2

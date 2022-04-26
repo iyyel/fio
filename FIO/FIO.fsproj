@@ -16,8 +16,8 @@
 
     <ItemGroup>
         <Compile Include="FIO.fs" />
-        <Compile Include="Runtime.fs" />
         <Compile Include="FIOBuilder.fs" />
+        <Compile Include="Runtime.fs" />
     </ItemGroup>
 
     <ItemGroup>

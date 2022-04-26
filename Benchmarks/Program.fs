@@ -20,7 +20,7 @@ let runBenchmarks parsedArgs =
 
 [<EntryPoint>]
 let main args =
-
+(*
     let res = fio {
         let x = 2
         let y = 4
@@ -33,6 +33,7 @@ let main args =
     }
 
     printfn $"Result: %A{res}"
+*)
 
     let parser = ArgParser.Parser()
     parser.PrintArgs args
