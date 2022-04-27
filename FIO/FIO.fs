@@ -119,7 +119,7 @@ module FIO =
     /// Fibers are used to execute multiple effects in parallel and
     /// can be awaited to retrieve the result of the effect.
     and Fiber<'R, 'E> private (
-        id: Guid, 
+        id: Guid,
         chan: BlockingCollection<Result<obj, obj>>,
         blockingWorkItems: BlockingCollection<WorkItem>) =
         let completed : int64 ref = ref 0
@@ -228,7 +228,7 @@ module FIO =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
 
     /// Encapsulate any kind of expressions into a FIO
-    let IO<'R, 'E> (action : 'R) : FIO<'R, 'E> =
+    let FIO<'R, 'E> (action : 'R) : FIO<'R, 'E> =
         NonBlocking (fun () -> Ok action)
 
     /// Send sends a message (value) on the given channel (chan)
