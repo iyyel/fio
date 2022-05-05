@@ -127,9 +127,9 @@ open FSharp.FIO
 
 [<EntryPoint>]
 let main _ =
-    let effect = toFIO(printfn "Hello! What is your name?"
-                       let name = System.Console.ReadLine()
-                       printfn $"Hello, %s{name}, welcome to FIO!")
+    let effect = FIO(printfn "Hello! What is your name?"
+                     let name = System.Console.ReadLine()
+                     printfn $"Hello, %s{name}, welcome to FIO!")
     Advanced.Runtime().Run effect |> ignore
     0
 ```
