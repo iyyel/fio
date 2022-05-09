@@ -29,7 +29,7 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer started!"
                 #endif
-                FIO <| stopwatch.Start()
+                FIO <| fun _ -> stopwatch.Start()
             | count ->
                 Receive chan >> fun res ->
                 match res with
@@ -42,7 +42,7 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer stopped!"
                 #endif
-                FIO <| stopwatch.Stop()
+                FIO <| fun _ -> stopwatch.Stop()
             | count ->
                 Receive chan >> fun res ->
                 match res with

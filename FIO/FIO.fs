@@ -228,8 +228,8 @@ module FIO =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
 
     /// Encapsulate any kind of expressions into a FIO
-    let FIO<'R, 'E> (action : 'R) : FIO<'R, 'E> =
-        NonBlocking (fun () -> Ok action)
+    let FIO<'R, 'E> (func : Unit -> 'R) : FIO<'R, 'E> =
+        NonBlocking (fun _ -> Ok (func ()))
 
     /// Send sends a message (value) on the given channel (chan)
     let Send<'R, 'E> (value : 'R) (chan : Channel<'R>) : FIO<'R, 'E> =
