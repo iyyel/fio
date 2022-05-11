@@ -271,11 +271,11 @@ module FIO =
         Await fiber1 >> fun res1 ->
         Success (res1, res2)
 
-    /// Parallel models the parallel execution of effect (eff1) and
-    /// (eff2) and returns their result in a tuple
-    let OnError<'R, 'E> (eff : FIO<'R, 'E>) (elseEff : FIO<'R, 'E>) : FIO<'R, 'E> =
+    /// OnError attempts to interpret (eff1) but if an error occurs
+    /// (errorEff) is then attempted to be interpreted
+    let OnError<'R, 'E> (eff : FIO<'R, 'E>) (errorEff : FIO<'R, 'E>) : FIO<'R, 'E> =
         eff >>| fun _ ->
-        elseEff >> fun res -> 
+        errorEff >> fun res -> 
         Success res
 
     /// Race models the parallel execution of two effects (eff1) and (eff2)
