@@ -220,73 +220,75 @@ module FIO =
             
         member internal this.Upcast<'R, 'E>() : FIO<obj, obj> =
             this.UpcastResult().UpcastError()
+
+    /// Transforms the expression (func) into a FIO.
+    let fio<'R, 'E> (func : Unit -> 'R) : FIO<'R, 'E> =
+        NonBlocking (fun _ -> Ok (func ()))
+
+    /// succeed creates an effect that models succeeding with the given value res.
+    /// succeed is identical to the Success opcode.
+    let succeed<'R, 'E> (result : 'R) : FIO<'R, 'E> =
+        Success result
+
+    /// fail creates an effect that models failure with the given value err.
+    /// fail is identical to the Failure opcode.
+    let fail<'R, 'E> (error : 'E) : FIO<'R, 'E> =
+        Failure error
+
+    /// stop creates an effect that models the end of an effect
+    /// by succeeding with Unit (Success ()).
+    let stop<'E> : FIO<Unit, 'E> =
+        Success ()
+
+    /// send sends a message (value) on the given channel (chan).
+    let send<'R, 'E> (value : 'R) (chan : Channel<'R>) : FIO<'R, 'E> =
+        SendMessage (value, chan)
         
+    /// receive creates a blocking effect that awaits data retrieval on the given channel chan.
+    let receive<'R, 'E> (chan : Channel<'R>) : FIO<'R, 'E> =
+        Blocking chan
+
+    /// Spawn creates an effect that executes the given effect eff concurrently and returns the corresponding fiber.
+    let spawn<'R1, 'E1, 'E> (eff : FIO<'R1, 'E1>) : FIO<Fiber<'R1, 'E1>, 'E> =
+        let fiber = new Fiber<'R1, 'E1>()
+        Concurrent (eff.Upcast(), fiber, fiber.ToLowLevel())
+
+    /// Await creates a blocking effect that awaits the result of the given fiber.
+    let await<'R, 'E> (fiber : Fiber<'R, 'E>) : FIO<'R, 'E> =
+        AwaitFiber <| fiber.ToLowLevel()
+
     let (>>) (eff : FIO<'R1, 'E>) (cont : 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
         Sequence (eff.UpcastResult(), fun res -> cont (res :?> 'R1))
 
     let (>>|) (eff : FIO<'R1, 'E>) (cont : 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
         SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
 
-    /// Encapsulate any kind of expressions into a FIO
-    let FIO<'R, 'E> (func : Unit -> 'R) : FIO<'R, 'E> =
-        NonBlocking (fun _ -> Ok (func ()))
-
-    /// Send sends a message (value) on the given channel (chan)
-    let Send<'R, 'E> (value : 'R) (chan : Channel<'R>) : FIO<'R, 'E> =
-        SendMessage (value, chan)
-        
-    /// Receive creates a blocking effect that awaits data retrieval on the given channel chan
-    let Receive<'R, 'E> (chan : Channel<'R>) : FIO<'R, 'E> =
-        Blocking chan
-
-    /// Spawn creates an effect that executes the given effect eff concurrently and returns the corresponding fiber
-    let Spawn<'R1, 'E1, 'E> (eff : FIO<'R1, 'E1>) : FIO<Fiber<'R1, 'E1>, 'E> =
-        let fiber = new Fiber<'R1, 'E1>()
-        Concurrent (eff.Upcast(), fiber, fiber.ToLowLevel())
-
-    /// Await creates a blocking effect that awaits the result of the given fiber
-    let Await<'R, 'E> (fiber : Fiber<'R, 'E>) : FIO<'R, 'E> =
-        AwaitFiber <| fiber.ToLowLevel()
-
-    /// Succeed creates an effect that models succeeding with the given value res.
-    /// Succeed is identical to the Success effect
-    let Succeed<'R, 'E> (res : 'R) : FIO<'R, 'E> =
-        Success res
-
-    /// Fail creates an effect that models failure with the given value err.
-    /// Fail is identical to the Failure effect
-    let Fail<'R, 'E> (err : 'E) : FIO<'R, 'E> =
-        Failure err
-
-    /// End creates an effect that models the end of an effect
-    /// by succeeding with Unit (Success ())
-    let End<'E> () : FIO<Unit, 'E> =
-        Success ()
-
-    /// Parallel models the parallel execution of effect (eff1) and
-    /// (eff2) and returns their result in a tuple
-    let Parallel<'R1, 'R2, 'E> (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
-        Spawn eff1 >> fun fiber1 ->
+    let (|||) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
+        spawn eff1 >> fun fiber1 ->
         eff2 >> fun res2 ->
-        Await fiber1 >> fun res1 ->
+        await fiber1 >> fun res1 ->
         Success (res1, res2)
+    
+    let (|||*) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<Unit, 'E> =
+        eff1 ||| eff2
+        >> fun (_, _) -> stop
 
-    /// OnError attempts to interpret (eff1) but if an error occurs
-    /// (errorEff) is then attempted to be interpreted
-    let OnError<'R, 'E> (eff : FIO<'R, 'E>) (errorEff : FIO<'R, 'E>) : FIO<'R, 'E> =
+    /// onError attempts to interpret (eff1) but if an error occurs
+    /// (errorEff) is then attempted to be interpreted.
+    let onError<'R, 'E> (eff : FIO<'R, 'E>) (errorEff : FIO<'R, 'E>) : FIO<'R, 'E> =
         eff >>| fun _ ->
-        errorEff >> fun res -> 
+        errorEff >> fun res ->
         Success res
 
-    /// Race models the parallel execution of two effects (eff1) and (eff2)
-    /// where the result of the effect that completes first is returned
-    let Race<'R, 'E> (eff1 : FIO<'R, 'E>) (eff2 : FIO<'R, 'E>) : FIO<'R, 'E> =
+    /// race models the parallel execution of two effects (eff1) and (eff2)
+    /// where the result of the effect that completes first is returned.
+    let race<'R, 'E> (eff1 : FIO<'R, 'E>) (eff2 : FIO<'R, 'E>) : FIO<'R, 'E> =
         let rec loop (fiber1 : LowLevelFiber) (fiber2 : LowLevelFiber) =
             if fiber1.Completed() then fiber1
             else if fiber2.Completed() then fiber2
             else loop fiber1 fiber2
-        Spawn eff1 >> fun fiber1 ->
-        Spawn eff2 >> fun fiber2 ->
+        spawn eff1 >> fun fiber1 ->
+        spawn eff2 >> fun fiber2 ->
         match (loop (fiber1.ToLowLevel()) (fiber2.ToLowLevel())).Await() with
         | Ok res -> Success (res :?> 'R)
         | Error err -> Failure (err :?> 'E)

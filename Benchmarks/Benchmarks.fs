@@ -29,9 +29,9 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer started!"
                 #endif
-                FIO <| fun _ -> stopwatch.Start()
+                fio <| fun _ -> stopwatch.Start()
             | count ->
-                Receive chan >> fun res ->
+                receive chan >> fun res ->
                 match res with
                 | Start -> loopStart (count - 1)
                 | _ -> loopStart count
@@ -42,16 +42,16 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer stopped!"
                 #endif
-                FIO <| fun _ -> stopwatch.Stop()
+                fio <| fun _ -> stopwatch.Stop()
             | count ->
-                Receive chan >> fun res ->
+                receive chan >> fun res ->
                 match res with
                 | Stop -> loopStop (count - 1)
                 | _ -> loopStop count
 
         loopStart startCount >> fun _ ->
         loopStop stopCount >> fun _ ->
-        Succeed stopwatch.ElapsedMilliseconds
+        succeed stopwatch.ElapsedMilliseconds
 
 (**********************************************************************************)
 (* Pingpong benchmark                                                             *)
@@ -69,31 +69,31 @@ module Pingpong =
     let private createPingProcess proc roundCount timerChan =
         let rec create msg roundCount =
             if roundCount = 0 then
-                Send Timer.Stop timerChan
+                send Timer.Stop timerChan
             else
-                Send msg proc.ChanSend >> fun _ ->
+                send msg proc.ChanSend >> fun _ ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} sent ping: %i{msg}"
                 #endif
-                Receive proc.ChanRecv >> fun x ->
+                receive proc.ChanRecv >> fun x ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} received pong: %i{x}"
                 #endif
                 create x (roundCount - 1)
-        Send Timer.Start timerChan >> fun _ ->
+        send Timer.Start timerChan >> fun _ ->
         create 0 roundCount
         
     let private createPongProcess proc roundCount =
         let rec create roundCount =
             if roundCount = 0 then
-                End()
+                stop
             else
-                Receive proc.ChanRecv >> fun x ->
+                receive proc.ChanRecv >> fun x ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} received ping: %i{x}"
                 #endif
                 let y = x + 10
-                Send y proc.ChanSend >> fun _ ->
+                send y proc.ChanSend >> fun _ ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
                 #endif
@@ -106,11 +106,11 @@ module Pingpong =
         let pingProc = { Name = "p0"; ChanSend = pingSendChan; ChanRecv = pongSendChan }
         let pongProc = { Name = "p1"; ChanSend = pongSendChan; ChanRecv = pingSendChan }
         let timerChan = Channel<Timer.TimerMessage>()
-        Spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
-        Parallel (createPingProcess pingProc roundCount timerChan) (createPongProcess pongProc roundCount)
-        >> fun (_, _) ->
-        Await fiber >> fun res ->
-        Succeed res
+        spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
+        createPingProcess pingProc roundCount timerChan ||| createPongProcess pongProc roundCount
+        >> fun _ ->
+        await fiber >> fun res ->
+        succeed res
 
 (**********************************************************************************)
 (* ThreadRing benchmark                                                           *)
@@ -128,13 +128,13 @@ module ThreadRing =
     let private createSendProcess proc roundCount timerChan =
         let rec create msg roundCount =
             if roundCount = 0 then
-                Send Timer.Stop timerChan
+                send Timer.Stop timerChan
             else
-                Send msg proc.ChanSend >> fun _ ->
+                send msg proc.ChanSend >> fun _ ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} sent: %i{msg}"
                 #endif
-                Receive proc.ChanRecv >> fun x ->
+                receive proc.ChanRecv >> fun x ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} received: %i{x}"
                 #endif
@@ -144,14 +144,14 @@ module ThreadRing =
     let private createRecvProcess proc roundCount =
         let rec create roundCount =
             if roundCount = 0 then
-                End()
+                stop
             else
-                Receive proc.ChanRecv >> fun x ->
+                receive proc.ChanRecv >> fun x ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} received: %i{x}"
                 #endif
                 let y = x + 10
-                Send y proc.ChanSend >> fun _ ->
+                send y proc.ChanSend >> fun _ ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} sent: %i{y}"
                 #endif
@@ -175,8 +175,7 @@ module ThreadRing =
             match procs with
             | [] -> acc
             | p::ps ->
-                let eff = Parallel (createRecvProcess p roundCount) acc >>
-                          fun (_, _) -> End()
+                let eff = createRecvProcess p roundCount |||* acc
                 createThreadRing ps eff
 
         let chans = [for _ in 1 .. processCount -> Channel<int>()]
@@ -187,13 +186,12 @@ module ThreadRing =
             | _ ->
                 failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.TimerMessage>()
-        let effEnd = Parallel (createRecvProcess pb roundCount) (createSendProcess pa roundCount timerChan)
-                     >> fun (_, _) -> End()
-        Spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
-        Send Timer.Start timerChan >> fun _ ->
+        let effEnd = createRecvProcess pb roundCount |||* createSendProcess pa roundCount timerChan
+        spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
+        send Timer.Start timerChan >> fun _ ->
         createThreadRing ps effEnd >> fun _ ->
-        Await fiber >> fun res ->
-        Succeed res
+        await fiber >> fun res ->
+        succeed res
 
 (**********************************************************************************)
 (* Big benchmark                                                                  *)
@@ -221,7 +219,7 @@ module Big =
                 let x = msg
                 let msg = Ping(x, proc.ChanRecvPong)
                 let chan, chans = (List.head chans, List.tail chans)
-                Send msg chan >> fun _ ->
+                send msg chan >> fun _ ->
                 #if DEBUG
                 printfn $"DEBUG: %s{proc.Name} sent ping: %i{x}"
                 #endif
@@ -231,7 +229,7 @@ module Big =
             if recvCount = 0 then
                 createRecvPongs proc.ChansSend.Length roundCount
             else
-                Receive proc.ChanRecvPing >> fun msg ->
+                receive proc.ChanRecvPing >> fun msg ->
                     match msg with
                     | Ping (x, replyChan) ->
                         #if DEBUG
@@ -239,7 +237,7 @@ module Big =
                         #endif
                         let y = x + 1
                         let msgReply = Pong y
-                        Send msgReply replyChan >> fun _ ->
+                        send msgReply replyChan >> fun _ ->
                         #if DEBUG
                         printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
                         #endif
@@ -249,11 +247,11 @@ module Big =
         and createRecvPongs recvCount roundCount =
             if recvCount = 0 then
                 if roundCount = 0 then
-                    Send Timer.Stop timerChan
+                    send Timer.Stop timerChan
                 else
                     createSendPings proc.ChansSend (roundCount - 1)
             else
-                Receive proc.ChanRecvPong >> fun msg ->
+                receive proc.ChanRecvPong >> fun msg ->
                     match msg with
                     | Pong x ->
                         #if DEBUG
@@ -262,7 +260,7 @@ module Big =
                         createRecvPongs (recvCount - 1) roundCount
                     | _ -> failwith "createRecvPongs: Received ping when pong should be received!"
 
-        Send Timer.Start timerChan >> fun _ ->
+        send Timer.Start timerChan >> fun _ ->
         createSendPings proc.ChansSend (roundCount - 1)
 
     let Create processCount roundCount : FIO<int64, obj> =
@@ -294,8 +292,7 @@ module Big =
         let rec createBig procs msg timerChan acc =
             match procs with
             | [] -> acc
-            | p::ps -> let eff = Parallel (createProcess p msg roundCount timerChan) acc
-                                 >> fun (_, _) -> End()
+            | p::ps -> let eff = createProcess p msg roundCount timerChan |||* acc
                        createBig ps (msg + 10) timerChan eff
 
         let procs = createProcesses processCount
@@ -305,13 +302,12 @@ module Big =
             | pa::pb::ps -> (pa, pb, ps)
             | _ -> 
             failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
-        let effEnd = Parallel (createProcess pa (10 * (processCount - 2)) roundCount timerChan)
-                              (createProcess pb (10 * (processCount - 1)) roundCount timerChan)
-                     >> fun (_, _) -> End()
-        Spawn (Timer.Effect processCount processCount timerChan) >> fun fiber ->
+        let effEnd = createProcess pa (10 * (processCount - 2)) roundCount timerChan |||*
+                     createProcess pb (10 * (processCount - 1)) roundCount timerChan
+        spawn (Timer.Effect processCount processCount timerChan) >> fun fiber ->
         createBig ps 0 timerChan effEnd >> fun _ ->
-        Await fiber >> fun res ->
-        Succeed res
+        await fiber >> fun res ->
+        succeed res
 
 (**********************************************************************************)
 (* Bang benchmark                                                                 *)
@@ -327,9 +323,9 @@ module Bang =
 
     let rec private createSendProcess proc msg roundCount =
         if roundCount = 0 then
-            End()
+            stop
         else
-            Send msg proc.Chan >> fun _ ->
+            send msg proc.Chan >> fun _ ->
             #if DEBUG
             printfn $"DEBUG: %s{proc.Name} sent: %i{msg}"
             #endif
@@ -337,9 +333,9 @@ module Bang =
             
     let rec private createRecvProcess proc roundCount timerChan =
         if roundCount = 0 then
-            Send Timer.Stop timerChan
+            send Timer.Stop timerChan
         else
-            Receive proc.Chan >> fun x ->
+            receive proc.Chan >> fun x ->
             #if DEBUG
             printfn $"DEBUG: %s{proc.Name} received: %i{x}"
             #endif
@@ -353,8 +349,7 @@ module Bang =
             match sendProcs with
             | [] -> acc
             | p::ps ->
-                let eff = Parallel (createSendProcess p msg roundCount) acc 
-                          >> fun (_, _) -> End()
+                let eff = createSendProcess p msg roundCount |||* acc
                 createBang recvProc ps (msg + 10) eff
 
         let recvProc = { Name = "p0"; Chan = Channel<int>() }
@@ -364,14 +359,13 @@ module Bang =
             | p::ps -> (p, ps)
             | _     -> failwith $"createBang failed! (at least 1 sending process should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.TimerMessage>()
-        let effEnd = Parallel (createSendProcess p 0 roundCount)
-                              (createRecvProcess recvProc (processCount * roundCount) timerChan)
-                     >> fun (_, _) -> End()
-        Spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
-        Send Timer.Start timerChan >> fun _ ->
+        let effEnd = createSendProcess p 0 roundCount |||*
+                     createRecvProcess recvProc (processCount * roundCount) timerChan
+        spawn (Timer.Effect 1 1 timerChan) >> fun fiber ->
+        send Timer.Start timerChan >> fun _ ->
         createBang recvProc ps 10 effEnd >> fun _ ->
-        Await fiber >> fun res ->
-        Succeed res
+        await fiber >> fun res ->
+        succeed res
 
 (**********************************************************************************)
 (*                                                                                *)
@@ -386,9 +380,9 @@ module ReverseBang =
 
     let rec private createSendProcess proc msg roundCount =
         if roundCount = 0 then
-            End()
+            stop
         else
-            Send msg proc.Chan >> fun _ ->
+            send msg proc.Chan >> fun _ ->
             #if DEBUG
             printfn $"DEBUG: %s{proc.Name} sent: %i{msg}"
             #endif
@@ -396,9 +390,9 @@ module ReverseBang =
             
     let rec private createRecvProcess proc roundCount timerChan =
         if roundCount = 0 then
-            Send Timer.Stop timerChan
+            send Timer.Stop timerChan
         else
-            Receive proc.Chan >> fun x ->
+            receive proc.Chan >> fun x ->
             #if DEBUG
             printfn $"DEBUG: %s{proc.Name} received: %i{x}"
             #endif
@@ -412,8 +406,7 @@ module ReverseBang =
             match sendProcs with
             | [] -> acc
             | p::ps -> 
-                let eff = Parallel (createRecvProcess p roundCount timerChan) acc 
-                          >> fun (_, _) -> End()
+                let eff = createRecvProcess p roundCount timerChan |||* acc
                 createReverseBang sendProc ps timerChan eff
 
         let sendProc = { Name = "p0"; Chan = Channel<int>() }
@@ -424,14 +417,13 @@ module ReverseBang =
             | p::ps -> (p, ps)
             | _     -> failwith $"createBang failed! (at least 1 sending process should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.TimerMessage>()
-        let effEnd = Parallel (createRecvProcess p roundCount timerChan)
-                              (createSendProcess sendProc 0 (processCount * roundCount))
-                     >> fun (_, _) -> End()
-        Spawn (Timer.Effect 1 processCount timerChan) >> fun fiber ->
-        Send Timer.Start timerChan >> fun _ ->
+        let effEnd = createRecvProcess p roundCount timerChan |||*
+                     createSendProcess sendProc 0 (processCount * roundCount)
+        spawn (Timer.Effect 1 processCount timerChan) >> fun fiber ->
+        send Timer.Start timerChan >> fun _ ->
         createReverseBang sendProc ps timerChan effEnd >> fun _ ->
-        Await fiber >> fun res ->
-        Succeed res
+        await fiber >> fun res ->
+        succeed res
 
 (**********************************************************************************)
 (*                                                                                *)
