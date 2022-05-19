@@ -127,12 +127,12 @@ open FSharp.FIO
 
 [<EntryPoint>]
 let main _ =
-    let effect = fio (fun _ -> 
-                   printfn "Hello! What is your name?"
-                   let name = System.Console.ReadLine()
-                   printfn $"Hello, %s{name}, welcome to FIO!")
-    Advanced.Runtime().Run effect |> ignore
-    0
+  let effect = spawn (succeed "Hello world!") >> fun fiber ->
+               await fiber >> fun res ->
+               succeed res
+  let result = (Advanced.Runtime().Run effect).Await()
+  printfn $"%A{result}"
+  0
 ```
 
 <p align="right">(<a href="#top">back to top</a>)</p>
