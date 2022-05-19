@@ -100,16 +100,6 @@ module ThesisExamples =
         succeed result
       ()
 
-    (*
-    let test () =
-        let fiber = new Fiber<int, obj>()
-        let effect = 
-            Sequence (
-            Concurrent (Success 42, fiber, fiber.ToLowLevel()), 
-            fun innerFiber -> AwaitFiber ((innerFiber :?> Fiber<int, obj>).ToLowLevel()))
-        effect
-        *)
-
 let runBenchmarks parsedArgs =
     let configs, runtime, runs, processIncrement = parsedArgs
     Run configs runtime runs processIncrement

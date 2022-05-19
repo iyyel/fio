@@ -271,7 +271,8 @@ module FIO =
     
     let (|||*) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<Unit, 'E> =
         eff1 ||| eff2
-        >> fun (_, _) -> stop
+        >> fun (_, _) ->
+        stop
 
     /// onError attempts to interpret (eff1) but if an error occurs
     /// (errorEff) is then attempted to be interpreted.
