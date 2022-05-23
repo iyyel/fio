@@ -6,7 +6,7 @@ base_pingpong_path = base_data_path + 'pingpong-roundcount120000-30runs/'
 base_threadring_path = base_data_path + 'threadring-processcount2000-roundcount1-30runs/'
 base_big_path = base_data_path + 'big-processcount500-roundcount1-30runs/'
 base_bang_path = base_data_path + 'bang-processcount3000-roundcount1-30runs/'
-base_reversebang_path = base_data_path + 'reversebang-processcount3000-roundcount2-30runs/'
+base_reversebang_path = base_data_path + 'reversebang-processcount3000-roundcount1-30runs/'
 
 base_naive_path = 'naive/' + data_path
 base_intermediate_1pc_path = 'intermediate-ewc7-bwc1-esc15/' + data_path

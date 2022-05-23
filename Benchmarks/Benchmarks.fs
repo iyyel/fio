@@ -379,7 +379,7 @@ module Big =
 
 (**********************************************************************************)
 (* Bang benchmark                                                                 *)
-(* Measures: Contention on mailbox; Many-to-One message passing                   *)
+(* Measures: Many-to-One message passing                                          *)
 (* A Scalability Benchmark Suite for Erlang/OTP                                   *)
 (* (https://dl.acm.org/doi/10.1145/2364489.2364495I)                              *)
 (**********************************************************************************)

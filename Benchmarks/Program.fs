@@ -18,21 +18,21 @@ module ThesisExamples =
 
     let helloWorldExample1 () =
         let effect : FIO<string, obj> = succeed "Hello world!"
-        let fiber : Fiber<string, obj> = Naive.Runtime().Run effect
+        let fiber : Fiber<string, obj> = Advanced.Runtime().Run effect
         let result : Result<string, obj> = fiber.Await()
         printfn $"%A{result}"
 
     let helloWorldExample2 () =
         let effect = succeed "Hello world!"
-        let fiber = Naive.Runtime().Run effect
+        let fiber = Advanced.Runtime().Run effect
         let result = fiber.Await()
         printfn $"%A{result}"
 
-    let concurrencyExample () = 
+    let concurrencyExample () =
         let effect = spawn (succeed 42) >> fun fiber ->
                      await fiber >> fun result ->
                      succeed result
-        let fiber = Naive.Runtime().Run effect
+        let fiber = Advanced.Runtime().Run effect
         let result = fiber.Await()
         printfn $"%A{result}"
 
@@ -57,7 +57,7 @@ module ThesisExamples =
         let chan2 = Channel<string>()
         let effect = pingerEffect chan1 chan2 |||
                      pongerEffect chan1 chan2
-        let fiber = Naive.Runtime().Run effect
+        let fiber = Advanced.Runtime().Run effect
         let result = fiber.Await()
         printfn $"%A{result}"
 
@@ -73,7 +73,7 @@ module ThesisExamples =
             stop
           else
             receive chan >> fun msg ->
-            printfn $"Receiver got: %i{msg}"
+            printfn $"Receiver received: %i{msg}"
             receiverEffect chan (count - 1)
 
         let rec createEffect chan count acc =
@@ -84,12 +84,12 @@ module ThesisExamples =
             let newAcc = senderEffect chan newCount |||* acc
             createEffect chan newCount newAcc
 
-        let fiberCount = 3000
+        let fiberCount = 4300
         let chan = Channel<int>()
         let acc = senderEffect chan fiberCount |||*
                   receiverEffect chan fiberCount
         let effect = createEffect chan fiberCount acc
-        let fiber = Naive.Runtime().Run effect
+        let fiber = Advanced.Runtime().Run effect
         let result = fiber.Await()
         printfn $"%A{result}"
 
