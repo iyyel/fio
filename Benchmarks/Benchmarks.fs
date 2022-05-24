@@ -87,7 +87,7 @@ module internal Timer =
         loopStop stopCount >> fun _ ->
         succeed stopwatch.ElapsedMilliseconds
 
-    let ChannelEffect startCount stopCount (chan : Channel<ChannelTimerMessage<int>>) =
+    let ChannelEffect startCount goCount stopCount (chan : Channel<ChannelTimerMessage<int>>) =
         // IsHighResolution: true
         // Frequency: 10000000
         let stopwatch = Stopwatch()
@@ -115,9 +115,16 @@ module internal Timer =
                 fio <| fun _ -> stopwatch.Stop()
             | count ->
                 receive chan >> fun res ->
+               
                 match res with
                 | ChannelTimerMessage.Stop -> loopStop (count - 1)
                 | _ -> loopStop count
+
+        let rec loopGo count msg =
+            match count with
+            | 0 -> stop
+            | count -> send msg processChan >> fun _ ->
+                       loopGo (count - 1) 0
 
         receive chan >> fun msg ->
         match msg with
@@ -126,7 +133,7 @@ module internal Timer =
         | _ -> failwith "ChannelEffect: Did not receive channel as first message!"
         >> fun _ ->
         loopStart startCount >> fun _ ->
-        send 0 processChan >> fun _ ->
+        loopGo goCount 0 >> fun _ ->
         loopStop stopCount >> fun _ ->
         succeed stopwatch.ElapsedMilliseconds
 
@@ -253,7 +260,7 @@ module ThreadRing =
                 failwith $"createProcessRing failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.ChannelTimerMessage<int>>()
         let effEnd = createProcess pb roundCount timerChan |||* createProcess pa roundCount timerChan
-        spawn (Timer.ChannelEffect processCount processCount timerChan) >> fun fiber ->
+        spawn (Timer.ChannelEffect processCount 1 processCount timerChan) >> fun fiber ->
         send (Timer.ChannelTimerMessage.Chan pa.ChanRecv) timerChan >> fun _ -> 
         createThreadRing ps effEnd timerChan >> fun _ ->
         await fiber >> fun res ->
@@ -277,7 +284,7 @@ module Big =
           ChanRecvPong: Channel<Message>
           ChansSend: Channel<Message> list }
 
-    let private createProcess proc msg roundCount timerChan =
+    let private createProcess proc msg roundCount timerChan goChan =
         let rec createSendPings chans roundCount =
             if List.length chans = 0 then
                 createRecvPings proc.ChansSend.Length roundCount
@@ -313,7 +320,7 @@ module Big =
         and createRecvPongs recvCount roundCount =
             if recvCount = 0 then
                 if roundCount = 0 then
-                    send Timer.StopwatchTimerMessage.Stop timerChan
+                    send Timer.ChannelTimerMessage.Stop timerChan
                 else
                     createSendPings proc.ChansSend (roundCount - 1)
             else
@@ -325,7 +332,8 @@ module Big =
                         #endif
                         createRecvPongs (recvCount - 1) roundCount
                     | _ -> failwith "createRecvPongs: Received ping when pong should be received!"
-
+        send Timer.ChannelTimerMessage.Start timerChan >> fun _ ->
+        receive goChan >> fun _ ->
         createSendPings proc.ChansSend (roundCount - 1)
 
     let Create processCount roundCount : FIO<int64, obj> =
@@ -354,26 +362,25 @@ module Big =
             let recvChanProcesses = createRecvChanProcesses processCount []
             create recvChanProcesses [] []
 
-        let rec createBig procs msg timerChan acc =
+        let rec createBig procs msg timerChan goChan acc =
             match procs with
             | [] -> acc
-            | p::ps -> let eff = createProcess p msg roundCount timerChan |||* acc
-                       createBig ps (msg + 10) timerChan eff
+            | p::ps -> let eff = createProcess p msg roundCount timerChan goChan |||* acc
+                       createBig ps (msg + 10) timerChan goChan eff
 
         let procs = createProcesses processCount
-        let timerChan = Channel<Timer.StopwatchTimerMessage>()
         let pa, pb, ps = 
             match procs with
             | pa::pb::ps -> (pa, pb, ps)
             | _ ->
             failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
-        let effEnd = createProcess pa (10 * (processCount - 2)) roundCount timerChan |||*
-                     createProcess pb (10 * (processCount - 1)) roundCount timerChan
-        let stopwatch = Stopwatch()
-        stopwatch.Start()
-        spawn (Timer.StopwatchEffect processCount timerChan) >> fun fiber ->
-        send (Timer.StopwatchTimerMessage.Start stopwatch) timerChan >> fun _ ->
-        createBig ps 0 timerChan effEnd >> fun _ ->
+        let timerChan = Channel<Timer.ChannelTimerMessage<int>>()
+        let goChan = Channel<int>()
+        let effEnd = createProcess pa (10 * (processCount - 2)) roundCount timerChan goChan |||*
+                     createProcess pb (10 * (processCount - 1)) roundCount timerChan goChan
+        spawn (Timer.ChannelEffect processCount processCount processCount timerChan) >> fun fiber ->
+        send (Timer.ChannelTimerMessage.Chan goChan) timerChan >> fun _ -> 
+        createBig ps 0 timerChan goChan effEnd >> fun _ ->
         await fiber >> fun res ->
         succeed res
 
