@@ -101,8 +101,8 @@ module ThesisExamples =
       ()
 
 let runBenchmarks parsedArgs =
-    let configs, runtime, runs, processIncrement = parsedArgs
-    Run configs runtime runs processIncrement
+    let configs, runtime, runs, fiberIncrement = parsedArgs
+    Run configs runtime runs fiberIncrement
 
 [<EntryPoint>]
 let main args =

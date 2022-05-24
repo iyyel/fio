@@ -2,7 +2,7 @@
   "profiles": {
     "Benchmarks": {
       "commandName": "Project",
-      "commandLineArgs": "--advanced-runtime 7 1 15 --runs 30 --big 500 1"
+      "commandLineArgs": "--naive-runtime --runs 30 --spawn 3500"
     }
   }
 }
