@@ -33,28 +33,12 @@ module FIO =
     /// data of the type ('R). Data can be both be sent and 
     /// retrieved (blocking) on a channel.
     and Channel<'R> private (
-        id: Guid,
         chan: BlockingCollection<obj>,
         blockingWorkItems: BlockingCollection<WorkItem>,
         dataCounter: int64 ref) =
-        new() = Channel(Guid.NewGuid(),
-                        new BlockingCollection<obj>(),
+        new() = Channel(new BlockingCollection<obj>(),
                         new BlockingCollection<WorkItem>(),
                         ref 0)
-        interface IComparable with
-            member this.CompareTo other =
-                match other with
-                | :? Channel<'R> as chan -> 
-                    if this.Id = chan.Id then 1 else -1
-                | _ -> -1
-        interface System.IComparable<Channel<'R>> with
-            member this.CompareTo other = this.Id.CompareTo other.Id.CompareTo
-        override this.Equals other =
-            match other with
-            | :? Channel<'R> as chan -> this.Id = chan.Id
-            | _ -> false
-        override _.GetHashCode() = id.GetHashCode()
-        member internal _.Id = id
         member internal _.AddBlockingWorkItem workItem =
             blockingWorkItems.Add workItem
         member internal _.RescheduleBlockingWorkItem (workItemQueue: BlockingCollection<WorkItem>) =
@@ -62,38 +46,22 @@ module FIO =
                 workItemQueue.Add <| blockingWorkItems.Take()
         member internal _.HasBlockingWorkItems() =
             blockingWorkItems.Count > 0
-        member internal _.Upcast() = Channel<obj>(id, chan, blockingWorkItems, dataCounter)
+        member internal _.Upcast() = Channel<obj>(chan, blockingWorkItems, dataCounter)
+        member _.UseAvailableData() =
+            Interlocked.Decrement dataCounter |> ignore
+        member _.DataAvailable() =
+            Interlocked.Read dataCounter > 0
         member _.Add (value: 'R) =
             Interlocked.Increment dataCounter |> ignore
             chan.Add value
         member _.Take() : 'R = chan.Take() :?> 'R
         member _.Count() = chan.Count
-        member _.UseAvailableData() =
-            Interlocked.Decrement dataCounter |> ignore
-        member _.DataAvailable() =
-            Interlocked.Read dataCounter > 0
 
     and internal LowLevelFiber internal (
-        id: Guid,
         chan: BlockingCollection<Result<obj, obj>>,
         blockingWorkItems: BlockingCollection<WorkItem>,
         completed: int64 ref) =
         let _lock = obj()
-        interface IComparable with
-            member this.CompareTo other = 
-                match other with
-                | :? LowLevelFiber as fiber ->
-                    if this.Id = fiber.Id then 1 else -1
-                | _ -> -1
-        interface System.IComparable<LowLevelFiber> with
-            member this.CompareTo other = this.Id.CompareTo other.Id.CompareTo
-        override this.Equals other = 
-            match other with
-            | :? LowLevelFiber as llfiber ->
-                this.Id = llfiber.Id
-            | _ -> false
-        override _.GetHashCode() = id.GetHashCode()
-        member internal _.Id = id
         member internal _.Complete res =
             lock _lock (fun _ ->
                 if Interlocked.Read completed = 0 then
@@ -119,14 +87,12 @@ module FIO =
     /// Fibers are used to execute multiple effects in parallel and
     /// can be awaited to retrieve the result of the effect.
     and Fiber<'R, 'E> private (
-        id: Guid,
         chan: BlockingCollection<Result<obj, obj>>,
         blockingWorkItems: BlockingCollection<WorkItem>) =
         let completed : int64 ref = ref 0
-        new() = Fiber(Guid.NewGuid(),
-                      new BlockingCollection<Result<obj, obj>>(),
+        new() = Fiber(new BlockingCollection<Result<obj, obj>>(),
                       new BlockingCollection<WorkItem>())
-        member internal _.ToLowLevel() = LowLevelFiber(id, chan, blockingWorkItems, completed)
+        member internal _.ToLowLevel() = LowLevelFiber(chan, blockingWorkItems, completed)
         member _.Await() : Result<'R, 'E> =
             let res = chan.Take()
             chan.Add res
