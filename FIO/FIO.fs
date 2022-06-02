@@ -226,9 +226,6 @@ module FIO =
     let (>>) (eff : FIO<'R1, 'E>) (cont : 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
         Sequence (eff.UpcastResult(), fun res -> cont (res :?> 'R1))
 
-    let (>>|) (eff : FIO<'R1, 'E>) (cont : 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
-        SequenceError (eff.UpcastResult(), fun res -> cont (res :?> 'E))
-
     let (|||) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         spawn eff1 >> fun fiber1 ->
         eff2 >> fun res2 ->
@@ -243,9 +240,7 @@ module FIO =
     /// onError attempts to interpret (eff1) but if an error occurs
     /// (errorEff) is then attempted to be interpreted.
     let onError<'R, 'E> (eff : FIO<'R, 'E>) (errorEff : FIO<'R, 'E>) : FIO<'R, 'E> =
-        eff >>| fun _ ->
-        errorEff >> fun res ->
-        Success res
+        SequenceError (eff.UpcastResult(), fun _ -> errorEff)
 
     /// race models the parallel execution of two effects (eff1) and (eff2)
     /// where the result of the effect that completes first is returned.
