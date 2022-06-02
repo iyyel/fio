@@ -625,7 +625,7 @@ module Benchmark =
             match curRun with
             | curRun' when curRun' = runs -> (bench, acc)
             | curRun' ->
-                let res: Result<int64, obj> = runtime.Run(eff).Await()
+                let res : Result<int64, obj> = runtime.Run(eff).Await()
                 let time =
                     match res with
                     | Ok time -> time

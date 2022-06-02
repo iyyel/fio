@@ -47,9 +47,9 @@ module FIO =
         member internal _.HasBlockingWorkItems() =
             blockingWorkItems.Count > 0
         member internal _.Upcast() = Channel<obj>(chan, blockingWorkItems, dataCounter)
-        member _.UseAvailableData() =
+        member internal _.UseAvailableData() =
             Interlocked.Decrement dataCounter |> ignore
-        member _.DataAvailable() =
+        member internal _.DataAvailable() =
             Interlocked.Read dataCounter > 0
         member _.Add (value: 'R) =
             Interlocked.Increment dataCounter |> ignore

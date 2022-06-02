@@ -16,6 +16,14 @@ ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 module ThesisExamples =
 
+    let pureFunc (x : int) (y : int) : int =
+        x + y
+
+    let mutable y : int = 42
+
+    let impureFunc (x : int) : int =
+        x + y
+
     let helloWorldExample1 () =
         let effect : FIO<string, obj> = succeed "Hello world!"
         let fiber : Fiber<string, obj> = Advanced.Runtime().Run effect
