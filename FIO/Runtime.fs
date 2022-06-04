@@ -180,7 +180,8 @@ module Runtime =
         type Runtime() =
             inherit Runner()
 
-            member internal this.LowLevelRun eff (acc : List<obj -> FIO<obj, obj>>) 
+            member internal this.LowLevelRun eff
+                (acc : List<obj -> FIO<obj, obj>>)
                 (errAcc : List<obj -> FIO<obj, obj>>)
                 : Result<obj, obj> =
                 match eff with

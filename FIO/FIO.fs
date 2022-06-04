@@ -104,36 +104,14 @@ module FIO =
     /// or fail with an error ('E) when interpreted.
     and FIO<'R, 'E> =
         internal
-          /// The NonBlocking effect models a
-          /// non-blocking action (action)
         | NonBlocking of action: (unit -> Result<'R, 'E>)
-          /// The Blocking effect models a blocking retrieval
-          /// of data on the channel (chan)
         | Blocking of chan: Channel<'R>
-          /// The SendMessage effect models the sending of data (msg)
-          /// on the channel (chan)
         | SendMessage of msg: 'R * chan: Channel<'R>
-          /// The Concurrent effect models the concurrent execution of 
-          /// the effect (effect) in the fiber (fiber)
         | Concurrent of effect: FIO<obj, obj> * fiber: obj * llfiber: LowLevelFiber
-          /// The AwaitFiber effect models the awaiting for the result
-          /// of the given LowLevelFiber (llfiber)
         | AwaitFiber of llfiber: LowLevelFiber
-          /// The Sequence effect models the sequencing of two effects,
-          /// where the success value of the first effect is passed
-          /// on to the second effect. If a failure occurs, this is
-          /// returned immediately.
         | Sequence of effect: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
-          /// The SequenceError effect models the sequencing of two effects,
-          /// where the error value of the first effect is passed
-          /// on to the second effect. If a success occurs, this is
-          /// returned immediately.
         | SequenceError of FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
-          /// The Success effect models the success of an effect
-          /// with the value (result)
         | Success of result: 'R
-          /// The Failure effect models the failure of an effect
-          /// with the value (error)
         | Failure of error: 'E
 
         member internal this.UpcastResult<'R, 'E>() : FIO<obj, 'E> =
@@ -187,6 +165,11 @@ module FIO =
         member internal this.Upcast<'R, 'E>() : FIO<obj, obj> =
             this.UpcastResult().UpcastError()
 
+        /// onError attempts to interpret this effect but if an error occurs
+        /// (errorEff) is then attempted to be interpreted.
+        member this.onError<'R, 'E> (errorEff : FIO<'R, 'E>) : FIO<'R, 'E> =
+            SequenceError (this.UpcastResult(), fun _ -> errorEff)
+
     /// Transforms the expression (func) into a FIO.
     let fio<'R, 'E> (func : Unit -> 'R) : FIO<'R, 'E> =
         NonBlocking (fun _ -> Ok (func ()))
@@ -228,19 +211,15 @@ module FIO =
 
     let (|||) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         spawn eff1 >> fun fiber1 ->
-        eff2 >> fun res2 ->
+        spawn eff2 >> fun fiber2 ->
         await fiber1 >> fun res1 ->
+        await fiber2 >> fun res2 ->
         Success (res1, res2)
     
     let (|||*) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<Unit, 'E> =
         eff1 ||| eff2
         >> fun (_, _) ->
         stop
-
-    /// onError attempts to interpret (eff1) but if an error occurs
-    /// (errorEff) is then attempted to be interpreted.
-    let onError<'R, 'E> (eff : FIO<'R, 'E>) (errorEff : FIO<'R, 'E>) : FIO<'R, 'E> =
-        SequenceError (eff.UpcastResult(), fun _ -> errorEff)
 
     /// race models the parallel execution of two effects (eff1) and (eff2)
     /// where the result of the effect that completes first is returned.

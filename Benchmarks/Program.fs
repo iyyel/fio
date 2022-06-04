@@ -109,13 +109,13 @@ module ThesisExamples =
                 fail $"Uh oh! Failed to compute %A{value}!"
 
         let rand = Random()
-        let xyz = onError (compute "x" rand ||| compute "y" rand) (succeed ("z", "z"))
+        let xyz = (compute "x" rand ||| compute "y" rand).onError (succeed ("z", "z"))
         let fiber = Naive.Runtime().Run xyz
         let result = fiber.Await()
         printfn $"%A{result}"
 
     let problem () =
-        let xyz = onError (fail "x" ||| fail "y") (succeed ("z", "z"))
+        let xyz = (fail "x" ||| fail "y").onError (succeed ("z", "z"))
         let fiber = Naive.Runtime().Run xyz
         let result = fiber.Await()
         printfn $"%A{result}"
