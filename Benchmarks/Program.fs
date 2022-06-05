@@ -101,45 +101,34 @@ module ThesisExamples =
         let result = fiber.Await()
         printfn $"%A{result}"
 
-    let program () =
+    let spawnFiberExample () =
+        let effect = 
+            spawn (succeed 42) >> fun fiber ->
+            await fiber >> fun result ->
+            succeed result
+        ()
 
-        let readFromDatabase : FIO<string, int> =
-            let rand = Random()
-            if rand.NextInt64() = 0L then
+    let externalServices () =
+        let readFromDatabase (rand : Random) =
+            if rand.NextInt64(0, 2) = 0L then
                 succeed "data"
             else
-                fail -1
+                fail "Database not available!"
 
-        let awaitWebservice : FIO<int, string> =
-            let rand = Random()
-            if rand.NextInt64() = 1L then
-                succeed 42
+        let awaitWebservice (rand : Random) =
+            if rand.NextInt64(0, 2) = 1L then
+                succeed 100
             else
                 fail "Webservice not available!"
 
-        
-        //let xyz = (readFromDatabase ||| awaitWebservice).onError (succeed ("default data", 84))
-        let xyz = succeed "test"
-        let fiber = Naive.Runtime().Run xyz
+        let rand = Random()
+        let externalData = readFromDatabase rand ||| awaitWebservice rand
+        let defaultData = succeed ("default", 42)
+        let program = externalData.onError defaultData
+  
+        let fiber = Advanced.Runtime().Run program
         let result = fiber.Await()
         printfn $"%A{result}"
-
-    let problem () =
-   
-        let xyz = (fail "x" >> fun res1 ->
-                   fail "y" >> fun res2 ->
-                   succeed (res1, res2)).onError (succeed ("z", "z"))
-        let fiber = Naive.Runtime().Run xyz
-        let result = fiber.Await()
-        printfn $"%A{result}"
-
-
-    let spawnFiberExample () =
-      let effect = 
-        spawn (succeed 42) >> fun fiber ->
-        await fiber >> fun result ->
-        succeed result
-      ()
 
 let runBenchmarks parsedArgs =
     let configs, runtime, runs, fiberIncrement = parsedArgs

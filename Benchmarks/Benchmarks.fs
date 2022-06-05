@@ -225,7 +225,7 @@ module Threadring =
         send Timer.ChannelTimerMessage.Ready timerChan >> fun _ ->
         create roundCount
         
-    let Create fiberCount roundCount : FIO<int64, obj> =
+    let Create processCount roundCount : FIO<int64, obj> =
         let getRecvChan index (chans: Channel<int> list) =
             match index with
             | index when index - 1 < 0 -> chans.Item(List.length chans - 1)
@@ -245,16 +245,16 @@ module Threadring =
                 let eff = createProcess p roundCount timerChan |||* acc
                 createThreadring ps eff timerChan
 
-        let chans = [for _ in 1 .. fiberCount -> Channel<int>()]
+        let chans = [for _ in 1 .. processCount -> Channel<int>()]
         let procs = createProcesses chans chans 0 []
         let pa, pb, ps =
             match procs with
             | pa::pb::ps -> (pa, pb, ps)
             | _ ->
-                failwith $"createThreadring failed! (at least 2 fibers should exist) fiberCount = %i{fiberCount}"
+                failwith $"createThreadring failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.ChannelTimerMessage<int>>()
         let effEnd = createProcess pb roundCount timerChan |||* createProcess pa roundCount timerChan
-        spawn (Timer.ChannelEffect fiberCount 1 fiberCount timerChan) >> fun fiber ->
+        spawn (Timer.ChannelEffect processCount 1 processCount timerChan) >> fun fiber ->
         send (Timer.ChannelTimerMessage.Chan pa.ChanRecv) timerChan >> fun _ -> 
         createThreadring ps effEnd timerChan >> fun _ ->
         await fiber >> fun res ->
@@ -330,10 +330,10 @@ module Big =
         receive goChan >> fun _ ->
         createSendPings proc.ChansSend (roundCount - 1)
 
-    let Create fiberCount roundCount : FIO<int64, obj> =
-        let rec createProcesses fiberCount =
-            let rec createRecvChanProcesses fiberCount acc =
-                match fiberCount with
+    let Create processCount roundCount : FIO<int64, obj> =
+        let rec createProcesses processCount =
+            let rec createRecvChanProcesses processCount acc =
+                match processCount with
                 | 0 -> acc
                 | count -> 
                     let proc = { Name = $"p{count - 1}"
@@ -353,7 +353,7 @@ module Big =
                                         ChansSend = chansSend }
                            create ps (prevRecvChanProcs @ [p]) (proc::acc)
 
-            let recvChanProcesses = createRecvChanProcesses fiberCount []
+            let recvChanProcesses = createRecvChanProcesses processCount []
             create recvChanProcesses [] []
 
         let rec createBig procs msg timerChan goChan acc =
@@ -362,17 +362,17 @@ module Big =
             | p::ps -> let eff = createProcess p msg roundCount timerChan goChan |||* acc
                        createBig ps (msg + 10) timerChan goChan eff
 
-        let procs = createProcesses fiberCount
+        let procs = createProcesses processCount
         let pa, pb, ps = 
             match procs with
             | pa::pb::ps -> (pa, pb, ps)
             | _ ->
-            failwith $"createBig failed! (at least 2 fibers should exist) fiberCount = %i{fiberCount}"
+            failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.ChannelTimerMessage<int>>()
         let goChan = Channel<int>()
-        let effEnd = createProcess pa (10 * (fiberCount - 2)) roundCount timerChan goChan |||*
-                     createProcess pb (10 * (fiberCount - 1)) roundCount timerChan goChan
-        spawn (Timer.ChannelEffect fiberCount fiberCount fiberCount timerChan) >> fun fiber ->
+        let effEnd = createProcess pa (10 * (processCount - 2)) roundCount timerChan goChan |||*
+                     createProcess pb (10 * (processCount - 1)) roundCount timerChan goChan
+        spawn (Timer.ChannelEffect processCount processCount processCount timerChan) >> fun fiber ->
         send (Timer.ChannelTimerMessage.Chan goChan) timerChan >> fun _ -> 
         createBig ps 0 timerChan goChan effEnd >> fun _ ->
         await fiber >> fun res ->
@@ -419,9 +419,9 @@ module Bang =
         receive goChan >> fun _ ->
         create proc roundCount
 
-    let Create fiberCount roundCount : FIO<int64, obj> =
-        let rec createSendProcesses recvProcChan fiberCount =
-            List.map (fun count -> { Name = $"p{count}"; Chan = recvProcChan }) [1..fiberCount]
+    let Create processCount roundCount : FIO<int64, obj> =
+        let rec createSendProcesses recvProcChan processCount =
+            List.map (fun count -> { Name = $"p{count}"; Chan = recvProcChan }) [1..processCount]
 
         let rec createBang recvProc sendProcs msg acc timerChan goChan =
             match sendProcs with
@@ -431,16 +431,16 @@ module Bang =
                 createBang recvProc ps (msg + 10) eff timerChan goChan
 
         let recvProc = { Name = "p0"; Chan = Channel<int>() }
-        let sendProcs = createSendProcesses recvProc.Chan fiberCount
+        let sendProcs = createSendProcesses recvProc.Chan processCount
         let p, ps = 
             match List.rev sendProcs with
             | p::ps -> (p, ps)
-            | _     -> failwith $"createBang failed! (at least 1 sending process should exist) fiberCount = %i{fiberCount}"
+            | _     -> failwith $"createBang failed! (at least 1 sending process should exist) processCount = %i{processCount}"
         let timerChan = Channel<Timer.ChannelTimerMessage<int>>()
         let goChan = Channel<int>()
         let effEnd = createSendProcess p 0 roundCount timerChan goChan |||*
-                     createRecvProcess recvProc (fiberCount * roundCount) timerChan goChan
-        spawn (Timer.ChannelEffect (fiberCount + 1) (fiberCount + 1) 1 timerChan) >> fun fiber ->
+                     createRecvProcess recvProc (processCount * roundCount) timerChan goChan
+        spawn (Timer.ChannelEffect (processCount + 1) (processCount + 1) 1 timerChan) >> fun fiber ->
         send (Timer.ChannelTimerMessage.Chan goChan) timerChan >> fun _ -> 
         createBang recvProc ps 10 effEnd timerChan goChan >> fun _ ->
         await fiber >> fun res ->
@@ -457,10 +457,10 @@ module Spawn =
         send (Timer.StopwatchTimerMessage.Stop) timerChan
         >> fun _ -> stop
        
-    let Create fiberCount : FIO<int64, obj> =
+    let Create processCount : FIO<int64, obj> =
 
-        let rec createSpawnTime fiberCount timerChan acc =
-            match fiberCount with
+        let rec createSpawnTime processCount timerChan acc =
+            match processCount with
             | 0 -> acc
             | count -> 
                 let eff = createProcess timerChan |||* acc
@@ -470,10 +470,10 @@ module Spawn =
         let effEnd = createProcess timerChan |||*
                      createProcess timerChan
         let stopwatch = Stopwatch()
-        spawn (Timer.StopwatchEffect fiberCount timerChan) >> fun fiber ->
+        spawn (Timer.StopwatchEffect processCount timerChan) >> fun fiber ->
         stopwatch.Start()
         send (Timer.StopwatchTimerMessage.Start stopwatch) timerChan >> fun _ ->
-        createSpawnTime (fiberCount - 2) timerChan effEnd >> fun _ ->
+        createSpawnTime (processCount - 2) timerChan effEnd >> fun _ ->
         await fiber >> fun res ->
         succeed res
 
@@ -489,19 +489,19 @@ module Benchmark =
         { RoundCount: int }
 
     and ThreadringConfig =
-        { FiberCount: int
+        { ProcessCount: int
           RoundCount: int }
 
     and BigConfig =
-        { FiberCount: int
+        { ProcessCount: int
           RoundCount: int }
 
     and BangConfig =
-        { FiberCount: int
+        { ProcessCount: int
           RoundCount: int }
 
     and SpawnConfig =
-        { FiberCount: int }
+        { ProcessCount: int }
 
     and BenchmarkConfig =
         | Pingpong of PingpongConfig
@@ -520,13 +520,13 @@ module Benchmark =
             | Pingpong config ->
                 $"roundcount%i{config.RoundCount}"
             | Threadring config ->
-                $"fibercount%i{config.FiberCount}-roundcount%i{config.RoundCount}"
+                $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
             | Big config ->
-                $"fibercount%i{config.FiberCount}-roundcount%i{config.RoundCount}"
+                $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
             | Bang config ->
-                $"fibercount%i{config.FiberCount}-roundcount%i{config.RoundCount}"
+                $"processcount%i{config.ProcessCount}-roundcount%i{config.RoundCount}"
             | Spawn config ->
-                $"fibercount%i{config.FiberCount}"
+                $"processcount%i{config.ProcessCount}"
 
         let rec fileContentStr times acc =
             match times with
@@ -563,13 +563,13 @@ module Benchmark =
         | Pingpong config ->
             $"Pingpong (RoundCount: %i{config.RoundCount})"
         | Threadring config ->
-            $"Threadring (FiberCount: %i{config.FiberCount} RoundCount: %i{config.RoundCount})"
+            $"Threadring (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
         | Big config ->
-            $"Big (FiberCount: %i{config.FiberCount} RoundCount: %i{config.RoundCount})"
+            $"Big (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
         | Bang config ->
-            $"Bang (FiberCount: %i{config.FiberCount} RoundCount: %i{config.RoundCount})"
+            $"Bang (ProcessCount: %i{config.ProcessCount} RoundCount: %i{config.RoundCount})"
         | Spawn config ->
-            $"Spawn (FiberCount: %i{config.FiberCount})"
+            $"Spawn (ProcessCount: %i{config.ProcessCount})"
 
     let private printResult (result: BenchmarkResult) =
         let rec runExecTimesStr runExecTimes acc =
@@ -612,13 +612,13 @@ module Benchmark =
             | Pingpong config ->
                 ("Pingpong", Pingpong.Create config.RoundCount)
             | Threadring config ->
-                ("Threadring", Threadring.Create config.FiberCount config.RoundCount)
+                ("Threadring", Threadring.Create config.ProcessCount config.RoundCount)
             | Big config ->
-                ("Big", Big.Create config.FiberCount config.RoundCount)
+                ("Big", Big.Create config.ProcessCount config.RoundCount)
             | Bang config ->
-                ("Bang", Bang.Create config.FiberCount config.RoundCount)
+                ("Bang", Bang.Create config.ProcessCount config.RoundCount)
             | Spawn config ->
-                ("Spawn", Spawn.Create config.FiberCount)
+                ("Spawn", Spawn.Create config.ProcessCount)
 
         let rec executeBenchmark config curRun acc =
             let bench, eff = createBenchmark config
@@ -638,22 +638,22 @@ module Benchmark =
         let bench, runExecTimes = executeBenchmark config 0 []
         (bench, config, runtimeFileName, runtimeName, runExecTimes)
 
-    let Run configs runtime runs (fiberCountInc, incTimes) =
+    let Run configs runtime runs (processCountInc, incTimes) =
         let newConfig config incTime =
             match config with
             | Pingpong config ->
                 Pingpong config
             | Threadring config ->
                 Threadring { RoundCount = config.RoundCount;
-                             FiberCount = config.FiberCount + (fiberCountInc * incTime) }
+                             ProcessCount = config.ProcessCount + (processCountInc * incTime) }
             | Big config ->
                 Big { RoundCount = config.RoundCount;
-                      FiberCount = config.FiberCount + (fiberCountInc * incTime) }
+                      ProcessCount = config.ProcessCount + (processCountInc * incTime) }
             | Bang config ->
                 Bang { RoundCount = config.RoundCount;
-                       FiberCount = config.FiberCount + (fiberCountInc * incTime) }
+                       ProcessCount = config.ProcessCount + (processCountInc * incTime) }
             | Spawn config ->
-                Spawn { FiberCount = config.FiberCount + (fiberCountInc * incTime) }
+                Spawn { ProcessCount = config.ProcessCount + (processCountInc * incTime) }
 
         let configs = configs @ (List.concat <| List.map (fun incTime ->
             List.map (fun config -> newConfig config incTime) configs) [1..incTimes])

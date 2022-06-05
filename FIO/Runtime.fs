@@ -194,7 +194,7 @@ module Runtime =
                     | Error err ->
                         match errAcc with
                         | [] -> Error err
-                        | x::xs -> this.LowLevelRun (x err) acc xs
+                        | x::xs -> this.LowLevelRun (x err) [] xs
                 | Blocking chan ->
                     let value = chan.Take()
                     match acc with
@@ -221,7 +221,7 @@ module Runtime =
                     | Error err ->
                         match errAcc with
                         | [] -> Error err
-                        | x::xs -> this.LowLevelRun (x err) acc xs
+                        | x::xs -> this.LowLevelRun (x err) [] xs
                 | SequenceSuccess (eff, cont) ->
                     this.LowLevelRun eff (cont :: acc) errAcc
                 | SequenceError (eff, cont) ->
@@ -229,11 +229,11 @@ module Runtime =
                 | Success res ->
                     match acc with
                     | [] -> Ok res
-                    | x::xs -> this.LowLevelRun (x res) xs []
+                    | x::xs -> this.LowLevelRun (x res) xs errAcc
                 | Failure err ->
                     match errAcc with
                     | [] -> Error err
-                    | x::xs -> this.LowLevelRun (x err) [] xs
+                    | x::xs -> this.LowLevelRun (x err) acc xs
 
             override this.Run<'R, 'E> (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = new Fiber<'R, 'E>()
@@ -388,7 +388,7 @@ module Runtime =
                             | Error err ->
                                 match errAcc with
                                 | [] -> (Failure err, Evaluated, newEvalSteps)
-                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps acc xs
+                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps [] xs
                     | Blocking chan ->
                         if prevAction = RescheduleForBlocking (BlockingChannel chan) then
                             let result = chan.Take()
@@ -417,7 +417,7 @@ module Runtime =
                             | Error err ->
                                 match errAcc with
                                 | [] -> (Failure err, Evaluated, newEvalSteps)
-                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps acc xs
+                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps [] xs
                         else
                             (backtrack acc (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
@@ -427,7 +427,7 @@ module Runtime =
                     | Success res ->
                         match acc with
                         | [] -> (Success res, Evaluated, newEvalSteps)
-                        | x::xs -> this.LowLevelRun (x res) Evaluated evalSteps xs []
+                        | x::xs -> this.LowLevelRun (x res) Evaluated evalSteps xs errAcc
                     | Failure err ->
                         match errAcc with
                         | [] -> (Failure err, Evaluated, newEvalSteps)
@@ -620,7 +620,7 @@ module Runtime =
                             | Error err ->
                                 match errAcc with
                                 | [] -> (Failure err, Evaluated, newEvalSteps)
-                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps acc xs
+                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps [] xs
                     | Blocking chan ->
                         if prevAction = RescheduleForBlocking (BlockingChannel chan) then
                             let result = chan.Take()
@@ -650,7 +650,7 @@ module Runtime =
                             | Error err ->
                                 match errAcc with
                                 | [] -> (Failure err, Evaluated, newEvalSteps)
-                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps acc xs
+                                | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps [] xs
                         else
                             (backtrack acc (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
@@ -660,7 +660,7 @@ module Runtime =
                     | Success res ->
                         match acc with
                         | [] -> (Success res, Evaluated, newEvalSteps)
-                        | x::xs -> this.LowLevelRun (x res) Evaluated evalSteps xs []
+                        | x::xs -> this.LowLevelRun (x res) Evaluated evalSteps xs errAcc
                     | Failure err ->
                         match errAcc with
                         | [] -> (Failure err, Evaluated, newEvalSteps)

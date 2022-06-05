@@ -6,7 +6,6 @@
 
 namespace FSharp.FIO
 
-open System
 open System.Threading
 open System.Collections.Concurrent
 
