@@ -109,7 +109,7 @@ module FIO =
         | SendMessage of msg: 'R * chan: Channel<'R>
         | Concurrent of effect: FIO<obj, obj> * fiber: obj * llfiber: LowLevelFiber
         | AwaitFiber of llfiber: LowLevelFiber
-        | Sequence of effect: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
+        | SequenceSuccess of effect: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
         | SequenceError of FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
         | Success of result: 'R
         | Failure of error: 'E
@@ -129,8 +129,8 @@ module FIO =
                 Concurrent (eff, fiber, llfiber)
             | AwaitFiber llfiber ->
                 AwaitFiber llfiber
-            | Sequence (eff, cont) ->
-                Sequence (eff, fun res -> (cont res).UpcastResult())
+            | SequenceSuccess (eff, cont) ->
+                SequenceSuccess (eff, fun res -> (cont res).UpcastResult())
             | SequenceError (eff, cont) ->
                 SequenceError (eff, fun res -> (cont res).UpcastResult())
             | Success res ->
@@ -153,8 +153,8 @@ module FIO =
                 Concurrent (eff, fiber, llfiber)
             | AwaitFiber llfiber ->
                 AwaitFiber llfiber
-            | Sequence (eff, cont) ->
-                Sequence (eff.UpcastError(), fun res -> (cont res).UpcastError())
+            | SequenceSuccess (eff, cont) ->
+                SequenceSuccess (eff.UpcastError(), fun res -> (cont res).UpcastError())
             | SequenceError (eff, cont) ->
                 SequenceError (eff.UpcastError(), fun res -> (cont res).UpcastError())
             | Success res ->
@@ -207,7 +207,7 @@ module FIO =
         AwaitFiber <| fiber.ToLowLevel()
 
     let (>>) (eff : FIO<'R1, 'E>) (cont : 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
-        Sequence (eff.UpcastResult(), fun res -> cont (res :?> 'R1))
+        SequenceSuccess (eff.UpcastResult(), fun res -> cont (res :?> 'R1))
 
     let (|||) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         spawn eff1 >> fun fiber1 ->

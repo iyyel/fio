@@ -102,20 +102,33 @@ module ThesisExamples =
         printfn $"%A{result}"
 
     let program () =
-        let compute value (rand : Random) =
-            if 1L = 0L then
-                succeed value
-            else
-                fail $"Uh oh! Failed to compute %A{value}!"
 
-        let rand = Random()
-        let xyz = (compute "x" rand ||| compute "y" rand).onError (succeed ("z", "z"))
+        let readFromDatabase : FIO<string, int> =
+            let rand = Random()
+            if rand.NextInt64() = 0L then
+                succeed "data"
+            else
+                fail -1
+
+        let awaitWebservice : FIO<int, string> =
+            let rand = Random()
+            if rand.NextInt64() = 1L then
+                succeed 42
+            else
+                fail "Webservice not available!"
+
+        
+        //let xyz = (readFromDatabase ||| awaitWebservice).onError (succeed ("default data", 84))
+        let xyz = succeed "test"
         let fiber = Naive.Runtime().Run xyz
         let result = fiber.Await()
         printfn $"%A{result}"
 
     let problem () =
-        let xyz = (fail "x" ||| fail "y").onError (succeed ("z", "z"))
+   
+        let xyz = (fail "x" >> fun res1 ->
+                   fail "y" >> fun res2 ->
+                   succeed (res1, res2)).onError (succeed ("z", "z"))
         let fiber = Naive.Runtime().Run xyz
         let result = fiber.Await()
         printfn $"%A{result}"
@@ -134,9 +147,7 @@ let runBenchmarks parsedArgs =
 
 [<EntryPoint>]
 let main args =
-    //let parser = ArgParser.Parser()
-    //parser.PrintArgs args
-    //runBenchmarks <| parser.ParseArgs args
-
-    ThesisExamples.problem()
+    let parser = ArgParser.Parser()
+    parser.PrintArgs args
+    runBenchmarks <| parser.ParseArgs args
     0
