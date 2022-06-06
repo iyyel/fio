@@ -113,13 +113,13 @@ module ThesisExamples =
             if rand.Next(0, 2) = 0 then
                 succeed "data"
             else
-                fail "Database not available!"
+                fail "Database is not available!"
 
         let awaitWebservice (rand : Random) =
             if rand.Next(0, 2) = 1 then
                 succeed 100
             else
-                fail "Webservice not available!"
+                fail "Webservice is not available!"
 
         let rand = Random()
         let externalData = readFromDatabase rand ||| awaitWebservice rand
@@ -132,14 +132,14 @@ module ThesisExamples =
 
     let raceServices () =
         let languageServerEast (rand : Random) =
-            fio <| fun _ ->
-            succeed <| Thread.Sleep(rand.Next(0, 101))
+            fio (fun _ ->
+            succeed (Thread.Sleep(rand.Next(0, 101))))
             >> fun _ ->
             succeed "language data (east)"
           
         let languageServerWest (rand : Random) =
-            fio <| fun _ ->
-            succeed <| Thread.Sleep(rand.Next(0, 101)) 
+            fio (fun _ ->
+            succeed (Thread.Sleep(rand.Next(0, 101))))
             >> fun _ ->
             succeed "language data (west)"
 
