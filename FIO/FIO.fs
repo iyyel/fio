@@ -60,14 +60,12 @@ module FIO =
         chan: BlockingCollection<Result<obj, obj>>,
         blockingWorkItems: BlockingCollection<WorkItem>,
         completed: int64 ref) =
-        let _lock = obj()
         member internal _.Complete res =
-            lock _lock (fun _ ->
-                if Interlocked.Read completed = 0 then
-                    Interlocked.Exchange(completed, 1) |> ignore
-                    chan.Add res
-                else
-                    failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!")
+            if Interlocked.Read completed = 0 then
+                Interlocked.Exchange(completed, 1) |> ignore
+                chan.Add res
+            else
+                failwith "LowLevelFiber: Complete was called on an already completed LowLevelFiber!"
         member internal _.Await() =
             let res = chan.Take()
             chan.Add res

@@ -92,7 +92,7 @@ module ThesisExamples =
             let newAcc = sender chan count |||* acc
             create chan (count - 1) newAcc
 
-        let fiberCount = 10000
+        let fiberCount = 100000
         let chan = Channel<int>()
         let acc = sender chan fiberCount |||*
                   receiver chan fiberCount
@@ -131,21 +131,21 @@ module ThesisExamples =
         printfn $"%A{result}"
 
     let raceServices () =
-        let languageServerEast (rand : Random) =
+        let serverRegionA (rand : Random) =
             fio (fun _ ->
             succeed (Thread.Sleep(rand.Next(0, 101))))
             >> fun _ ->
-            succeed "language data (east)"
+            succeed "server data (Region A)"
           
-        let languageServerWest (rand : Random) =
+        let serverRegionB (rand : Random) =
             fio (fun _ ->
             succeed (Thread.Sleep(rand.Next(0, 101))))
             >> fun _ ->
-            succeed "language data (west)"
+            succeed "server data (Region B)"
 
         let rand = Random()
-        let program = race (languageServerEast rand)
-                           (languageServerWest rand)
+        let program = race (serverRegionA rand)
+                           (serverRegionB rand)
 
         let fiber = Advanced.Runtime().Run program
         let result = fiber.Await()
