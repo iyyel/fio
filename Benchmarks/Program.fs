@@ -110,13 +110,13 @@ module ThesisExamples =
 
     let externalServices () =
         let readFromDatabase (rand : Random) =
-            if rand.NextInt64(0, 2) = 0L then
+            if rand.Next(0, 2) = 0 then
                 succeed "data"
             else
                 fail "Database not available!"
 
         let awaitWebservice (rand : Random) =
-            if rand.NextInt64(0, 2) = 1L then
+            if rand.Next(0, 2) = 1 then
                 succeed 100
             else
                 fail "Webservice not available!"
@@ -126,6 +126,27 @@ module ThesisExamples =
         let defaultData = succeed ("default", 42)
         let program = externalData.onError defaultData
   
+        let fiber = Advanced.Runtime().Run program
+        let result = fiber.Await()
+        printfn $"%A{result}"
+
+    let raceServices () =
+        let languageServerEast (rand : Random) =
+            fio <| fun _ ->
+            succeed <| Thread.Sleep(rand.Next(0, 101))
+            >> fun _ ->
+            succeed "language data (east)"
+          
+        let languageServerWest (rand : Random) =
+            fio <| fun _ ->
+            succeed <| Thread.Sleep(rand.Next(0, 101)) 
+            >> fun _ ->
+            succeed "language data (west)"
+
+        let rand = Random()
+        let program = race (languageServerEast rand)
+                           (languageServerWest rand)
+
         let fiber = Advanced.Runtime().Run program
         let result = fiber.Await()
         printfn $"%A{result}"
