@@ -6,7 +6,12 @@
 
 module Program
 
+open System.Threading
+
+ThreadPool.SetMaxThreads(32767, 32767) |> ignore
+ThreadPool.SetMinThreads(32767, 32767) |> ignore
+
 [<EntryPoint>]
 let main args =
-    Examples.errorHandlingExample()
+    Examples.highConcurrencyExample()
     0

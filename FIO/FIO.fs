@@ -203,9 +203,8 @@ module FIO =
 
     let (|||) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         spawn eff1 >> fun fiber1 ->
-        spawn eff2 >> fun fiber2 ->
+        eff2 >> fun res2 ->
         await fiber1 >> fun res1 ->
-        await fiber2 >> fun res2 ->
         Success (res1, res2)
     
     let (|||*) (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<Unit, 'E> =
