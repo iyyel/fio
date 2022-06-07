@@ -6,20 +6,7 @@
 
 module Program
 
-open Benchmarks.Benchmark
-
-open System.Threading
-
-ThreadPool.SetMaxThreads(32767, 32767) |> ignore
-ThreadPool.SetMinThreads(32767, 32767) |> ignore
-
-let runBenchmarks parsedArgs =
-    let configs, runtime, runs, fiberIncrement = parsedArgs
-    Run configs runtime runs fiberIncrement
-
 [<EntryPoint>]
 let main args =
-    let parser = ArgParser.Parser()
-    parser.PrintArgs args
-    runBenchmarks <| parser.ParseArgs args
+    Examples.errorHandlingExample()
     0

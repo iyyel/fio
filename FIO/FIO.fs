@@ -107,7 +107,7 @@ module FIO =
         | Concurrent of effect: FIO<obj, obj> * fiber: obj * llfiber: LowLevelFiber
         | AwaitFiber of llfiber: LowLevelFiber
         | SequenceSuccess of effect: FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
-        | SequenceError of FIO<obj, 'E> * cont: (obj -> FIO<'R, 'E>)
+        | SequenceError of FIO<obj, obj> * cont: (obj -> FIO<'R, 'E>)
         | Success of result: 'R
         | Failure of error: 'E
 
@@ -162,11 +162,6 @@ module FIO =
         member internal this.Upcast<'R, 'E>() : FIO<obj, obj> =
             this.UpcastResult().UpcastError()
 
-        /// onError attempts to interpret this effect but if an error occurs
-        /// (errorEff) is then attempted to be interpreted.
-        member this.onError<'R, 'E> (errorEff : FIO<'R, 'E>) : FIO<'R, 'E> =
-            SequenceError (this.UpcastResult(), fun _ -> errorEff)
-
     /// Transforms the expression (func) into a FIO.
     let fio<'R, 'E> (func : Unit -> 'R) : FIO<'R, 'E> =
         NonBlocking (fun _ -> Ok (func ()))
@@ -218,7 +213,14 @@ module FIO =
         >> fun (_, _) ->
         stop
 
-    let zip (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
+    /// attempt attempts to interpret the (eff) effect but if an error occurs
+    /// the error is passed to the continuation.
+    let attempt<'R, 'E1, 'E> (eff : FIO<'R, 'E1>) (cont : 'E1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
+        SequenceError (eff.Upcast(), fun res -> cont (res :?> 'E1))
+
+    /// zip returns the results of (eff1) and (eff2) in a tuple.
+    /// Errors are returned immediately.
+    let zip<'R1, 'R2, 'E> (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         eff1 >> fun res1 ->
         eff2 >> fun res2 ->
         succeed (res1, res2)
