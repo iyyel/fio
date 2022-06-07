@@ -222,7 +222,7 @@ module FIO =
     let zip<'R1, 'R2, 'E> (eff1 : FIO<'R1, 'E>) (eff2 : FIO<'R2, 'E>) : FIO<'R1 * 'R2, 'E> =
         eff1 >> fun res1 ->
         eff2 >> fun res2 ->
-        succeed (res1, res2)
+        Success (res1, res2)
 
     /// race models the parallel execution of two effects (eff1) and (eff2)
     /// where the result of the effect that completes first is returned.
