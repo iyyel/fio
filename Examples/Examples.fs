@@ -60,7 +60,7 @@ let errorHandlingExample () =
         let result = zip databaseResult webserviceResult
         attempt result (fun _ -> succeed ("default", 'D'))
   
-    let fiber = Advanced.Runtime().Run program
+    let fiber = Naive.Runtime().Run program
     let result = fiber.Await()
     printfn $"%A{result}"
 

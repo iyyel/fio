@@ -181,19 +181,19 @@ module Runtime =
             inherit Runner()
 
             member internal this.LowLevelRun eff
-                (acc : List<obj -> FIO<obj, obj>>)
-                (errAcc : List<obj -> FIO<obj, obj>>)
+                (succConts : List<obj -> FIO<obj, obj>>)
+                (errConts : List<obj -> FIO<obj, obj>>)
                 : Result<obj, obj> =
 
                 let handleSuccess res =
-                    match acc with
+                    match succConts with
                     | [] -> Ok res
-                    | x::xs -> this.LowLevelRun (x res) xs errAcc
+                    | cont::conts -> this.LowLevelRun (cont res) conts errConts
 
                 let handleError err =
-                    match errAcc with
+                    match errConts with
                     | [] -> Error err
-                    | x::xs -> this.LowLevelRun (x err) [] xs
+                    | cont::conts -> this.LowLevelRun (cont err) succConts conts
 
                 let handleResult result =
                     match result with
@@ -217,9 +217,9 @@ module Runtime =
                 | AwaitFiber llfiber ->
                     handleResult <| llfiber.Await()
                 | SequenceSuccess (eff, cont) ->
-                    this.LowLevelRun eff (cont :: acc) errAcc
+                    this.LowLevelRun eff (cont :: succConts) errConts
                 | SequenceError (eff, cont) ->
-                    this.LowLevelRun eff acc (cont :: errAcc)
+                    this.LowLevelRun eff succConts (cont :: errConts)
                 | Success res ->
                     handleSuccess res
                 | Failure err ->
@@ -358,28 +358,28 @@ module Runtime =
             new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
             member internal this.LowLevelRun eff prevAction evalSteps
-                (acc : List<obj -> FIO<obj, obj>>)
-                (errAcc : List<obj -> FIO<obj, obj>>) : FIO<obj, obj> * Action * int =
+                (succConts : List<obj -> FIO<obj, obj>>)
+                (errConts : List<obj -> FIO<obj, obj>>) : FIO<obj, obj> * Action * int =
 
                 let handleSuccess res newEvalSteps =
-                    match acc with
+                    match succConts with
                     | [] -> (Success res, Evaluated, newEvalSteps)
-                    | x::xs -> this.LowLevelRun (x res) Evaluated evalSteps xs errAcc
+                    | cont::conts -> this.LowLevelRun (cont res) Evaluated evalSteps conts errConts
 
                 let handleError err newEvalSteps =
-                    match errAcc with
+                    match errConts with
                     | [] -> (Failure err, Evaluated, newEvalSteps)
-                    | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps [] xs
+                    | cont::conts -> this.LowLevelRun (cont err) Evaluated evalSteps succConts conts
 
                 let handleResult result newEvalSteps =
                     match result with
                     | Ok res -> handleSuccess res newEvalSteps
                     | Error err -> handleError err newEvalSteps
 
-                let rec backtrack acc eff =
-                    match acc with
+                let rec backtrack succConts eff =
+                    match succConts with
                     | [] -> eff
-                    | x::xs -> backtrack xs (SequenceSuccess (eff, x))
+                    | cont::conts -> backtrack conts (SequenceSuccess (eff, cont))
 
                 if evalSteps = 0 then
                     (eff, RescheduleForRunning, 0)
@@ -393,7 +393,7 @@ module Runtime =
                             let res = chan.Take()
                             handleSuccess res newEvalSteps
                         else
-                            (backtrack acc (Blocking chan), RescheduleForBlocking (BlockingChannel chan), evalSteps)
+                            (backtrack succConts (Blocking chan), RescheduleForBlocking (BlockingChannel chan), evalSteps)
                     | SendMessage (value, chan) ->
                         chan.Add value
                         handleSuccess value newEvalSteps
@@ -404,11 +404,11 @@ module Runtime =
                         if llfiber.Completed() then
                             handleResult (llfiber.Await()) newEvalSteps
                         else
-                            (backtrack acc (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
+                            (backtrack succConts (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps (cont :: acc) errAcc
+                        this.LowLevelRun eff prevAction evalSteps (cont :: succConts) errConts
                     | SequenceError (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps acc (cont :: errAcc)
+                        this.LowLevelRun eff prevAction evalSteps succConts (cont :: errConts)
                     | Success res ->
                         handleSuccess res newEvalSteps
                     | Failure err ->
@@ -581,28 +581,28 @@ module Runtime =
             new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
             member internal this.LowLevelRun eff prevAction evalSteps
-                (acc : List<obj -> FIO<obj, obj>>)
-                (errAcc : List<obj -> FIO<obj, obj>>) : FIO<obj, obj> * Action * int =
+                (succConts : List<obj -> FIO<obj, obj>>)
+                (errConts : List<obj -> FIO<obj, obj>>) : FIO<obj, obj> * Action * int =
 
                 let handleSuccess res newEvalSteps =
-                    match acc with
+                    match succConts with
                     | [] -> (Success res, Evaluated, newEvalSteps)
-                    | x::xs -> this.LowLevelRun (x res) Evaluated evalSteps xs errAcc
+                    | cont::conts -> this.LowLevelRun (cont res) Evaluated evalSteps conts errConts
 
                 let handleError err newEvalSteps =
-                    match errAcc with
+                    match errConts with
                     | [] -> (Failure err, Evaluated, newEvalSteps)
-                    | x::xs -> this.LowLevelRun (x err) Evaluated evalSteps [] xs
+                    | cont::conts -> this.LowLevelRun (cont err) Evaluated evalSteps succConts conts
 
                 let handleResult result newEvalSteps =
                     match result with
                     | Ok res -> handleSuccess res newEvalSteps
                     | Error err -> handleError err newEvalSteps
 
-                let rec backtrack acc eff =
-                    match acc with
+                let rec backtrack succConts eff =
+                    match succConts with
                     | [] -> eff
-                    | x::xs -> backtrack xs (SequenceSuccess (eff, x))
+                    | cont::conts -> backtrack conts (SequenceSuccess (eff, cont))
       
                 if evalSteps = 0 then
                     (eff, RescheduleForRunning, 0)
@@ -616,7 +616,7 @@ module Runtime =
                             let res = chan.Take()
                             handleSuccess res newEvalSteps
                         else
-                            (backtrack acc (Blocking chan), RescheduleForBlocking (BlockingChannel chan), evalSteps)
+                            (backtrack succConts (Blocking chan), RescheduleForBlocking (BlockingChannel chan), evalSteps)
                     | SendMessage (value, chan) ->
                         chan.Add value
                         blockingEventQueue.Add <| chan
@@ -628,11 +628,11 @@ module Runtime =
                         if llfiber.Completed() then
                             handleResult (llfiber.Await()) newEvalSteps
                         else
-                            (backtrack acc (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
+                            (backtrack succConts (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps (cont :: acc) errAcc
+                        this.LowLevelRun eff prevAction evalSteps (cont :: succConts) errConts
                     | SequenceError (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps acc (cont :: errAcc)
+                        this.LowLevelRun eff prevAction evalSteps succConts (cont :: errConts)
                     | Success res ->
                         handleSuccess res newEvalSteps
                     | Failure err ->
