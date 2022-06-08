@@ -109,7 +109,7 @@ module Runtime =
 
             member internal _.SetBlockingWorkers workers =
                 blockingWorkers <- workers
-         #endif
+        #endif
 
         #if MONITOR
         type internal Monitor(
@@ -143,7 +143,6 @@ module Runtime =
                 for workItem in queue.ToArray() do
                     let llfiber = workItem.LLFiber
                     printfn $"MONITOR:    ------------ workItem start ------------"
-                    printfn $"MONITOR:      WorkItem LLFiber Id: %A{llfiber.Id}"
                     printfn $"MONITOR:      WorkItem LLFiber completed: %A{llfiber.Completed()}"
                     printfn $"MONITOR:      WorkItem LLFiber blocking items count: %A{llfiber.BlockingWorkItemsCount()}"
                     printfn $"MONITOR:      WorkItem PrevAction: %A{workItem.PrevAction}"
@@ -158,14 +157,11 @@ module Runtime =
                     printfn $"MONITOR:    ------------ BlockingItem * WorkItem start ------------"
                     match blockingItem with
                     | BlockingChannel chan ->
-                        printfn $"MONITOR:      Blocking Channel Id: %A{chan.Id}"
                         printfn $"MONITOR:      Blocking Channel count: %A{chan.Count}"
                     | BlockingFiber llfiber ->
-                        printfn $"MONITOR:      Blocking LLFiber Id: %A{llfiber.Id}"
                         printfn $"MONITOR:      Blocking LLFiber completed: %A{llfiber.Completed()}"
                         printfn $"MONITOR:      Blocking LLFiber blocking items count: %A{llfiber.BlockingWorkItemsCount()}"
                     let llfiber = workItem.LLFiber
-                    printfn $"MONITOR:      WorkItem LLFiber Id: %A{llfiber.Id}"
                     printfn $"MONITOR:      WorkItem LLFiber completed: %A{llfiber.Completed()}"
                     printfn $"MONITOR:      WorkItem LLFiber blocking items count: %A{llfiber.BlockingWorkItemsCount()}"
                     printfn $"MONITOR:      WorkItem PrevAction: %A{workItem.PrevAction}"
@@ -178,7 +174,6 @@ module Runtime =
                 printfn "MONITOR: ------------ blockingEventQueue information start ------------"
                 for blockingChan in queue.ToArray() do
                     printfn $"MONITOR:    ------------ blockingChan start ------------"
-                    printfn $"MONITOR:      Id: %A{blockingChan.Id}"
                     printfn $"MONITOR:      Count: %A{blockingChan.Count()}"
                     printfn $"MONITOR:    ------------ blockingChan end ------------"
                 printfn "MONITOR: ------------ blockingEventQueue information end ------------"
