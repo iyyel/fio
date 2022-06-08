@@ -17,6 +17,32 @@ module Runtime =
     type Runner() =
         abstract Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
 
+    and internal Context =
+        { SuccConts: BlockingCollection<obj -> FIO<obj, obj>>;
+          ErrConts: BlockingCollection<obj -> FIO<obj, obj>> }
+
+        static member Create =
+            { SuccConts = new BlockingCollection<obj -> FIO<obj, obj>>();
+              ErrConts = new BlockingCollection<obj -> FIO<obj, obj>>() }
+
+        member this.AddSuccCont cont =
+            this.SuccConts.Add cont
+
+        member this.AddErrCont cont =
+            this.ErrConts.Add cont
+
+        member this.GetSuccCont() =
+            this.SuccConts.Take()
+
+        member this.GetErrCont() =
+            this.ErrConts.Take()
+
+        member this.SuccContCount() =
+            this.SuccConts.Count
+
+        member this.ErrContCount() =
+            this.ErrConts.Count
+
     #if DETECT_DEADLOCK
     [<AbstractClass>]
     type internal Worker() =
@@ -188,12 +214,12 @@ module Runtime =
                 let handleSuccess res =
                     match succConts with
                     | [] -> Ok res
-                    | cont::conts -> this.LowLevelRun (cont res) conts errConts
+                    | cont::conts -> this.LowLevelRun (cont res) conts []
 
                 let handleError err =
                     match errConts with
                     | [] -> Error err
-                    | cont::conts -> this.LowLevelRun (cont err) succConts conts
+                    | cont::conts -> this.LowLevelRun (cont err) [] conts
 
                 let handleResult result =
                     match result with

@@ -8,6 +8,7 @@ namespace FSharp.FIO
 
 open System.Threading
 open System.Collections.Concurrent
+open System
 
 [<AutoOpen>]
 module FIO =
@@ -215,7 +216,7 @@ module FIO =
     /// attempt attempts to interpret the (eff) effect but if an error occurs
     /// the error is passed to the continuation.
     let attempt<'R, 'E1, 'E> (eff : FIO<'R, 'E1>) (cont : 'E1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
-        SequenceError (eff.Upcast(), fun res -> cont (res :?> 'E1))
+        SequenceError (eff.Upcast(), fun err -> cont (err :?> 'E1))
 
     /// zip returns the results of (eff1) and (eff2) in a tuple.
     /// Errors are returned immediately.
