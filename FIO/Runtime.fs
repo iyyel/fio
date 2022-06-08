@@ -63,7 +63,6 @@ module Runtime =
             let blockingItems = new ConcurrentDictionary<BlockingItem, Unit>()
             let mutable blockingWorkers : List<'B> = []
             let mutable evalWorkers : List<'E> = []
-            let dataEventQueue = new BlockingCollection<Unit>()
             let mutable countDown = 10
             let _ = (async {
                 while true do
@@ -86,9 +85,8 @@ module Runtime =
             } |> Async.StartAsTask |> ignore)
                     
             member internal _.AddBlockingItem blockingItem =
-                match blockingItems.TryAdd (blockingItem, ()) with
-                | true -> dataEventQueue.Add <| ()
-                | false -> ()
+                blockingItems.TryAdd (blockingItem, ())
+                |> ignore
                 
             member internal _.RemoveBlockingItem (blockingItem: BlockingItem) =
                 blockingItems.TryRemove blockingItem
