@@ -814,7 +814,7 @@ module Runtime =
             #endif
 
         and internal BlockingWorkItemMap() =
-            let blockingWorkItemMap = new ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>>()
+            let blockingWorkItemMap = ConcurrentDictionary<BlockingItem, BlockingCollection<WorkItem>>()
 
             member internal _.RescheduleWorkItem blockingItem workItem =
                 let newBlockingQueue = new BlockingCollection<WorkItem>()
@@ -840,7 +840,7 @@ module Runtime =
 
             let workItemQueue = new BlockingCollection<WorkItem>()
             let blockingEventQueue = new BlockingCollection<Channel<obj>>()
-            let blockingWorkItemMap = new BlockingWorkItemMap()
+            let blockingWorkItemMap = BlockingWorkItemMap()
 
             #if DETECT_DEADLOCK
             let deadlockDetector = new Utils.DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue, 500)

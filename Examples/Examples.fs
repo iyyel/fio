@@ -56,7 +56,7 @@ let errorHandlingExample () =
     let webserviceResult : FIO<char, Error> =
         attempt awaitWebservice (fun err -> fail (WsError err))
 
-    let program : FIO<(string * char), Error> =
+    let program : FIO<string * char, Error> =
         let result = zip databaseResult webserviceResult
         attempt result (fun _ -> succeed ("default", 'D'))
   
@@ -144,6 +144,5 @@ let highConcurrencyExample () =
 let spawnFiberExample () =
     let effect = 
         spawn (succeed 42) >> fun fiber ->
-        await fiber >> fun result ->
-        succeed result
-    ()
+        await fiber >> succeed
+    effect

@@ -8,7 +8,6 @@ namespace FSharp.FIO
 
 open System.Threading
 open System.Collections.Concurrent
-open System
 
 [<AutoOpen>]
 module FIO =

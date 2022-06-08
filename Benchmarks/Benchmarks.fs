@@ -18,7 +18,7 @@ module internal Timer =
         | Start
         | Stop
 
-    type internal StopwatchTimerMessage = 
+    type internal StopwatchTimerMessage =
         | Start of Stopwatch
         | Stop
 
@@ -454,7 +454,7 @@ module Bang =
 module Spawn =
 
     let rec private createProcess timerChan =
-        send (Timer.StopwatchTimerMessage.Stop) timerChan
+        send Timer.StopwatchTimerMessage.Stop timerChan
         >> fun _ -> stop
        
     let Create processCount : FIO<int64, obj> =

@@ -94,7 +94,7 @@ type Parser() =
 
         let spawnConfig =
             match results.TryGetResult Spawn with
-            | Some (processcount) ->
+            | Some processcount ->
                 [Benchmark.Spawn { ProcessCount = processcount }]
             | _ -> []
 

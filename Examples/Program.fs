@@ -12,6 +12,6 @@ ThreadPool.SetMaxThreads(32767, 32767) |> ignore
 ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 [<EntryPoint>]
-let main args =
+let main _ =
     Examples.errorHandlingExample()
     0
