@@ -35,7 +35,7 @@ type Error =
     | DbError of bool
     | WsError of int
 
-let errorHandlingExample () = 
+let errorHandlingExample () =
     let readFromDatabase : FIO<string, bool> =
         let rand = Random()
         if rand.Next(0, 2) = 0 then
@@ -60,7 +60,7 @@ let errorHandlingExample () =
         let result = zip databaseResult webserviceResult
         attempt result (fun _ -> succeed ("default", 'D'))
   
-    let fiber = Naive.Runtime().Run program
+    let fiber = Advanced.Runtime().Run program
     let result = fiber.Await()
     printfn $"%A{result}"
 
@@ -140,9 +140,3 @@ let highConcurrencyExample () =
     let fiber = Advanced.Runtime().Run program
     let result = fiber.Await()
     printfn $"%A{result}"
-
-let spawnFiberExample () =
-    let effect = 
-        spawn (succeed 42) >> fun fiber ->
-        await fiber >> succeed
-    effect

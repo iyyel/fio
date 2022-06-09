@@ -17,31 +17,9 @@ module Runtime =
     type Runner() =
         abstract Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
 
-    and internal Context =
-        { SuccConts: BlockingCollection<obj -> FIO<obj, obj>>;
-          ErrConts: BlockingCollection<obj -> FIO<obj, obj>> }
-
-        static member Create =
-            { SuccConts = new BlockingCollection<obj -> FIO<obj, obj>>();
-              ErrConts = new BlockingCollection<obj -> FIO<obj, obj>>() }
-
-        member this.AddSuccCont cont =
-            this.SuccConts.Add cont
-
-        member this.AddErrCont cont =
-            this.ErrConts.Add cont
-
-        member this.GetSuccCont() =
-            this.SuccConts.Take()
-
-        member this.GetErrCont() =
-            this.ErrConts.Take()
-
-        member this.SuccContCount() =
-            this.SuccConts.Count
-
-        member this.ErrContCount() =
-            this.ErrConts.Count
+    and internal StackFrame =
+        | ContHandler of succCont: (obj -> FIO<obj, obj>)
+        | ErrorHandler of errCont: (obj -> FIO<obj, obj>)
 
     #if DETECT_DEADLOCK
     [<AbstractClass>]
@@ -199,54 +177,63 @@ module Runtime =
         type Runtime() =
             inherit Runner()
 
-            member internal this.LowLevelRun eff
-                (succConts : List<obj -> FIO<obj, obj>>)
-                (errConts : List<obj -> FIO<obj, obj>>)
+            member internal this.LowLevelRun eff 
+                (stack : List<StackFrame>) 
                 : Result<obj, obj> =
-
-                let handleSuccess res =
-                    match succConts with
+            
+                let rec handleSuccess res stack =
+                    match stack with
                     | [] -> Ok res
-                    | cont::conts -> this.LowLevelRun (cont res) conts []
-
-                let handleError err =
-                    match errConts with
+                    | s::ss -> 
+                        match s with
+                        | ContHandler succCont ->
+                            this.LowLevelRun (succCont res) ss
+                        | ErrorHandler _ ->
+                            handleSuccess res ss
+                  
+                let rec handleError err stack =
+                    match stack with
                     | [] -> Error err
-                    | cont::conts -> this.LowLevelRun (cont err) [] conts
+                    | s::ss ->
+                        match s with
+                        | ContHandler _ ->
+                            handleError err ss
+                        | ErrorHandler errCont ->
+                            this.LowLevelRun (errCont err) ss
 
-                let handleResult result =
+                let handleResult result stack =
                     match result with
-                    | Ok res -> handleSuccess res
-                    | Error err -> handleError err
+                    | Ok res -> handleSuccess res stack
+                    | Error err -> handleError err stack
 
                 match eff with
                 | NonBlocking action ->
-                    handleResult <| action ()
+                    handleResult (action ()) stack
                 | Blocking chan ->
                     let res = chan.Take()
-                    handleSuccess res
+                    handleSuccess res stack
                 | SendMessage (value, chan) ->
                     chan.Add value
-                    handleSuccess value
+                    handleSuccess value stack
                 | Concurrent (eff, fiber, llfiber) ->
-                    async { llfiber.Complete <| this.LowLevelRun eff [] [] }
+                    async { llfiber.Complete <| this.LowLevelRun eff [] }
                     |> Async.StartAsTask
                     |> ignore
-                    handleSuccess fiber
+                    handleSuccess fiber stack
                 | AwaitFiber llfiber ->
-                    handleResult <| llfiber.Await()
+                    handleResult (llfiber.Await()) stack
                 | SequenceSuccess (eff, cont) ->
-                    this.LowLevelRun eff (cont :: succConts) errConts
+                    this.LowLevelRun eff (ContHandler cont :: stack)
                 | SequenceError (eff, cont) ->
-                    this.LowLevelRun eff succConts (cont :: errConts)
+                    this.LowLevelRun eff (ErrorHandler cont :: stack)
                 | Success res ->
-                    handleSuccess res
+                    handleSuccess res stack
                 | Failure err ->
-                    handleError err
+                    handleError err stack
 
             override this.Run<'R, 'E> (eff : FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = new Fiber<'R, 'E>()
-                async { fiber.ToLowLevel().Complete <| this.LowLevelRun (eff.Upcast()) [] [] }
+                async { fiber.ToLowLevel().Complete <| this.LowLevelRun (eff.Upcast()) [] }
                 |> Async.StartAsTask
                 |> ignore
                 fiber
@@ -272,7 +259,7 @@ module Runtime =
                     #if DETECT_DEADLOCK
                     working <- true
                     #endif
-                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps [] [] with
+                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps [] with
                     | Success res, Evaluated, _ ->
                         self.CompleteWorkItem workItem (Ok res)
                     | Failure err, Evaluated, _ ->
@@ -376,29 +363,45 @@ module Runtime =
 
             new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
-            member internal this.LowLevelRun eff prevAction evalSteps
-                (succConts : List<obj -> FIO<obj, obj>>)
-                (errConts : List<obj -> FIO<obj, obj>>) : FIO<obj, obj> * Action * int =
+            member internal this.LowLevelRun eff 
+                prevAction evalSteps
+                (stack : List<StackFrame>)
+                : FIO<obj, obj> * Action * int =
 
-                let handleSuccess res newEvalSteps =
-                    match succConts with
+                let rec handleSuccess res newEvalSteps stack =
+                    match stack with
                     | [] -> (Success res, Evaluated, newEvalSteps)
-                    | cont::conts -> this.LowLevelRun (cont res) Evaluated evalSteps conts errConts
-
-                let handleError err newEvalSteps =
-                    match errConts with
+                    | s::ss ->
+                        match s with
+                        | ContHandler succCont ->
+                            this.LowLevelRun (succCont res) Evaluated evalSteps ss
+                        | ErrorHandler _ ->
+                            handleSuccess res newEvalSteps ss
+                    
+                let rec handleError err newEvalSteps stack =
+                    match stack with
                     | [] -> (Failure err, Evaluated, newEvalSteps)
-                    | cont::conts -> this.LowLevelRun (cont err) Evaluated evalSteps succConts conts
+                    | s::ss ->
+                        match s with
+                        | ContHandler _ ->
+                            handleError err newEvalSteps ss
+                        | ErrorHandler errCont ->
+                            this.LowLevelRun (errCont err) Evaluated evalSteps ss
 
-                let handleResult result newEvalSteps =
+                let handleResult result newEvalSteps stack =
                     match result with
-                    | Ok res -> handleSuccess res newEvalSteps
-                    | Error err -> handleError err newEvalSteps
+                    | Ok res -> handleSuccess res newEvalSteps stack
+                    | Error err -> handleError err newEvalSteps stack
 
-                let rec backtrack succConts eff =
-                    match succConts with
+                let rec backtrack stack eff =
+                    match stack with
                     | [] -> eff
-                    | cont::conts -> backtrack conts (SequenceSuccess (eff, cont))
+                    | s::ss -> 
+                        match s with
+                        | ContHandler succCont ->
+                            backtrack ss (SequenceSuccess (eff, succCont))
+                        | ErrorHandler errCont ->
+                            backtrack ss (SequenceError (eff, errCont))
 
                 if evalSteps = 0 then
                     (eff, RescheduleForRunning, 0)
@@ -406,32 +409,34 @@ module Runtime =
                     let newEvalSteps = evalSteps - 1
                     match eff with
                     | NonBlocking action ->
-                        handleResult (action ()) newEvalSteps
+                        handleResult (action ()) newEvalSteps stack
                     | Blocking chan ->
                         if prevAction = RescheduleForBlocking (BlockingChannel chan) then
                             let res = chan.Take()
-                            handleSuccess res newEvalSteps
+                            handleSuccess res newEvalSteps stack
                         else
-                            (backtrack succConts (Blocking chan), RescheduleForBlocking (BlockingChannel chan), evalSteps)
+                            (backtrack stack (Blocking chan), 
+                                RescheduleForBlocking (BlockingChannel chan), evalSteps)
                     | SendMessage (value, chan) ->
                         chan.Add value
-                        handleSuccess value newEvalSteps
+                        handleSuccess value newEvalSteps stack
                     | Concurrent (eff, fiber, llfiber) ->
                         workItemQueue.Add <| WorkItem.Create eff llfiber prevAction
-                        handleSuccess fiber newEvalSteps
+                        handleSuccess fiber newEvalSteps stack
                     | AwaitFiber llfiber ->
                         if llfiber.Completed() then
-                            handleResult (llfiber.Await()) newEvalSteps
+                            handleResult (llfiber.Await()) newEvalSteps stack
                         else
-                            (backtrack succConts (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
+                            (backtrack stack (AwaitFiber llfiber), 
+                                RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps (cont :: succConts) errConts
+                        this.LowLevelRun eff prevAction evalSteps (ContHandler cont :: stack)
                     | SequenceError (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps succConts (cont :: errConts)
+                        this.LowLevelRun eff prevAction evalSteps (ErrorHandler cont :: stack)
                     | Success res ->
-                        handleSuccess res newEvalSteps
+                        handleSuccess res newEvalSteps stack
                     | Failure err ->
-                        handleError err newEvalSteps
+                        handleError err newEvalSteps stack
 
             override _.Run<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
@@ -493,7 +498,7 @@ module Runtime =
                     #if DETECT_DEADLOCK
                     working <- true
                     #endif
-                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps [] [] with
+                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps [] with
                     | Success res, Evaluated, _ ->
                         self.CompleteWorkItem workItem (Ok res)
                     | Failure err, Evaluated, _ ->
@@ -599,29 +604,45 @@ module Runtime =
 
             new() = Runtime(System.Environment.ProcessorCount - 1, 1, 15)
 
-            member internal this.LowLevelRun eff prevAction evalSteps
-                (succConts : List<obj -> FIO<obj, obj>>)
-                (errConts : List<obj -> FIO<obj, obj>>) : FIO<obj, obj> * Action * int =
+            member internal this.LowLevelRun eff
+                prevAction evalSteps
+                (stack : List<StackFrame>)
+                : FIO<obj, obj> * Action * int =
 
-                let handleSuccess res newEvalSteps =
-                    match succConts with
+                let rec handleSuccess res newEvalSteps stack =
+                    match stack with
                     | [] -> (Success res, Evaluated, newEvalSteps)
-                    | cont::conts -> this.LowLevelRun (cont res) Evaluated evalSteps conts errConts
-
-                let handleError err newEvalSteps =
-                    match errConts with
+                    | s::ss ->
+                        match s with
+                        | ContHandler succCont ->
+                            this.LowLevelRun (succCont res) Evaluated evalSteps ss
+                        | ErrorHandler _ ->
+                            handleSuccess res newEvalSteps ss
+                    
+                let rec handleError err newEvalSteps stack =
+                    match stack with
                     | [] -> (Failure err, Evaluated, newEvalSteps)
-                    | cont::conts -> this.LowLevelRun (cont err) Evaluated evalSteps succConts conts
+                    | s::ss ->
+                        match s with
+                        | ContHandler _ ->
+                            handleError err newEvalSteps ss
+                        | ErrorHandler errCont ->
+                            this.LowLevelRun (errCont err) Evaluated evalSteps ss
 
-                let handleResult result newEvalSteps =
+                let handleResult result newEvalSteps stack =
                     match result with
-                    | Ok res -> handleSuccess res newEvalSteps
-                    | Error err -> handleError err newEvalSteps
+                    | Ok res -> handleSuccess res newEvalSteps stack
+                    | Error err -> handleError err newEvalSteps stack
 
-                let rec backtrack succConts eff =
-                    match succConts with
+                let rec backtrack stack eff =
+                    match stack with
                     | [] -> eff
-                    | cont::conts -> backtrack conts (SequenceSuccess (eff, cont))
+                    | s::ss -> 
+                        match s with
+                        | ContHandler succCont ->
+                            backtrack ss (SequenceSuccess (eff, succCont))
+                        | ErrorHandler errCont ->
+                            backtrack ss (SequenceError (eff, errCont))
       
                 if evalSteps = 0 then
                     (eff, RescheduleForRunning, 0)
@@ -629,33 +650,35 @@ module Runtime =
                     let newEvalSteps = evalSteps - 1
                     match eff with
                     | NonBlocking action ->
-                        handleResult (action ()) newEvalSteps
+                        handleResult (action ()) newEvalSteps stack
                     | Blocking chan ->
                         if prevAction = RescheduleForBlocking (BlockingChannel chan) then
                             let res = chan.Take()
-                            handleSuccess res newEvalSteps
+                            handleSuccess res newEvalSteps stack
                         else
-                            (backtrack succConts (Blocking chan), RescheduleForBlocking (BlockingChannel chan), evalSteps)
+                            (backtrack stack (Blocking chan),
+                                RescheduleForBlocking (BlockingChannel chan), evalSteps)
                     | SendMessage (value, chan) ->
                         chan.Add value
                         blockingEventQueue.Add <| chan
-                        handleSuccess value newEvalSteps
+                        handleSuccess value newEvalSteps stack
                     | Concurrent (eff, fiber, llfiber) ->
                         workItemQueue.Add <| WorkItem.Create eff llfiber prevAction
-                        handleSuccess fiber newEvalSteps
+                        handleSuccess fiber newEvalSteps stack
                     | AwaitFiber llfiber ->
                         if llfiber.Completed() then
-                            handleResult (llfiber.Await()) newEvalSteps
+                            handleResult (llfiber.Await()) newEvalSteps stack
                         else
-                            (backtrack succConts (AwaitFiber llfiber), RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
+                            (backtrack stack (AwaitFiber llfiber),
+                                RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps (cont :: succConts) errConts
+                        this.LowLevelRun eff prevAction evalSteps (ContHandler cont :: stack)
                     | SequenceError (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps succConts (cont :: errConts)
+                        this.LowLevelRun eff prevAction evalSteps (ErrorHandler cont :: stack)
                     | Success res ->
-                        handleSuccess res newEvalSteps
+                        handleSuccess res newEvalSteps stack
                     | Failure err ->
-                        handleError err newEvalSteps
+                        handleError err newEvalSteps stack
 
             override _.Run<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
