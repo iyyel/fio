@@ -18,7 +18,7 @@ module Runtime =
         abstract Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
 
     and internal StackFrame =
-        | ContHandler of succCont: (obj -> FIO<obj, obj>)
+        | SuccHandler of succCont: (obj -> FIO<obj, obj>)
         | ErrorHandler of errCont: (obj -> FIO<obj, obj>)
 
     #if DETECT_DEADLOCK
@@ -186,7 +186,7 @@ module Runtime =
                     | [] -> Ok res
                     | s::ss -> 
                         match s with
-                        | ContHandler succCont ->
+                        | SuccHandler succCont ->
                             this.LowLevelRun (succCont res) ss
                         | ErrorHandler _ ->
                             handleSuccess res ss
@@ -196,7 +196,7 @@ module Runtime =
                     | [] -> Error err
                     | s::ss ->
                         match s with
-                        | ContHandler _ ->
+                        | SuccHandler _ ->
                             handleError err ss
                         | ErrorHandler errCont ->
                             this.LowLevelRun (errCont err) ss
@@ -223,7 +223,7 @@ module Runtime =
                 | AwaitFiber llfiber ->
                     handleResult (llfiber.Await()) stack
                 | SequenceSuccess (eff, cont) ->
-                    this.LowLevelRun eff (ContHandler cont :: stack)
+                    this.LowLevelRun eff (SuccHandler cont :: stack)
                 | SequenceError (eff, cont) ->
                     this.LowLevelRun eff (ErrorHandler cont :: stack)
                 | Success res ->
@@ -373,7 +373,7 @@ module Runtime =
                     | [] -> (Success res, Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
-                        | ContHandler succCont ->
+                        | SuccHandler succCont ->
                             this.LowLevelRun (succCont res) Evaluated evalSteps ss
                         | ErrorHandler _ ->
                             handleSuccess res newEvalSteps ss
@@ -383,7 +383,7 @@ module Runtime =
                     | [] -> (Failure err, Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
-                        | ContHandler _ ->
+                        | SuccHandler _ ->
                             handleError err newEvalSteps ss
                         | ErrorHandler errCont ->
                             this.LowLevelRun (errCont err) Evaluated evalSteps ss
@@ -398,7 +398,7 @@ module Runtime =
                     | [] -> eff
                     | s::ss -> 
                         match s with
-                        | ContHandler succCont ->
+                        | SuccHandler succCont ->
                             backtrack ss (SequenceSuccess (eff, succCont))
                         | ErrorHandler errCont ->
                             backtrack ss (SequenceError (eff, errCont))
@@ -430,7 +430,7 @@ module Runtime =
                             (backtrack stack (AwaitFiber llfiber), 
                                 RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps (ContHandler cont :: stack)
+                        this.LowLevelRun eff prevAction evalSteps (SuccHandler cont :: stack)
                     | SequenceError (eff, cont) ->
                         this.LowLevelRun eff prevAction evalSteps (ErrorHandler cont :: stack)
                     | Success res ->
@@ -614,7 +614,7 @@ module Runtime =
                     | [] -> (Success res, Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
-                        | ContHandler succCont ->
+                        | SuccHandler succCont ->
                             this.LowLevelRun (succCont res) Evaluated evalSteps ss
                         | ErrorHandler _ ->
                             handleSuccess res newEvalSteps ss
@@ -624,7 +624,7 @@ module Runtime =
                     | [] -> (Failure err, Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
-                        | ContHandler _ ->
+                        | SuccHandler _ ->
                             handleError err newEvalSteps ss
                         | ErrorHandler errCont ->
                             this.LowLevelRun (errCont err) Evaluated evalSteps ss
@@ -639,7 +639,7 @@ module Runtime =
                     | [] -> eff
                     | s::ss -> 
                         match s with
-                        | ContHandler succCont ->
+                        | SuccHandler succCont ->
                             backtrack ss (SequenceSuccess (eff, succCont))
                         | ErrorHandler errCont ->
                             backtrack ss (SequenceError (eff, errCont))
@@ -672,7 +672,7 @@ module Runtime =
                             (backtrack stack (AwaitFiber llfiber),
                                 RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
-                        this.LowLevelRun eff prevAction evalSteps (ContHandler cont :: stack)
+                        this.LowLevelRun eff prevAction evalSteps (SuccHandler cont :: stack)
                     | SequenceError (eff, cont) ->
                         this.LowLevelRun eff prevAction evalSteps (ErrorHandler cont :: stack)
                     | Success res ->
