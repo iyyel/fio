@@ -13,5 +13,5 @@ ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 [<EntryPoint>]
 let main _ =
-    Examples.errorHandlingExample()
+    Examples.highConcurrencyExample()
     0
