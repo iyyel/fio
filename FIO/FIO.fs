@@ -21,10 +21,14 @@ module FIO =
         | BlockingChannel of Channel<obj>
         | BlockingFiber of LowLevelFiber
 
+    and internal StackFrame =
+        | SuccHandler of succCont: (obj -> FIO<obj, obj>)
+        | ErrorHandler of errCont: (obj -> FIO<obj, obj>)
+
     and internal WorkItem =
-        { Eff: FIO<obj, obj>; LLFiber: LowLevelFiber; PrevAction: Action }
-        static member Create eff llfiber prevAction =
-            { Eff = eff; LLFiber = llfiber; PrevAction = prevAction }
+        { Eff: FIO<obj, obj>; Stack: List<StackFrame>; LLFiber: LowLevelFiber; PrevAction: Action }
+        static member Create eff stack llfiber prevAction =
+            { Eff = eff; Stack = stack; LLFiber = llfiber; PrevAction = prevAction }
         member this.Complete res =
             this.LLFiber.Complete <| res
 

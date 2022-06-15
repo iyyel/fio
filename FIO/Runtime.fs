@@ -17,13 +17,9 @@ module Runtime =
     type Runner() =
         abstract Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
 
-    and internal StackFrame =
-        | SuccHandler of succCont: (obj -> FIO<obj, obj>)
-        | ErrorHandler of errCont: (obj -> FIO<obj, obj>)
-
     #if DETECT_DEADLOCK
     [<AbstractClass>]
-    type internal Worker() =
+    type internal 1orker() =
         abstract Working : unit -> bool
     #endif
 
@@ -249,7 +245,7 @@ module Runtime =
             runtime: Runtime,
             workItemQueue: BlockingCollection<WorkItem>,
             blockingWorker: BlockingWorker,
-            evalSteps) as self =
+            evalSteps) =
             #if DETECT_DEADLOCK
             inherit Worker()
             let mutable working = false
@@ -259,16 +255,16 @@ module Runtime =
                     #if DETECT_DEADLOCK
                     working <- true
                     #endif
-                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps [] with
-                    | Success res, Evaluated, _ ->
-                        self.CompleteWorkItem workItem (Ok res)
-                    | Failure err, Evaluated, _ ->
-                        self.CompleteWorkItem workItem (Error err)
-                    | eff, RescheduleForRunning, _ ->
-                        let workItem = WorkItem.Create eff workItem.LLFiber RescheduleForRunning
+                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps workItem.Stack with
+                    | (Success res, _), Evaluated, _ ->
+                        workItem.Complete (Ok res)
+                    | (Failure err, _), Evaluated, _ ->
+                        workItem.Complete (Error err)
+                    | (eff, stack), RescheduleForRunning, _ ->
+                        let workItem = WorkItem.Create eff stack workItem.LLFiber RescheduleForRunning
                         workItemQueue.Add workItem
-                    | eff, RescheduleForBlocking blockingItem, _ ->
-                        let workItem = WorkItem.Create eff workItem.LLFiber (RescheduleForBlocking blockingItem)
+                    | (eff, stack), RescheduleForBlocking blockingItem, _ ->
+                        let workItem = WorkItem.Create eff stack workItem.LLFiber (RescheduleForBlocking blockingItem)
                         blockingWorker.RescheduleForBlocking blockingItem workItem
                     | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
                     #if DETECT_DEADLOCK
@@ -276,8 +272,6 @@ module Runtime =
                     #endif
             } |> Async.StartAsTask |> ignore)
 
-            member private _.CompleteWorkItem workItem res =
-                workItem.Complete res
 
             #if DETECT_DEADLOCK
             override _.Working() =
@@ -366,11 +360,11 @@ module Runtime =
             member internal this.LowLevelRun eff 
                 prevAction evalSteps
                 (stack : List<StackFrame>)
-                : FIO<obj, obj> * Action * int =
+                : (FIO<obj, obj> * List<StackFrame>) * Action * int =
 
                 let rec handleSuccess res newEvalSteps stack =
                     match stack with
-                    | [] -> (Success res, Evaluated, newEvalSteps)
+                    | [] -> ((Success res, []), Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
                         | SuccHandler succCont ->
@@ -380,7 +374,7 @@ module Runtime =
                     
                 let rec handleError err newEvalSteps stack =
                     match stack with
-                    | [] -> (Failure err, Evaluated, newEvalSteps)
+                    | [] -> ((Failure err, []), Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
                         | SuccHandler _ ->
@@ -393,18 +387,8 @@ module Runtime =
                     | Ok res -> handleSuccess res newEvalSteps stack
                     | Error err -> handleError err newEvalSteps stack
 
-                let rec backtrack stack eff =
-                    match stack with
-                    | [] -> eff
-                    | s::ss -> 
-                        match s with
-                        | SuccHandler succCont ->
-                            backtrack ss (SequenceSuccess (eff, succCont))
-                        | ErrorHandler errCont ->
-                            backtrack ss (SequenceError (eff, errCont))
-
                 if evalSteps = 0 then
-                    (eff, RescheduleForRunning, 0)
+                    ((eff, stack), RescheduleForRunning, 0)
                 else
                     let newEvalSteps = evalSteps - 1
                     match eff with
@@ -415,19 +399,19 @@ module Runtime =
                             let res = chan.Take()
                             handleSuccess res newEvalSteps stack
                         else
-                            (backtrack stack (Blocking chan), 
+                            ((Blocking chan, stack),
                                 RescheduleForBlocking (BlockingChannel chan), evalSteps)
                     | SendMessage (value, chan) ->
                         chan.Add value
                         handleSuccess value newEvalSteps stack
                     | Concurrent (eff, fiber, llfiber) ->
-                        workItemQueue.Add <| WorkItem.Create eff llfiber prevAction
+                        workItemQueue.Add <| WorkItem.Create eff [] llfiber prevAction
                         handleSuccess fiber newEvalSteps stack
                     | AwaitFiber llfiber ->
                         if llfiber.Completed() then
                             handleResult (llfiber.Await()) newEvalSteps stack
                         else
-                            (backtrack stack (AwaitFiber llfiber), 
+                            ((AwaitFiber llfiber, stack), 
                                 RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
                         this.LowLevelRun eff prevAction evalSteps (SuccHandler cont :: stack)
@@ -440,7 +424,7 @@ module Runtime =
 
             override _.Run<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
-                workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
+                workItemQueue.Add <| WorkItem.Create (eff.Upcast()) [] (fiber.ToLowLevel()) Evaluated
                 fiber
 
             member private this.CreateBlockingWorkers() : BlockingWorker list =
@@ -498,16 +482,16 @@ module Runtime =
                     #if DETECT_DEADLOCK
                     working <- true
                     #endif
-                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps [] with
-                    | Success res, Evaluated, _ ->
+                    match runtime.LowLevelRun workItem.Eff workItem.PrevAction evalSteps workItem.Stack with
+                    | (Success res, _), Evaluated, _ ->
                         self.CompleteWorkItem workItem (Ok res)
-                    | Failure err, Evaluated, _ ->
+                    | (Failure err, _), Evaluated, _ ->
                         self.CompleteWorkItem workItem (Error err)
-                    | eff, RescheduleForRunning, _ ->
-                        let workItem = WorkItem.Create eff workItem.LLFiber RescheduleForRunning
+                    | (eff, stack), RescheduleForRunning, _ ->
+                        let workItem = WorkItem.Create eff stack workItem.LLFiber RescheduleForRunning
                         workItemQueue.Add workItem
-                    | eff, RescheduleForBlocking blockingItem, _ ->
-                        let workItem = WorkItem.Create eff workItem.LLFiber (RescheduleForBlocking blockingItem)
+                    | (eff, stack), RescheduleForBlocking blockingItem, _ ->
+                        let workItem = WorkItem.Create eff stack workItem.LLFiber (RescheduleForBlocking blockingItem)
                         blockingWorker.RescheduleForBlocking blockingItem workItem
                         self.HandleBlockingFiber blockingItem
                     | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
@@ -607,11 +591,11 @@ module Runtime =
             member internal this.LowLevelRun eff
                 prevAction evalSteps
                 (stack : List<StackFrame>)
-                : FIO<obj, obj> * Action * int =
+                : (FIO<obj, obj> * List<StackFrame>) * Action * int =
 
                 let rec handleSuccess res newEvalSteps stack =
                     match stack with
-                    | [] -> (Success res, Evaluated, newEvalSteps)
+                    | [] -> ((Success res, []), Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
                         | SuccHandler succCont ->
@@ -621,7 +605,7 @@ module Runtime =
                     
                 let rec handleError err newEvalSteps stack =
                     match stack with
-                    | [] -> (Failure err, Evaluated, newEvalSteps)
+                    | [] -> ((Failure err, []), Evaluated, newEvalSteps)
                     | s::ss ->
                         match s with
                         | SuccHandler _ ->
@@ -633,19 +617,9 @@ module Runtime =
                     match result with
                     | Ok res -> handleSuccess res newEvalSteps stack
                     | Error err -> handleError err newEvalSteps stack
-
-                let rec backtrack stack eff =
-                    match stack with
-                    | [] -> eff
-                    | s::ss -> 
-                        match s with
-                        | SuccHandler succCont ->
-                            backtrack ss (SequenceSuccess (eff, succCont))
-                        | ErrorHandler errCont ->
-                            backtrack ss (SequenceError (eff, errCont))
       
                 if evalSteps = 0 then
-                    (eff, RescheduleForRunning, 0)
+                    ((eff, stack), RescheduleForRunning, 0)
                 else
                     let newEvalSteps = evalSteps - 1
                     match eff with
@@ -656,20 +630,20 @@ module Runtime =
                             let res = chan.Take()
                             handleSuccess res newEvalSteps stack
                         else
-                            (backtrack stack (Blocking chan),
+                            ((Blocking chan, stack),
                                 RescheduleForBlocking (BlockingChannel chan), evalSteps)
                     | SendMessage (value, chan) ->
                         chan.Add value
                         blockingEventQueue.Add <| chan
                         handleSuccess value newEvalSteps stack
                     | Concurrent (eff, fiber, llfiber) ->
-                        workItemQueue.Add <| WorkItem.Create eff llfiber prevAction
+                        workItemQueue.Add <| WorkItem.Create eff [] llfiber prevAction
                         handleSuccess fiber newEvalSteps stack
                     | AwaitFiber llfiber ->
                         if llfiber.Completed() then
                             handleResult (llfiber.Await()) newEvalSteps stack
                         else
-                            (backtrack stack (AwaitFiber llfiber),
+                            ((AwaitFiber llfiber, stack),
                                 RescheduleForBlocking (BlockingFiber llfiber), evalSteps)
                     | SequenceSuccess (eff, cont) ->
                         this.LowLevelRun eff prevAction evalSteps (SuccHandler cont :: stack)
@@ -682,7 +656,7 @@ module Runtime =
 
             override _.Run<'R, 'E> (eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
-                workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
+                workItemQueue.Add <| WorkItem.Create (eff.Upcast()) [] (fiber.ToLowLevel()) Evaluated
                 fiber
 
             member private this.CreateBlockingWorkers() : BlockingWorker list =
@@ -750,10 +724,10 @@ module Runtime =
                     | Failure err, Evaluated, _ ->
                         self.CompleteWorkItem(workItem, Error err)
                     | eff, RescheduleForRunning, _ ->
-                        let workItem = WorkItem.Create eff workItem.LLFiber RescheduleForRunning
+                        let workItem = WorkItem.Create eff [] workItem.LLFiber RescheduleForRunning
                         self.RescheduleForRunning workItem
                     | eff, RescheduleForBlocking blockingItem, _ ->
-                        let workItem = WorkItem.Create eff workItem.LLFiber (RescheduleForBlocking blockingItem)
+                        let workItem = WorkItem.Create eff [] workItem.LLFiber (RescheduleForBlocking blockingItem)
                         blockingWorker.RescheduleForBlocking blockingItem workItem
                     | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
                     #if DETECT_DEADLOCK
@@ -895,7 +869,7 @@ module Runtime =
                         blockingEventQueue.Add <| chan
                         (Success value, Evaluated, evalSteps - 1)
                     | Concurrent (eff, fiber, llfiber) ->
-                        workItemQueue.Add <| WorkItem.Create eff llfiber prevAction
+                        workItemQueue.Add <| WorkItem.Create eff [] llfiber prevAction
                         (Success fiber, Evaluated, evalSteps - 1)
                     | AwaitFiber llfiber ->
                         if llfiber.Completed() then
@@ -921,7 +895,7 @@ module Runtime =
 
             override _.Run<'R, 'E>(eff: FIO<'R, 'E>) : Fiber<'R, 'E> =
                 let fiber = Fiber<'R, 'E>()
-                workItemQueue.Add <| WorkItem.Create (eff.Upcast()) (fiber.ToLowLevel()) Evaluated
+                workItemQueue.Add <| WorkItem.Create (eff.Upcast()) [] (fiber.ToLowLevel()) Evaluated
                 fiber
 
             member private this.CreateBlockingWorkers() =
