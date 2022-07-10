@@ -140,3 +140,15 @@ let highConcurrencyExample () =
     let fiber = Advanced.Runtime().Run program
     let result = fiber.Await()
     printfn $"%A{result}"
+
+let askForNameExample () =
+    let askForName =
+        fio (fun () -> printfn "%s" "Hello! What is your name?")
+        >> fun _ ->
+        fio (fun () -> Console.ReadLine())
+        >> fun name ->
+        fio (fun () -> printfn $"Hello, %s{name}, welcome to FIO!")
+
+    let fiber = Advanced.Runtime().Run askForName
+    let result = fiber.Await()
+    printfn $"%A{result}"
