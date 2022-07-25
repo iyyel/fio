@@ -209,17 +209,26 @@ Additionally, the **FIO** project supports two conditional compilation options:
 
 * **Threadring**
 
-<img src="images/threadring_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
+<img src="images/threadring_scalability_plot.png" width="auto" height="600" alt="Threadring scalability plot">
  
 
 
 * **Big**
 
+<img src="images/big_scalability_plot.png" width="auto" height="600" alt="Threadring scalability plot">
+
+
 
 * **Bang**
 
+<img src="images/bang_scalability_plot.png" width="auto" height="600" alt="Threadring scalability plot">
+
+
 
 * **Spawn**
+
+<img src="images/spawn_scalability_plot.png" width="auto" height="600" alt="Threadring scalability plot">
+
 
 
 <p align="right">(<a href="#top">back to top</a>)</p>
