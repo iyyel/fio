@@ -209,7 +209,7 @@ Additionally, the **FIO** project supports two conditional compilation options:
 
 * **Threadring**
 
-<img src="images/threadring_scalability_plot.png" width="auto" height="300" alt="Threadring scalability plot">
+<img src="images/threadring_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
  
 
 
