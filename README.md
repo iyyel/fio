@@ -91,7 +91,7 @@
 
 ### Built With
 
-**FIO** is built with the following technologies:
+**FIO** is built using the following technologies:
 
 * [F#](https://fsharp.org/)
 * [.NET 6.0](https://docs.microsoft.com/en-us/dotnet/core/whats-new/dotnet-6)
