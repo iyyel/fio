@@ -67,6 +67,7 @@
         <li><a href="#benchmarks">Benchmarks</a></li>
       </ul>
     </li>
+    <li><a href="#performance">Performance</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
@@ -78,12 +79,14 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-<!-- [![Celestial Outbreak][product-screenshot]](https://github.com/iyyel/fio) -->
+<!-- [![FIO][product-screenshot]](https://github.com/iyyel/fio) -->
 
-**FIO** is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling expressions with side effects. It uses the concept of "green threads" also known as "fibers" to provide a high level of efficient concurrency.
+**FIO** is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling expressions with side effects. It uses the concept of "green threads" also known as "fibers" to provide scalable and efficient concurrency.
 
-**FIO** is an attempt creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
+**FIO** is an attempt at creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
 [ZIO](https://zio.dev/) and [Cats Effect](https://typelevel.org/cats-effect/).
+
+**DISCLAIMER:** **FIO** is in early development stages and a lot of improvements and enhancements can be made. Expect bugs.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -91,7 +94,7 @@
 
 ### Built With
 
-**FIO** is built with the following technologies:
+**FIO** is built using the following technologies:
 
 * [F#](https://fsharp.org/)
 * [.NET 6.0](https://docs.microsoft.com/en-us/dotnet/core/whats-new/dotnet-6)
@@ -103,7 +106,7 @@
 <!-- GETTING STARTED -->
 ## Getting Started
 
-It is quite simple to get started with installing or developing for **FIO**.
+It is easy to get started with **FIO**.
 
 ### Prerequisites
 
@@ -112,7 +115,9 @@ It is quite simple to get started with installing or developing for **FIO**.
 
 ### Installation
 
-* Download this repository and open it in your favorite IDE
+* Download or clone this repository
+* Open it in your IDE of choice
+* Navigate to the _Examples_ project and check out the example programs or create a new file to start using **FIO**
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -120,7 +125,7 @@ It is quite simple to get started with installing or developing for **FIO**.
 
 ## Usage
 
-Create a new F# class and import the library using "open FSharp.FIO". For example:
+Create a new class and import the library using "open FSharp.FIO". For example:
 
 ```fsharp
 open FSharp.FIO
@@ -145,14 +150,14 @@ let main _ =
 
 ## Benchmarks
 
-This repository contains five benchmarks that each stress test a different scenario of concurrent computing.
+This repository contains five benchmarks that each tests an aspect of concurrent computing.
 All benchmarks reside from the [Savina - An Actor Benchmark Suite](http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf) paper.
 
-* Pingpong (Measures delivery overhead)
-* ThreadRing (Measures message sending and context switching between actors)
-* Big (Measures contention on mailbox and many-to-many message passing)
-* Bang (Measures contention on mailbox and many-to-one message passing)
-* ReverseBang (Measures contention on mailbox and many-to-one message retrieval)
+* Pingpong (Message sending and retrieval)
+* ThreadRing (Message sending and retrieval, context switching between fibers)
+* Big (Contention on channel, many-to-many message passing)
+* Bang (Many-to-one messaging)
+* Spawn (Spawning time of fibers)
 
 The benchmarks can be through the following command line options:
 
@@ -180,21 +185,39 @@ OPTIONS:
                           specify process count and round count for big benchmark.
     --bang <processcount> <roundcount>
                           specify process count and round count for bang benchmark.
-    --reversebang <processcount> <roundcount>
-                          specify process count and round count for reversebang benchmark.
-    --help                display this list of options.
+    --spawn <processcount>
+                          specify process count for spawn benchmark.
+    --help                display this list of options.           display this list of options.
 ```
 
-For example, running 30 runs of each of the benchmarks using the advanced runtime with 7 evaluation workers, 1 blocking worker and 15 evaluation steps would look as so:
+For example, running 30 runs of each benchmark using the advanced runtime with 7 evaluation workers, 1 blocking worker and 15 evaluation steps would look as so:
 
 ```
---advanced-runtime 7 1 15 --runs 30 --pingpong 120000 --threadring 2000 1 --big 500 1 --bang 3000 1 --reversebang 3000 2
+--advanced-runtime 7 1 15 --runs 30 --pingpong 120000 --threadring 2000 1 --big 500 1 --bang 3000 1 --spawn 3000
 ```
 
 Additionally, the **FIO** project supports two conditional compilation options:
 
-* DETECT_DEADLOCK: Enables a deadlock detecting thread that attempts to detect if a deadlock has occurred when running the benchmarks
-* MONITOR: Enables a monitoring thread that prints out value data structure content during a run of the benchmarks
+* **DETECT_DEADLOCK:** Enables a naive deadlock detecting thread that attempts to detect if a deadlock has occurred when running FIO programs
+* **MONITOR:** Enables a monitoring thread that prints out data structure content during when running FIO programs
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+
+<!-- PERFORMANCE -->
+## Performance
+
+* **Threadring**
+
+
+* **Big**
+
+
+* **Bang**
+
+
+* **Spawn**
+
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -220,7 +243,7 @@ Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [mail@iyyel.io](mailto:ma
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-TBA.
+* Alceste Scalas - [alcsc](https://people.compute.dtu.dk/alcsc/) - [github](https://github.com/alcestes)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
