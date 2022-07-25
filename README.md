@@ -207,6 +207,8 @@ Additionally, the **FIO** project supports two conditional compilation options:
 <!-- PERFORMANCE -->
 ## Performance
 
+Below the scalability of each interpreter can be seen for each benchmark. **I** is denoting the intermediate runtime and **A** the advanced. To give some insight into the interpreters, the naive interpreter uses operating system threads, the intermediate uses fibers with handling of blocked FIO programs in linear time, and the advanced uses fibers with constant time handling.
+
 * **Threadring**
 
 <img src="images/threadring_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
