@@ -206,6 +206,13 @@ Additionally, the **FIO** project supports two conditional compilation options:
 <p align="right">(<a href="#top">back to top</a>)</p>
 
 
+<!-- PERFORMANCE -->
+## Performance
+
+
+<p align="right">(<a href="#top">back to top</a>)</p>
+
+
 <!-- LICENSE -->
 ## License
 
