@@ -85,7 +85,7 @@
 **FIO** is an attempt at creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
 [ZIO](https://zio.dev/) and [Cats Effect](https://typelevel.org/cats-effect/).
 
-**DISCLAIMER:** **FIO** is in early development stages and a lot of improvements and enhancements can be made
+**DISCLAIMER:** **FIO** is in early development stages and a lot of improvements and enhancements can be made. Expect bugs.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
