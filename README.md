@@ -80,7 +80,7 @@
 
 <!-- [![Celestial Outbreak][product-screenshot]](https://github.com/iyyel/fio) -->
 
-**FIO** is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling expressions with side effects. It uses the concept of "green threads" also known as "fibers" to provide a high level of efficient concurrency.
+**FIO** is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling expressions with side effects. It uses the concept of "green threads" also known as "fibers" to provide scalable and efficient concurrency.
 
 **FIO** is an attempt creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
 [ZIO](https://zio.dev/) and [Cats Effect](https://typelevel.org/cats-effect/).
