@@ -66,10 +66,8 @@
       <ul>
         <li><a href="#benchmarks">Benchmarks</a></li>
       </ul>
-      <ul>
-        <li><a href="#performance">Performance</a></li>
-      </ul>
     </li>
+    <li><a href="#performance">Performance</a></li>
     <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
