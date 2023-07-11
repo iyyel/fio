@@ -13,5 +13,6 @@ ThreadPool.SetMinThreads(32767, 32767) |> ignore
 
 [<EntryPoint>]
 let main _ =
-    Examples.highConcurrencyExample()
+    //Examples.highConcurrencyExample()
+    Examples.computationExpressionTest()
     0

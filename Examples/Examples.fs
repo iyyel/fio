@@ -67,14 +67,14 @@ let errorHandlingExample () =
 let raceServicesExample () =
     let serverRegionA =
         let rand = Random()
-        fio (fun _ ->
+        fioZ (fun _ ->
         succeed (Thread.Sleep(rand.Next(0, 101))))
         >> fun _ ->
         succeed "server data (Region A)"
           
     let serverRegionB =
         let rand = Random()
-        fio (fun _ ->
+        fioZ (fun _ ->
         succeed (Thread.Sleep(rand.Next(0, 101))))
         >> fun _ ->
         succeed "server data (Region B)"
@@ -142,13 +142,26 @@ let highConcurrencyExample () =
     printfn $"%A{result}"
 
 let askForNameExample () =
-    let askForName =
-        fio (fun () -> printfn "%s" "Hello! What is your name?")
-        >> fun _ ->
-        fio (fun () -> Console.ReadLine())
-        >> fun name ->
-        fio (fun () -> printfn $"Hello, %s{name}, welcome to FIO!")
+    let askForName = fio {
+        do! printfn "%s" "Hello! What is your name?"
+        let! name = Console.ReadLine()
+        do! printfn $"Hello, %s{name}, welcome to FIO!"
+    }
 
     let fiber = Advanced.Runtime().Run askForName
+    let result = fiber.Await()
+    printfn $"%A{result}"
+
+let computationExpressionTest () =
+
+    let eff = fio {
+        do! Console.WriteLine "lol"
+        let! x = 2
+        let! y = 3
+        let! z = x + y
+        return z
+    }
+
+    let fiber = Advanced.Runtime().Run eff
     let result = fiber.Await()
     printfn $"%A{result}"

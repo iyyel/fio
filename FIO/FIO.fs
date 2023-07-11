@@ -167,7 +167,7 @@ module FIO =
             this.UpcastResult().UpcastError()
 
     /// Transforms the expression (func) into a FIO.
-    let fio<'R, 'E> (func : Unit -> 'R) : FIO<'R, 'E> =
+    let fioZ<'R, 'E> (func : Unit -> 'R) : FIO<'R, 'E> =
         NonBlocking (fun _ -> Ok (func ()))
 
     /// succeed creates an effect that models succeeding with the given value res.
@@ -240,3 +240,23 @@ module FIO =
         match (loop (fiber1.ToLowLevel()) (fiber2.ToLowLevel())).Await() with
         | Ok res -> Success (res :?> 'R)
         | Error err -> Failure (err :?> 'E)
+
+    module internal FIOBuilderHelper =
+    
+        let rec bind (res : 'R1) (cont : 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
+            // This is kind of a hack. The Success here should not be necessary.
+            // Let's look into this later.
+            Success <| res >> cont
+
+        let fioReturn (res : 'R) : FIO<'R, 'E> =
+            Success res
+
+        let zero () : FIO<Unit, 'E> =
+            Success ()
+
+    type FIOBuilder () =
+        member _.Bind(eff, cont) = FIOBuilderHelper.bind eff cont
+        member _.Return(res) = FIOBuilderHelper.fioReturn res
+        member _.ReturnForm(res) = res
+
+    let fio = FIOBuilder ()

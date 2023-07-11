@@ -36,7 +36,7 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer started!"
                 #endif
-                fio <| fun _ -> stopwatch.Start()
+                fioZ <| fun _ -> stopwatch.Start()
             | count ->
                 receive chan >> fun res ->
                 match res with
@@ -49,7 +49,7 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer stopped!"
                 #endif
-                fio <| fun _ -> stopwatch.Stop()
+                fioZ <| fun _ -> stopwatch.Stop()
             | count ->
                 receive chan >> fun res ->
                 match res with
@@ -69,7 +69,7 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer stopped!"
                 #endif
-                fio <| fun _ -> stopwatch.Stop()
+                fioZ <| fun _ -> stopwatch.Stop()
             | count ->
                 receive chan >> fun res ->
                 match res with
@@ -93,7 +93,7 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer started!"
                 #endif
-                fio <| fun _ -> stopwatch.Start()
+                fioZ <| fun _ -> stopwatch.Start()
             | count ->
                 receive chan >> fun res ->
                 match res with
@@ -112,7 +112,7 @@ module internal Timer =
                 #if DEBUG
                 printfn "DEBUG: TimerEffect: Timer stopped!"
                 #endif
-                fio <| fun _ -> stopwatch.Stop()
+                fioZ <| fun _ -> stopwatch.Stop()
             | count ->
                 receive chan >> fun res ->
                
@@ -148,7 +148,7 @@ module Pingpong =
         let stopwatch = Stopwatch()
         let rec create msg roundCount =
             if roundCount = 0 then
-                fio (fun _ -> stopwatch.Stop()) >> fun _ ->
+                fioZ (fun _ -> stopwatch.Stop()) >> fun _ ->
                 succeed stopwatch.ElapsedMilliseconds
             else
                 send msg proc.ChanSend >> fun _ ->
@@ -161,7 +161,7 @@ module Pingpong =
                 #endif
                 create x (roundCount - 1)
         receive readyChan >> fun _ ->
-        fio (fun _ -> stopwatch.Start()) >> fun _ ->
+        fioZ (fun _ -> stopwatch.Start()) >> fun _ ->
         create 0 roundCount
         
     let private createPongProcess proc roundCount readyChan =
