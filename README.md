@@ -111,7 +111,7 @@ It is easy to get started with **FIO**.
 ### Prerequisites
 
 * Download and install [.NET](https://dotnet.microsoft.com/en-us/)
-* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/), [Rider](https://www.jetbrains.com/rider/download/) or a text editor like [Visual Studio Code](https://code.visualstudio.com/)
+* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/) or a text editor like [Visual Studio Code](https://code.visualstudio.com/)
 
 ### Installation
 
