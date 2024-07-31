@@ -97,7 +97,7 @@
 **FIO** is built using the following technologies:
 
 * [F#](https://fsharp.org/)
-* [.NET 6.0](https://docs.microsoft.com/en-us/dotnet/core/whats-new/dotnet-6)
+* [.NET](https://dotnet.microsoft.com/en-us/)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -110,8 +110,8 @@ It is easy to get started with **FIO**.
 
 ### Prerequisites
 
-* Download and install [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/6.0)
-* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/)
+* Download and install [.NET](https://dotnet.microsoft.com/en-us/)
+* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/), [Rider](https://www.jetbrains.com/rider/download/) or a text editor like [Visual Studio Code](https://code.visualstudio.com/)
 
 ### Installation
 
