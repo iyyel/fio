@@ -49,7 +49,7 @@
   <summary>Table of Contents</summary>
   <ol>
     <li>
-      <a href="#about-the-project">About FIO</a>
+      <a href="#about-fio">About FIO</a>
       <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
