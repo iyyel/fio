@@ -252,7 +252,7 @@ Distributed under the GNU General Public License v3.0. See [LICENSE.md](LICENSE.
 <!-- CONTACT -->
 ## Contact
 
-Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [mail@iyyel.io](mailto:mail@iyyel.io)
+Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [hello@iyyel.io](mailto:hello@iyyel.io)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
