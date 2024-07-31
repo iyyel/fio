@@ -86,6 +86,8 @@
 **FIO** is an attempt at creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
 [ZIO](https://zio.dev/) and [Cats Effect](https://typelevel.org/cats-effect/).
 
+**FIO** was developed as part of a master's thesis in Computer Science and Engineering at the [Technical University of Denmark (DTU)](https://www.dtu.dk/english/). You can read the thesis, which provides more details about FIO, here.
+
 **DISCLAIMER:** **FIO** is in early development stages and a lot of improvements and enhancements can be made. This README might be lackluster.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -111,12 +113,12 @@ It is easy to get started with **FIO**.
 ### Prerequisites
 
 * Download and install [.NET](https://dotnet.microsoft.com/en-us/)
-* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/) or a text editor like [Visual Studio Code](https://code.visualstudio.com/)
+* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/), or a text editor like [Visual Studio Code](https://code.visualstudio.com/)
 
 ### Installation
 
 * Download or clone this repository
-* Open it in your IDE of choice
+* Open it in your IDE or text editor of choice
 * Navigate to the _Examples_ project and check out the example programs or create a new file to start using **FIO**
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -159,7 +161,7 @@ All benchmarks reside from the [Savina - An Actor Benchmark Suite](http://soft.v
 * Bang (Many-to-one messaging)
 * Spawn (Spawning time of fibers)
 
-The benchmarks can be through the following command line options:
+The benchmarks can be given the following command line options:
 
 ```
 OPTIONS:
@@ -200,6 +202,8 @@ Additionally, the **FIO** project supports two conditional compilation options:
 
 * **DETECT_DEADLOCK:** Enables a naive deadlock detecting thread that attempts to detect if a deadlock has occurred when running FIO programs
 * **MONITOR:** Enables a monitoring thread that prints out data structure content during when running FIO programs
+
+**DISCLAIMER:** These features are very experimental.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
