@@ -22,12 +22,12 @@
 
 
 ## Table of Contents
-- [Table of Contents](#table-of-contents)
 - [Introduction](#introduction)
 - [Built With](#built-with)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
 - [Benchmarks](#benchmarks)
+- [Performance](#performance)
 - [License](#license)
 - [Contact](#contact)
 - [Acknowledgments](#acknowledgments)
@@ -141,6 +141,23 @@ Additionally, the **FIO** project supports two conditional compilation options:
 * **MONITOR:** Enables a monitoring thread that prints out data structure content during when running FIO programs
 
 **DISCLAIMER:** These features are very experimental.
+
+
+
+## Performance
+Below the scalability of each interpreter can be seen for each benchmark. **I** is denoting the intermediate runtime and **A** the advanced. To give some insight into the interpreters, the naive interpreter uses operating system threads, the intermediate uses fibers with handling of blocked FIO programs in linear time, and the advanced uses fibers with constant time handling.
+
+**Threadring**
+<img src="images/threadring_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
+ 
+**Big**
+<img src="images/big_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
+
+**Bang**
+<img src="images/bang_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
+
+**Spawn**
+<img src="images/spawn_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
 
 
 
