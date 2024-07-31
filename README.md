@@ -77,7 +77,7 @@
 
 
 <!-- ABOUT THE PROJECT -->
-## About The Project
+## About FIO
 
 <!-- [![FIO][product-screenshot]](https://github.com/iyyel/fio) -->
 
