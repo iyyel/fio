@@ -27,7 +27,7 @@
 
   <p align="center">
     <br />
-    :wrench: A type-safe, highly concurrent and asynchronous library for F# based on pure functional programming
+    🪻 A type-safe, highly concurrent and asynchronous library for F# based on pure functional programming
     <br />
     <!--
     <a href="https://github.com/othneildrew/Best-README-Template"><strong>Explore the docs »</strong></a>
@@ -49,7 +49,7 @@
   <summary>Table of Contents</summary>
   <ol>
     <li>
-      <a href="#about-the-project">About FIO</a>
+      <a href="#about-fio">About FIO</a>
       <ul>
         <li><a href="#built-with">Built With</a></li>
       </ul>
@@ -77,7 +77,7 @@
 
 
 <!-- ABOUT THE PROJECT -->
-## About The Project
+## About FIO
 
 <!-- [![FIO][product-screenshot]](https://github.com/iyyel/fio) -->
 
@@ -85,6 +85,8 @@
 
 **FIO** is an attempt at creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
 [ZIO](https://zio.dev/) and [Cats Effect](https://typelevel.org/cats-effect/).
+
+**FIO** was developed as part of a master's thesis in Computer Science and Engineering at the [Technical University of Denmark (DTU)](https://www.dtu.dk/english/). You can read the thesis, which provides more details about **FIO**, [here](https://iyyel.io/assets/doc/masters_thesis_daniel_larsen.pdf).
 
 **DISCLAIMER:** **FIO** is in early development stages and a lot of improvements and enhancements can be made. This README might be lackluster.
 
@@ -97,7 +99,7 @@
 **FIO** is built using the following technologies:
 
 * [F#](https://fsharp.org/)
-* [.NET 6.0](https://docs.microsoft.com/en-us/dotnet/core/whats-new/dotnet-6)
+* [.NET](https://dotnet.microsoft.com/en-us/)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -110,13 +112,13 @@ It is easy to get started with **FIO**.
 
 ### Prerequisites
 
-* Download and install [.NET 6.0](https://dotnet.microsoft.com/en-us/download/dotnet/6.0)
-* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/)
+* Download and install [.NET](https://dotnet.microsoft.com/en-us/)
+* Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/), or a text editor like [Visual Studio Code](https://code.visualstudio.com/)
 
 ### Installation
 
 * Download or clone this repository
-* Open it in your IDE of choice
+* Open it in your IDE or text editor of choice
 * Navigate to the _Examples_ project and check out the example programs or create a new file to start using **FIO**
 
 <p align="right">(<a href="#top">back to top</a>)</p>
@@ -159,7 +161,7 @@ All benchmarks reside from the [Savina - An Actor Benchmark Suite](http://soft.v
 * Bang (Many-to-one messaging)
 * Spawn (Spawning time of fibers)
 
-The benchmarks can be through the following command line options:
+The benchmarks can be given the following command line options:
 
 ```
 OPTIONS:
@@ -200,6 +202,8 @@ Additionally, the **FIO** project supports two conditional compilation options:
 
 * **DETECT_DEADLOCK:** Enables a naive deadlock detecting thread that attempts to detect if a deadlock has occurred when running FIO programs
 * **MONITOR:** Enables a monitoring thread that prints out data structure content during when running FIO programs
+
+**DISCLAIMER:** These features are very experimental.
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
@@ -248,7 +252,7 @@ Distributed under the GNU General Public License v3.0. See [LICENSE.md](LICENSE.
 <!-- CONTACT -->
 ## Contact
 
-Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [mail@iyyel.io](mailto:mail@iyyel.io)
+Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [hello@iyyel.io](mailto:hello@iyyel.io)
 
 <p align="right">(<a href="#top">back to top</a>)</p>
 
