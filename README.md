@@ -27,7 +27,7 @@
 
   <p align="center">
     <br />
-    :wrench: A type-safe, highly concurrent and asynchronous library for F# based on pure functional programming
+    🪻 A type-safe, highly concurrent and asynchronous library for F# based on pure functional programming
     <br />
     <!--
     <a href="https://github.com/othneildrew/Best-README-Template"><strong>Explore the docs »</strong></a>
