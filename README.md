@@ -1,14 +1,3 @@
-<div id="top"></div>
-
-<!-- PROJECT SHIELDS -->
-<!--
-*** I'm using markdown "reference style" links for readability.
-*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
-*** See the bottom of this document for the declaration of the reference variables
-*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
-*** https://www.markdownguide.org/basic-syntax/#reference-style-links
--->
-
 [![Contributors][contributors-shield]][contributors-url]
 [![Forks][forks-shield]][forks-url]
 [![Stargazers][stars-shield]][stars-url]
@@ -16,71 +5,36 @@
 [![MIT License][license-shield]][license-url]
 
 
-<!-- PROJECT LOGO -->
+
 <br />
 <div align="center">
   <a href="https://github.com/iyyel/fio">
     <img src="images/fio_logo_wide.png" width="auto" height="300" alt="FIO Logo">
   </a>
 
-  <!-- <h3 align="center">Title</h3> -->
-
   <p align="center">
     <br />
     🪻 A type-safe, highly concurrent and asynchronous library for F# based on pure functional programming
     <br />
-    <!--
-    <a href="https://github.com/othneildrew/Best-README-Template"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/othneildrew/Best-README-Template">View Demo</a>
-    ·
-    <a href="https://github.com/othneildrew/Best-README-Template/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/othneildrew/Best-README-Template/issues">Request Feature</a>
-    -->
   </p>
 </div>
 
 
 
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-fio">About FIO</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#usage">Usage</a>
-      <ul>
-        <li><a href="#benchmarks">Benchmarks</a></li>
-      </ul>
-    </li>
-    <li><a href="#performance">Performance</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgments">Acknowledgments</a></li>
-  </ol>
-</details>
+## Table of Contents
+- [Introduction](#introduction)
+- [Built With](#built-with)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
+- [Benchmarks](#benchmarks)
+- [Performance](#performance)
+- [License](#license)
+- [Contact](#contact)
+- [Acknowledgments](#acknowledgments)
 
 
 
-<!-- ABOUT THE PROJECT -->
-## About FIO
-
-<!-- [![FIO][product-screenshot]](https://github.com/iyyel/fio) -->
-
+## Introduction
 **FIO** is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling expressions with side effects. It uses the concept of "green threads" also known as "fibers" to provide scalable and efficient concurrency.
 
 **FIO** is an attempt at creating a similar environment to that of [ZIO](https://zio.dev/) for Scala. **FIO** is both inspired by
@@ -90,43 +44,29 @@
 
 **DISCLAIMER:** **FIO** is in early development stages and a lot of improvements and enhancements can be made. This README might be lackluster.
 
-<p align="right">(<a href="#top">back to top</a>)</p>
 
 
-
-### Built With
-
+## Built With
 **FIO** is built using the following technologies:
 
 * [F#](https://fsharp.org/)
 * [.NET](https://dotnet.microsoft.com/en-us/)
 
-<p align="right">(<a href="#top">back to top</a>)</p>
 
 
-
-<!-- GETTING STARTED -->
 ## Getting Started
-
 It is easy to get started with **FIO**.
-
-### Prerequisites
 
 * Download and install [.NET](https://dotnet.microsoft.com/en-us/)
 * Download and install a compatible IDE such as [Visual Studio](https://visualstudio.microsoft.com/downloads/) or [Rider](https://www.jetbrains.com/rider/download/), or a text editor like [Visual Studio Code](https://code.visualstudio.com/)
-
-### Installation
 
 * Download or clone this repository
 * Open it in your IDE or text editor of choice
 * Navigate to the _Examples_ project and check out the example programs or create a new file to start using **FIO**
 
-<p align="right">(<a href="#top">back to top</a>)</p>
-
 
 
 ## Usage
-
 Create a new class and import the library using "open FSharp.FIO". For example:
 
 ```fsharp
@@ -146,12 +86,9 @@ let main _ =
   printfn $"%A{result}"
 ```
 
-<p align="right">(<a href="#top">back to top</a>)</p>
-
 
 
 ## Benchmarks
-
 This repository contains five benchmarks that each tests an aspect of concurrent computing.
 All benchmarks reside from the [Savina - An Actor Benchmark Suite](http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf) paper.
 
@@ -205,70 +142,41 @@ Additionally, the **FIO** project supports two conditional compilation options:
 
 **DISCLAIMER:** These features are very experimental.
 
-<p align="right">(<a href="#top">back to top</a>)</p>
 
 
-<!-- PERFORMANCE -->
 ## Performance
-
 Below the scalability of each interpreter can be seen for each benchmark. **I** is denoting the intermediate runtime and **A** the advanced. To give some insight into the interpreters, the naive interpreter uses operating system threads, the intermediate uses fibers with handling of blocked FIO programs in linear time, and the advanced uses fibers with constant time handling.
 
-* **Threadring**
-
+#### **Threadring**
 <img src="images/threadring_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
  
-
-
-* **Big**
-
+#### **Big**
 <img src="images/big_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
 
-
-
-* **Bang**
-
+#### **Bang**
 <img src="images/bang_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
 
-
-
-* **Spawn**
-
+#### **Spawn**
 <img src="images/spawn_scalability_plot.png" width="auto" height="500" alt="Threadring scalability plot">
 
 
 
-<p align="right">(<a href="#top">back to top</a>)</p>
-
-
-<!-- LICENSE -->
 ## License
-
 Distributed under the GNU General Public License v3.0. See [LICENSE.md](LICENSE.md) for more information.
 
-<p align="right">(<a href="#top">back to top</a>)</p>
 
 
-
-<!-- CONTACT -->
 ## Contact
-
 Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [hello@iyyel.io](mailto:hello@iyyel.io)
 
-<p align="right">(<a href="#top">back to top</a>)</p>
 
 
-
-<!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
-
-* Alceste Scalas - [alcsc](https://people.compute.dtu.dk/alcsc/) - [github](https://github.com/alcestes)
-
-<p align="right">(<a href="#top">back to top</a>)</p>
+Alceste Scalas - [alcsc](https://people.compute.dtu.dk/alcsc/) - [github](https://github.com/alcestes)
 
 
 
 <!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
 [contributors-shield]: https://img.shields.io/github/contributors/iyyel/fio.svg?style=for-the-badge
 [contributors-url]: https://github.com/iyyel/fio/graphs/contributors
 [forks-shield]: https://img.shields.io/github/forks/iyyel/fio.svg?style=for-the-badge
@@ -279,7 +187,3 @@ Daniel Larsen (iyyel) - [iyyel.io](https://iyyel.io) - [hello@iyyel.io](mailto:h
 [issues-url]: https://github.com/iyyel/fio/issues
 [license-shield]: https://img.shields.io/github/license/iyyel/fio.svg?style=for-the-badge
 [license-url]: https://github.com/iyyel/fio/blob/main/LICENSE.md
-<!-- [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/ 
-[product-screenshot]: images/main_menu.png
--->
