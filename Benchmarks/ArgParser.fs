@@ -1,6 +1,6 @@
 ﻿(**********************************************************************************)
 (* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
+(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
 (* All rights reserved                                                            *)
 (**********************************************************************************)
 
@@ -8,7 +8,9 @@ module ArgParser
 
 open Argu
 
-open FSharp.FIO
+open FIO.Runtime
+open FIO.Runtime.Core
+
 open Benchmarks
 
 type Arguments =
@@ -27,7 +29,7 @@ type Arguments =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-            | Naive_Runtime _ -> 
+            | Naive_Runtime ->
                 "specify naive runtime. (specify only one runtime)"
             | Intermediate_Runtime _ ->
                 "specify eval worker count, blocking worker count and eval step count for intermediate runtime. (specify only one runtime)"

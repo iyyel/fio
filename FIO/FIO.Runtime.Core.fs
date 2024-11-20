@@ -4,10 +4,16 @@
 (* All rights reserved                                                            *)
 (**********************************************************************************)
 
-open System.Threading
+module FIO.Runtime.Core
 
-let maxThreads = 32767
-ThreadPool.SetMaxThreads(maxThreads, maxThreads) |> ignore
-ThreadPool.SetMinThreads(maxThreads, maxThreads) |> ignore
+open FIO.Core
 
-Examples.errorHandlingExample()
+#if DETECT_DEADLOCK || MONITOR
+open FIO.Monitor
+#endif
+
+open System.Collections.Concurrent
+
+[<AbstractClass>]
+type Runner() =
+    abstract Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>

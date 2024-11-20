@@ -1,12 +1,13 @@
 ﻿(**********************************************************************************)
 (* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
+(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
 (* All rights reserved                                                            *)
 (**********************************************************************************)
 
 module Examples
 
-open FSharp.FIO
+open FIO.Core
+open FIO.Runtime
 
 open System
 open System.Threading
@@ -110,6 +111,7 @@ let pingPongMpExample () =
     let result = fiber.Await()
     printfn $"%A{result}"
 
+// This example currently throws a stack overflow exception.
 let highConcurrencyExample () =
     let sender chan id =
         let msg = 42

@@ -1,26 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <WarnOn>3390;$(WarnOn)</WarnOn>
-    </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
 
-    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-      <DefineConstants>TRACE</DefineConstants>
-    </PropertyGroup>
-
-    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
-      <DefineConstants>TRACE</DefineConstants>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <Compile Include="FIO.fs" />
-        <Compile Include="Runtime.fs" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Update="FSharp.Core" Version="7.0.300" />
-    </ItemGroup>
+	<ItemGroup>
+		<Compile Include="FIO.Core.fs" />
+		<Compile Include="FIO.Monitor.fs" />
+		<Compile Include="FIO.Runtime.Core.fs" />
+		<Compile Include="FIO.Runtime.Naive.fs" />
+		<Compile Include="FIO.Runtime.Intermediate.fs" />
+		<Compile Include="FIO.Runtime.Advanced.fs" />
+		<Compile Include="FIO.Runtime.Deadlocking.fs" />
+	</ItemGroup>
 
 </Project>

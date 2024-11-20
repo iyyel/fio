@@ -1,12 +1,14 @@
 ﻿(**********************************************************************************)
 (* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2022, Daniel Larsen and Technical University of Denmark (DTU)    *)
+(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
 (* All rights reserved                                                            *)
 (**********************************************************************************)
 
 namespace Benchmarks
 
-open FSharp.FIO
+open FIO.Core
+open FIO.Runtime
+open FIO.Runtime.Core
 
 open System
 open System.IO
