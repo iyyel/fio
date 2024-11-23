@@ -4,16 +4,10 @@
 (* All rights reserved                                                            *)
 (**********************************************************************************)
 
-module FIO.Runtime.Core
+namespace rec FIO.Runtime
 
 open FIO.Core
 
-#if DETECT_DEADLOCK || MONITOR
-open FIO.Monitor
-#endif
-
-open System.Collections.Concurrent
-
 [<AbstractClass>]
-type Runner() =
-    abstract Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
+type Runtime() =
+    abstract member Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>

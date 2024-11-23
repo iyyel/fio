@@ -9,7 +9,6 @@ module ArgParser
 open Argu
 
 open FIO.Runtime
-open FIO.Runtime.Core
 
 open Benchmarks
 
@@ -103,18 +102,18 @@ type Parser() =
         let configs = pingpongConfig @ threadringConfig @
                       bigConfig @ bangConfig @ spawnConfig
 
-        let runtime : Runner =
+        let runtime : Runtime =
             match results.TryGetResult Naive_Runtime with
-            | Some _ -> Naive.Runtime()
+            | Some _ -> Naive.NaiveRuntime()
             | _ ->
                 match results.TryGetResult Intermediate_Runtime with
-                | Some (ewc, bwc, esc) -> Intermediate.Runtime(ewc, bwc, esc)
+                | Some (ewc, bwc, esc) -> Intermediate.IntermediateRuntime(ewc, bwc, esc)
                 | _ ->
                     match results.TryGetResult Advanced_Runtime with
-                    | Some (ewc, bwc, esc) -> Advanced.Runtime(ewc, bwc, esc)
+                    | Some (ewc, bwc, esc) -> Advanced.AdvancedRuntime(ewc, bwc, esc)
                     | _ -> 
                         match results.TryGetResult Deadlocking_Runtime with
-                        | Some (ewc, bwc, esc) -> Deadlocking.Runtime(ewc, bwc, esc)
+                        | Some (ewc, bwc, esc) -> Deadlocking.DeadlockingRuntime(ewc, bwc, esc)
                         | _ -> failwith "ArgParser: Invalid runtime specified!"
     
         (configs, runtime, runs, processIncrement)

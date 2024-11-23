@@ -7,28 +7,28 @@
 module Examples
 
 open FIO.Core
-open FIO.Runtime
+open FIO.Runtime.Advanced
 
 open System
 open System.Threading
 
 let helloWorldExample1 () =
     let hello : FIO<string, obj> = succeed "Hello world!"
-    let fiber : Fiber<string, obj> = Advanced.Runtime().Run hello
+    let fiber : Fiber<string, obj> = AdvancedRuntime().Run hello
     let result : Result<string, obj> = fiber.Await()
     printfn $"%A{result}"
 
 let helloWorldExample2 () =
     let hello = succeed "Hello world!"
-    let fiber = Advanced.Runtime().Run hello
+    let fiber = AdvancedRuntime().Run hello
     let result = fiber.Await()
     printfn $"%A{result}"
 
 let concurrencyExample () =
-    let spawner = spawn (succeed 42) >> fun fiber ->
+    let spawner = concurrently (succeed 42) >> fun fiber ->
                   await fiber >> fun result ->
                   succeed result
-    let fiber = Advanced.Runtime().Run spawner
+    let fiber = AdvancedRuntime().Run spawner
     let result = fiber.Await()
     printfn $"%A{result}"
 
@@ -52,16 +52,16 @@ let errorHandlingExample () =
             fail 404
 
     let databaseResult : FIO<string, Error> =
-        attempt readFromDatabase (fun err -> fail (DbError err))
+        readFromDatabase ?> fun err -> fail (DbError err)
 
     let webserviceResult : FIO<char, Error> =
-        attempt awaitWebservice (fun err -> fail (WsError err))
+        awaitWebservice ?> fun err -> fail (WsError err)
 
     let program : FIO<string * char, Error> =
-        let result = zip databaseResult webserviceResult
-        attempt result (fun _ -> succeed ("default", 'D'))
+        let result = databaseResult <^> webserviceResult
+        result ?> fun _ -> succeed ("default", 'D')
   
-    let fiber = Advanced.Runtime().Run program
+    let fiber = AdvancedRuntime().Run program
     let result = fiber.Await()
     printfn $"%A{result}"
 
@@ -80,16 +80,16 @@ let raceServicesExample () =
         >> fun _ ->
         succeed "server data (Region B)"
 
-    let program = race serverRegionA serverRegionB
+    let program = serverRegionA <?> serverRegionB
 
-    let fiber = Advanced.Runtime().Run program
+    let fiber = AdvancedRuntime().Run program
     let result = fiber.Await()
     printfn $"%A{result}"
 
 let pingPongMpExample () =
     let pinger chan1 chan2 =
         let ping = "ping"
-        send ping chan1 >> fun _ ->
+        ping *> chan1 >> fun _ ->
         printfn $"pinger sent: %s{ping}"
         receive chan2 >> fun pong ->
         printfn $"pinger received: %s{pong}"
@@ -99,23 +99,22 @@ let pingPongMpExample () =
         receive chan1 >> fun ping ->
         printfn $"ponger received: %s{ping}"
         let pong = "pong"
-        send pong chan2 >> fun _ ->
+        pong *> chan2 >> fun _ ->
         printfn $"ponger sent: %s{pong}"
         stop
 
     let chan1 = Channel<string>()
     let chan2 = Channel<string>()
-    let pingpong = pinger chan1 chan2 ||| ponger chan1 chan2
+    let pingpong = pinger chan1 chan2 <~> ponger chan1 chan2
 
-    let fiber = Advanced.Runtime().Run pingpong
+    let fiber = AdvancedRuntime().Run pingpong
     let result = fiber.Await()
     printfn $"%A{result}"
 
-// This example currently throws a stack overflow exception.
 let highConcurrencyExample () =
     let sender chan id =
         let msg = 42
-        send msg chan >> fun _ ->
+        msg *> chan >> fun _ ->
         printfn $"Sender[%i{id}] sent: %i{msg}"
         stop
 
@@ -131,15 +130,15 @@ let highConcurrencyExample () =
         if count = 0 then
             acc
         else
-            let newAcc = sender chan count |||* acc
+            let newAcc = sender chan count <*> acc
             create chan (count - 1) newAcc
 
     let fiberCount = 100000
     let chan = Channel<int>()
-    let acc = sender chan fiberCount |||* receiver chan fiberCount
+    let acc = sender chan fiberCount <*> receiver chan fiberCount
     let program = create chan (fiberCount - 1) acc
 
-    let fiber = Advanced.Runtime().Run program
+    let fiber = AdvancedRuntime().Run program
     let result = fiber.Await()
     printfn $"%A{result}"
 
@@ -150,7 +149,7 @@ let askForNameExample () =
         do! printfn $"Hello, %s{name}, welcome to FIO!"
     }
 
-    let fiber = Advanced.Runtime().Run askForName
+    let fiber = AdvancedRuntime().Run askForName
     let result = fiber.Await()
     printfn $"%A{result}"
 
@@ -164,6 +163,6 @@ let computationExpressionTest () =
         return z
     }
 
-    let fiber = Advanced.Runtime().Run eff
+    let fiber = AdvancedRuntime().Run eff
     let result = fiber.Await()
     printfn $"%A{result}"

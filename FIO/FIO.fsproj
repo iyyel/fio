@@ -7,8 +7,8 @@
 
 	<ItemGroup>
 		<Compile Include="FIO.Core.fs" />
-		<Compile Include="FIO.Monitor.fs" />
 		<Compile Include="FIO.Runtime.Core.fs" />
+		<Compile Include="FIO.Runtime.Tools.fs" />
 		<Compile Include="FIO.Runtime.Naive.fs" />
 		<Compile Include="FIO.Runtime.Intermediate.fs" />
 		<Compile Include="FIO.Runtime.Advanced.fs" />
