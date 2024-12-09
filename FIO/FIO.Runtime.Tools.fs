@@ -15,7 +15,7 @@ type internal Worker() =
     abstract Working : unit -> bool
 
 type internal DeadlockDetector<'B, 'E when 'B :> Worker and 'E :> Worker>(
-    workItemQueue: Queue<WorkItem>,
+    workItemQueue: InternalQueue<WorkItem>,
     intervalMs: int) as self =
     let blockingItems = new ConcurrentDictionary<BlockingItem, Unit>()
     let mutable blockingWorkers : List<'B> = []
@@ -66,10 +66,10 @@ type internal DeadlockDetector<'B, 'E when 'B :> Worker and 'E :> Worker>(
         blockingWorkers <- workers
 
 type internal Monitor(
-    workItemQueue: Queue<WorkItem>,
-    blockingItemQueue: Option<Queue<BlockingItem * WorkItem>>,
-    blockingEventQueue: Option<Queue<Channel<obj>>>,
-    blockingWorkItemMap: Option<ConcurrentDictionary<BlockingItem, Queue<WorkItem>>>) as self =
+    workItemQueue: InternalQueue<WorkItem>,
+    blockingItemQueue: Option<InternalQueue<BlockingItem * WorkItem>>,
+    blockingEventQueue: Option<InternalQueue<Channel<obj>>>,
+    blockingWorkItemMap: Option<ConcurrentDictionary<BlockingItem, InternalQueue<WorkItem>>>) as self =
     let _ = (async {
         while true do
             printfn "\n\n"
@@ -90,7 +90,7 @@ type internal Monitor(
             System.Threading.Thread.Sleep(1000)
     } |> Async.StartAsTask |> ignore)
 
-    member private this.PrintWorkItemQueueInfo (queue : Queue<WorkItem>) =
+    member private this.PrintWorkItemQueueInfo (queue : InternalQueue<WorkItem>) =
         printfn $"MONITOR: workItemQueue count: %i{queue.Count}"
         printfn "MONITOR: ------------ workItemQueue information start ------------"
         for workItem in queue.ToArray() do
@@ -103,7 +103,7 @@ type internal Monitor(
             printfn $"MONITOR:    ------------ workItem end ------------"
         printfn "MONITOR: ------------ workItemQueue information end ------------"
 
-    member private this.PrintBlockingItemQueueInfo (queue : Queue<BlockingItem * WorkItem>) =
+    member private this.PrintBlockingItemQueueInfo (queue : InternalQueue<BlockingItem * WorkItem>) =
         printfn $"MONITOR: blockingItemQueue count: %i{queue.Count}"
         printfn "MONITOR: ------------ blockingItemQueue information start ------------"
         for blockingItem, workItem in queue.ToArray() do
@@ -122,7 +122,7 @@ type internal Monitor(
             printfn $"MONITOR:    ------------ BlockingItem * WorkItem end ------------"
         printfn "MONITOR: ------------ workItemQueue information end ------------"
                
-    member private _.PrintBlockingEventQueueInfo (queue : Queue<Channel<obj>>) =
+    member private _.PrintBlockingEventQueueInfo (queue : InternalQueue<Channel<obj>>) =
         printfn $"MONITOR: blockingEventQueue count: %i{queue.Count}"
         printfn "MONITOR: ------------ blockingEventQueue information start ------------"
         for blockingChan in queue.ToArray() do
@@ -131,5 +131,5 @@ type internal Monitor(
             printfn $"MONITOR:    ------------ blockingChan end ------------"
         printfn "MONITOR: ------------ blockingEventQueue information end ------------"
 
-    member private _.PrintBlockingWorkItemMapInfo (map : ConcurrentDictionary<BlockingItem, Queue<WorkItem>>) =
+    member private _.PrintBlockingWorkItemMapInfo (map : ConcurrentDictionary<BlockingItem, InternalQueue<WorkItem>>) =
         printfn $"MONITOR: blockingWorkItemMap count: %i{map.Count}"

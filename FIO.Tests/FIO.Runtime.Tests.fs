@@ -27,8 +27,8 @@ type RuntimeTests() =
     static member GenerateRuntimes() =
         seq {
            yield TestCaseData(NaiveRuntime())
-           // yield TestCaseData(IntermediateRuntime())
-           // yield TestCaseData(AdvancedRuntime())
+           yield TestCaseData(IntermediateRuntime())
+           yield TestCaseData(AdvancedRuntime())
         }
  
     [<TestCaseSource("GenerateRuntimes")>]
@@ -65,7 +65,7 @@ type RuntimeTests() =
     member this.StopFunctionTest(runtime : Runtime) =
         // Arrange
         let expected = ()
-        let effect = stop
+        let effect = ! ()
 
         // Act
         let fiber = runtime.Run(effect)
@@ -80,7 +80,7 @@ type RuntimeTests() =
     member this.SendMessageFunctionTest(runtime : Runtime) =
         // Arrange
         let expected = "Beam of Light"
-        let channel = new Channel<string>()
+        let channel = Channel()
         let effect = expected *> channel
 
         // Act
@@ -97,9 +97,9 @@ type RuntimeTests() =
     member this.ReceiveMessageFunctionTest(runtime : Runtime) =
         // Arrange
         let expected = "Zeitakubyo"
-        let channel = new Channel<string>()
+        let channel = Channel()
         let effect = expected *> channel >> fun _ ->
-                     receive channel >> fun result -> 
+                     !*> channel >> fun result -> 
                      succeed result
 
         // Act
@@ -116,8 +116,8 @@ type RuntimeTests() =
     member this.ConcurrentlyAndAwaitSucceedFunctionTest(runtime : Runtime) =
         // Arrange
         let expected = "ONE OK ROCK"
-        let effect = concurrently (succeed expected) >> fun fiber -> 
-                     await fiber >> fun result ->
+        let effect = !> (succeed expected) >> fun fiber -> 
+                     !?> fiber >> fun result ->
                      succeed result
 
         // Act
@@ -133,8 +133,8 @@ type RuntimeTests() =
     member this.ConcurrentlyAndAwaitFailFunctionTest(runtime : Runtime) =
         // Arrange
         let expected = "Kanjou Effect"
-        let effect = concurrently (fail expected) >> fun fiber -> 
-                     await fiber >> fun result ->
+        let effect = !> (fail expected) >> fun fiber -> 
+                     !?> fiber >> fun result ->
                      succeed result
 
         // Act
@@ -187,7 +187,7 @@ type RuntimeTests() =
         let spiritbox = "Spiritbox"
         let imminence = "Imminence"
         let expected = (spiritbox, imminence)
-        let effect = succeed spiritbox <~> succeed imminence
+        let effect = succeed spiritbox <*> succeed imminence
 
         // Act
         let fiber = runtime.Run(effect)
@@ -204,7 +204,7 @@ type RuntimeTests() =
         let julieta = "Julieta"
         let groza = "Groza"
         let expected = julieta
-        let effect = fail julieta <~> fail groza
+        let effect = fail julieta <*> fail groza
 
         // Act
         let fiber = runtime.Run(effect)
@@ -221,7 +221,7 @@ type RuntimeTests() =
         let ambitions = "Ambitions"
         let eyeOfTheStorm = "Eye of the Storm"
         let expected = eyeOfTheStorm
-        let effect = succeed ambitions <~> fail eyeOfTheStorm
+        let effect = succeed ambitions <*> fail eyeOfTheStorm
 
         // Act
         let fiber = runtime.Run(effect)
@@ -238,7 +238,7 @@ type RuntimeTests() =
         let bombsAway = "Bombs Away"
         let takingOff = "Taking Off"
         let expected = bombsAway
-        let effect = fail bombsAway <~> succeed takingOff
+        let effect = fail bombsAway <*> succeed takingOff
 
         // Act
         let fiber = runtime.Run(effect)
@@ -253,7 +253,7 @@ type RuntimeTests() =
     member this.ParallelizeUnitDoubleSuccessFunctionTest(runtime : Runtime) =
         // Arrange
         let expected = ()
-        let effect = succeed "I won't be there" <*> succeed "and neither will I"
+        let effect = succeed "I won't be there" <!> succeed "and neither will I"
 
         // Act
         let fiber = runtime.Run(effect)
@@ -270,7 +270,7 @@ type RuntimeTests() =
         let lostInTonight = "Lost in Tonight"
         let ghost = "and yet, I will not be there"
         let expected = lostInTonight
-        let effect = fail expected <*> fail ghost
+        let effect = fail expected <!> fail ghost
 
         // Act
         let fiber = runtime.Run(effect)
@@ -287,7 +287,7 @@ type RuntimeTests() =
         let startAgain = "Start Again"
         let ghost = "I am a ghost, boo"
         let expected = startAgain
-        let effect = succeed ghost <*> fail expected
+        let effect = succeed ghost <!> fail expected
 
         // Act
         let fiber = runtime.Run(effect)
@@ -304,7 +304,7 @@ type RuntimeTests() =
         let oneWayTicket = "One Way Ticket"
         let ghost = "Boo, boo..."
         let expected = oneWayTicket
-        let effect = fail expected <*> succeed ghost
+        let effect = fail expected <!> succeed ghost
 
         // Act
         let fiber = runtime.Run(effect)

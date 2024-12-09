@@ -7,7 +7,7 @@
 
 	<ItemGroup>
 		<Compile Include="Examples.fs" />
-		<Compile Include="Program.fs" />
+		<Compile Include="FIOAppExamples.fs" />
 	</ItemGroup>
 
 	<ItemGroup>

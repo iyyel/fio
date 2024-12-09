@@ -16,7 +16,7 @@ open FIO.Monitor
 
 type internal EvalWorker(
     runtime: DeadlockingRuntime,
-    workItemQueue: Queue<WorkItem>,
+    workItemQueue: InternalQueue<WorkItem>,
     blockingWorker: BlockingWorker,
     #if DETECT_DEADLOCK
     deadlockDetector: DeadlockDetector<BlockingWorker, EvalWorker>,
@@ -64,12 +64,12 @@ type internal EvalWorker(
     #endif
             
 and internal BlockingWorker(
-    workItemQueue: Queue<WorkItem>,
+    workItemQueue: InternalQueue<WorkItem>,
     #if DETECT_DEADLOCK
     deadlockDetector: DeadlockDetector<BlockingWorker, EvalWorker>,
     #endif
     blockingWorkItemMap: BlockingWorkItemMap,
-    blockingEventQueue: Queue<Channel<obj>>) as self =
+    blockingEventQueue: InternalQueue<Channel<obj>>) as self =
     #if DETECT_DEADLOCK
     inherit Worker()
     let mutable working = false
@@ -94,7 +94,7 @@ and internal BlockingWorker(
     member private this.HandleBlockingChannel(blockingChan) =
         let blockingItem = BlockingChannel blockingChan
         match blockingWorkItemMap.TryRemove blockingItem with
-            | true, (blockingQueue: Queue<WorkItem>) ->
+            | true, (blockingQueue: InternalQueue<WorkItem>) ->
                 workItemQueue.Add <| blockingQueue.Take()
                 #if DETECT_DEADLOCK
                 deadlockDetector.RemoveBlockingItem blockingItem
@@ -106,7 +106,7 @@ and internal BlockingWorker(
     member internal this.RescheduleBlockingEffects(ifiber) =
         let blockingItem = BlockingFiber ifiber
         match blockingWorkItemMap.TryRemove blockingItem with
-            | true, (blockingQueue: Queue<WorkItem>) ->
+            | true, (blockingQueue: InternalQueue<WorkItem>) ->
                 while blockingQueue.Count > 0 do
                     workItemQueue.Add <| blockingQueue.Take()
             | false, _ -> ()
@@ -117,10 +117,10 @@ and internal BlockingWorker(
     #endif
 
 and internal BlockingWorkItemMap() =
-    let blockingWorkItemMap = ConcurrentDictionary<BlockingItem, Queue<WorkItem>>()
+    let blockingWorkItemMap = ConcurrentDictionary<BlockingItem, InternalQueue<WorkItem>>()
 
     member internal this.RescheduleWorkItem blockingItem workItem =
-        let newBlockingQueue = new Queue<WorkItem>()
+        let newBlockingQueue = new InternalQueue<WorkItem>()
         newBlockingQueue.Add <| workItem
         blockingWorkItemMap.AddOrUpdate(blockingItem, newBlockingQueue, fun _ oldQueue -> oldQueue.Add workItem; oldQueue)
         |> ignore
@@ -132,7 +132,7 @@ and internal BlockingWorkItemMap() =
         blockingWorkItemMap.AddOrUpdate(blockingItem, blockingQueue, fun _ queue -> queue)
         |> ignore
 
-    member internal this.Get() : ConcurrentDictionary<BlockingItem, Queue<WorkItem>> =
+    member internal this.Get() : ConcurrentDictionary<BlockingItem, InternalQueue<WorkItem>> =
         blockingWorkItemMap
 
 and DeadlockingRuntime(
@@ -141,8 +141,8 @@ and DeadlockingRuntime(
     evalStepCount) as self =
     inherit Runtime()
 
-    let workItemQueue = new Queue<WorkItem>()
-    let blockingEventQueue = new Queue<Channel<obj>>()
+    let workItemQueue = new InternalQueue<WorkItem>()
+    let blockingEventQueue = new InternalQueue<Channel<obj>>()
     let blockingWorkItemMap = BlockingWorkItemMap()
 
     #if DETECT_DEADLOCK
@@ -177,20 +177,20 @@ and DeadlockingRuntime(
                     (Success <| chan.Take(), Evaluated, evalSteps - 1)
                 else
                     (Blocking chan, RescheduleForBlocking (BlockingChannel chan), evalSteps)
-            | SendMessage (value, chan) ->
+            | Send (value, chan) ->
                 chan.Add value
                 blockingEventQueue.Add <| chan
                 (Success value, Evaluated, evalSteps - 1)
             | Concurrent (eff, fiber, ifiber) ->
                 workItemQueue.Add <| WorkItem.Create eff [] ifiber prevAction
                 (Success fiber, Evaluated, evalSteps - 1)
-            | AwaitFiber ifiber ->
+            | Await ifiber ->
                 if ifiber.Completed() then
                     match ifiber.Await() with
                     | Ok res -> (Success res, Evaluated, evalSteps - 1)
                     | Error err -> (Failure err, Evaluated, evalSteps - 1)
                 else
-                    (AwaitFiber ifiber, RescheduleForBlocking (BlockingFiber ifiber), evalSteps)
+                    (Await ifiber, RescheduleForBlocking (BlockingFiber ifiber), evalSteps)
             | SequenceSuccess (eff, cont) ->
                 match this.InternalRun eff prevAction evalSteps with
                 | Success res, Evaluated, evalSteps -> this.InternalRun (cont res) Evaluated evalSteps

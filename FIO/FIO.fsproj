@@ -13,6 +13,7 @@
 		<Compile Include="FIO.Runtime.Intermediate.fs" />
 		<Compile Include="FIO.Runtime.Advanced.fs" />
 		<Compile Include="FIO.Runtime.Deadlocking.fs" />
+		<Compile Include="FIOApp.fs" />
 	</ItemGroup>
 
 </Project>

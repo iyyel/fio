@@ -44,7 +44,7 @@ type NaiveRuntime() =
         | Blocking channel ->
             let result = channel.Take()
             handleSuccess result stack
-        | SendMessage (message, channel) ->
+        | Send (message, channel) ->
             channel.Add message
             handleSuccess message stack
         | Concurrent (effect, fiber, ifiber) ->
@@ -52,7 +52,7 @@ type NaiveRuntime() =
             |> Async.StartAsTask
             |> ignore
             handleSuccess fiber stack
-        | AwaitFiber ifiber ->
+        | Await ifiber ->
             handleResult (ifiber.Await()) stack
         | SequenceSuccess (effect, continuation) ->
             this.InternalRun effect (SuccConts continuation :: stack)

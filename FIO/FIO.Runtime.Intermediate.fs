@@ -8,13 +8,11 @@ module rec FIO.Runtime.Intermediate
 
 open FIO.Core
 
-open System.Collections.Concurrent
-
 #if DETECT_DEADLOCK || MONITOR
 open FIO.Runtime.Tools
 #endif
 
-type internal EvalWorker(runtime: IntermediateRuntime, workItemQueue: Queue<WorkItem>, blockingWorker: BlockingWorker, evalSteps) =
+type internal EvalWorker(runtime: IntermediateRuntime, workItemQueue: InternalQueue<WorkItem>, blockingWorker: BlockingWorker, evalSteps) =
     #if DETECT_DEADLOCK
     inherit Worker()
     let mutable working = false
@@ -47,11 +45,11 @@ type internal EvalWorker(runtime: IntermediateRuntime, workItemQueue: Queue<Work
     #endif
             
 and internal BlockingWorker(
-    workItemQueue: Queue<WorkItem>,
+    workItemQueue: InternalQueue<WorkItem>,
     #if DETECT_DEADLOCK
     deadlockDetector: DeadlockDetector<BlockingWorker, EvalWorker>,
     #endif
-    blockingItemQueue: Queue<BlockingItem * WorkItem>) as self =
+    blockingItemQueue: InternalQueue<BlockingItem * WorkItem>) as self =
     #if DETECT_DEADLOCK
     inherit Worker()
     let mutable working = false
@@ -70,14 +68,15 @@ and internal BlockingWorker(
     member private this.HandleBlockingItem blockingItem workItem =
         match blockingItem with
         | BlockingChannel chan ->
-            if chan.DataAvailable() then
-                chan.UseAvailableData()
+            // TODO: Are we sure that the intermediate runtime works without this?
+            // if chan.DataAvailable() then
+            //    chan.UseAvailableData()
                 workItemQueue.Add workItem
                 #if DETECT_DEADLOCK
                 deadlockDetector.RemoveBlockingItem blockingItem
                 #endif
-            else 
-                blockingItemQueue.Add ((blockingItem, workItem))
+            // else 
+            //    blockingItemQueue.Add ((blockingItem, workItem))
         | BlockingFiber ifiber ->
             if ifiber.Completed() then
                 workItemQueue.Add workItem
@@ -101,8 +100,8 @@ and internal BlockingWorker(
 and IntermediateRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as self =
     inherit Runtime()
 
-    let workItemQueue = new Queue<WorkItem>()
-    let blockingItemQueue = new Queue<BlockingItem * WorkItem>()
+    let workItemQueue = new InternalQueue<WorkItem>()
+    let blockingItemQueue = new InternalQueue<BlockingItem * WorkItem>()
 
     #if DETECT_DEADLOCK
     let deadlockDetector = new DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue, 500)
@@ -163,17 +162,17 @@ and IntermediateRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as 
                 else
                     ((Blocking channel, stack),
                         RescheduleForBlocking (BlockingChannel channel), evalSteps)
-            | SendMessage (message, channel) ->
+            | Send (message, channel) ->
                 channel.Add message
                 handleSuccess message newEvalSteps stack
             | Concurrent (effect, fiber, ifiber) ->
                 workItemQueue.Add <| WorkItem.Create effect [] ifiber prevAction
                 handleSuccess fiber newEvalSteps stack
-            | AwaitFiber ifiber ->
+            | Await ifiber ->
                 if ifiber.Completed() then
                     handleResult (ifiber.Await()) newEvalSteps stack
                 else
-                    ((AwaitFiber ifiber, stack), 
+                    ((Await ifiber, stack), 
                         RescheduleForBlocking (BlockingFiber ifiber), evalSteps)
             | SequenceSuccess (effect, continuation) ->
                 this.InternalRun effect prevAction evalSteps (SuccConts continuation :: stack)

@@ -16,7 +16,7 @@ open FIO.Monitor
 
 type internal EvalWorker(
     runtime: AdvancedRuntime,
-    workItemQueue: Queue<WorkItem>,
+    workItemQueue: InternalQueue<WorkItem>,
     blockingWorker: BlockingWorker,
     #if DETECT_DEADLOCK
     deadlockDetector: DeadlockDetector<BlockingWorker, EvalWorker>,
@@ -69,11 +69,11 @@ type internal EvalWorker(
     #endif
             
 and internal BlockingWorker(
-    workItemQueue: Queue<WorkItem>,
+    workItemQueue: InternalQueue<WorkItem>,
     #if DETECT_DEADLOCK
     deadlockDetector: DeadlockDetector<BlockingWorker, EvalWorker>,
     #endif
-    blockingEventQueue: Queue<Channel<obj>>) =
+    blockingEventQueue: InternalQueue<Channel<obj>>) =
     #if DETECT_DEADLOCK
     inherit Worker()
     let mutable working = false
@@ -113,9 +113,8 @@ and internal BlockingWorker(
 and AdvancedRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as self =
     inherit Runtime()
 
-    let workItemQueue = new Queue<WorkItem>()
-    let blockingEventQueue = new Queue<Channel<obj>>()
-
+    let workItemQueue = new InternalQueue<WorkItem>()
+    let blockingEventQueue = new InternalQueue<Channel<obj>>()
     #if DETECT_DEADLOCK
     let deadlockDetector = new DeadlockDetector<BlockingWorker, EvalWorker>(workItemQueue, 500)
     #endif
@@ -175,18 +174,18 @@ and AdvancedRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as self
                 else
                     ((Blocking channel, stack),
                         RescheduleForBlocking (BlockingChannel channel), evalSteps)
-            | SendMessage (message, channel) ->
+            | Send (message, channel) ->
                 channel.Add message
                 blockingEventQueue.Add channel
                 handleSuccess message newEvalSteps stack
             | Concurrent (effect, fiber, ifiber) ->
                 workItemQueue.Add <| WorkItem.Create effect [] ifiber prevAction
                 handleSuccess fiber newEvalSteps stack
-            | AwaitFiber ifiber ->
+            | Await ifiber ->
                 if ifiber.Completed() then
                     handleResult (ifiber.Await()) newEvalSteps stack
                 else
-                    ((AwaitFiber ifiber, stack),
+                    ((Await ifiber, stack),
                         RescheduleForBlocking (BlockingFiber ifiber), evalSteps)
             | SequenceSuccess (effect, continuation) ->
                 this.InternalRun effect prevAction evalSteps (SuccConts continuation :: stack)
