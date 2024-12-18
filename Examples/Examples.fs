@@ -10,28 +10,30 @@ open System
 
 open System.Globalization
 open System.Threading
+open System.Net.Sockets
+open System.Net
 
 open FIO.Core
 open FIO.App
-open FIO.Net.Socket
+open FIO.Lib.Network.Socket
 open FIO.Runtime.Advanced
 
 let helloWorld1 () =
-    let hello: FIO<string, obj> = succeed "Hello world!"
+    let hello: FIO<string, obj> = !+ "Hello world!"
     let fiber: Fiber<string, obj> = AdvancedRuntime().Run hello
-    let result: Result<string, obj> = fiber.Await()
+    let result: Result<string, obj> = fiber.AwaitResult()
     printfn $"%A{result}"
 
 let helloWorld2 () =
-    let hello = succeed "Hello world!"
+    let hello = !+ "Hello world!"
     let fiber = AdvancedRuntime().Run hello
-    let result = fiber.Await()
+    let result = fiber.AwaitResult()
     printfn $"%A{result}"
 
 let concurrency () =
-    let concurrent = !>(succeed 42) >> fun fiber -> !?>fiber >> succeed
+    let concurrent = !! !+ 42 >>= fun fiber -> !? fiber >>= succeed
     let fiber = AdvancedRuntime().Run concurrent
-    let result = fiber.Await()
+    let result = fiber.AwaitResult()
     printfn $"%A{result}"
 
 type WelcomeApp() =
@@ -39,9 +41,9 @@ type WelcomeApp() =
 
     override this.effect =
         fio {
-            do! succeed <| printfn "Hello! What is your name?"
-            let! name = succeed <| Console.ReadLine()
-            do! succeed <| printfn $"Hello, %s{name}, welcome to FIO! 🪻"
+            do! !+ printfn("Hello! What is your name?")
+            let! name = !+ Console.ReadLine()
+            do! !+ printfn($"Hello, %s{name}, welcome to FIO! 🪻")
         }
 
 type EnterNumberApp() =
@@ -49,12 +51,11 @@ type EnterNumberApp() =
 
     override this.effect =
         fio {
-            do! succeed <| printf "Enter a number: "
-            let! input = succeed <| Console.ReadLine()
-
+            do! !+ printf("Enter a number: ")
+            let! input = !+ Console.ReadLine()
             match Int32.TryParse(input) with
-            | true, number -> do! succeed <| printfn $"You entered the number: {number}."
-            | false, _ -> do! fail <| printfn "You entered an invalid number!"
+            | true, number -> do! !+ printfn($"You entered the number: {number}.")
+            | false, _ -> do! !- printfn("You entered an invalid number!")
         }
 
 type GuessNumberApp() =
@@ -62,24 +63,23 @@ type GuessNumberApp() =
 
     override this.effect =
         fio {
-            let! numberToGuess = succeed <| Random().Next(1, 100)
+            let! numberToGuess = !+ Random().Next(1, 100)
             let mutable guess = -1
 
             while guess <> numberToGuess do
-                do! succeed <| printf "Guess a number: "
-                let! input = succeed <| Console.ReadLine()
+                do! !+ printf("Guess a number: ")
+                let! input = !+ Console.ReadLine()
 
                 match Int32.TryParse(input) with
                 | true, parsedInput ->
                     guess <- parsedInput
-
                     if guess < numberToGuess then
-                        do! succeed <| printfn "Too low! Try again."
+                        do! !+ printfn("Too low! Try again.")
                     elif guess > numberToGuess then
-                        do! succeed <| printfn "Too high! Try again."
+                        do! !+ printfn("Too high! Try again.")
                     else
-                        do! succeed <| printfn "Congratulations! You guessed the number!"
-                | _ -> do! succeed <| printfn "Invalid input. Please enter a number."
+                        do! !+ printfn("Congratulations! You guessed the number!")
+                | _ -> do! !+ printfn("Invalid input. Please enter a number.")
 
             return guess
         }
@@ -91,26 +91,46 @@ type PingPongApp() =
     let channel2 = Channel<string>()
 
     let pinger channel1 channel2 =
-        "ping" *> channel1
-        >> fun ping ->
-            printfn $"pinger sent: %s{ping}"
-
-            !*>channel2
-            >> fun pong ->
-                printfn $"pinger received: %s{pong}"
-                ! ()
+        "ping" **> channel1 >>= fun ping ->
+        printfn $"pinger sent: %s{ping}"
+        !*? channel2 >>= fun pong ->
+        printfn $"pinger received: %s{pong}"
+        ! ()
 
     let ponger channel1 channel2 =
-        !*>channel1
-        >> fun ping ->
-            printfn $"ponger received: %s{ping}"
+        !*? channel1 >>= fun ping ->
+        printfn $"ponger received: %s{ping}"
+        "pong" **> channel2 >>= fun pong ->
+        printfn $"ponger sent: %s{pong}"
+        ! ()
 
-            "pong" *> channel2
-            >> fun pong ->
-                printfn $"ponger sent: %s{pong}"
-                ! ()
+    override this.effect =
+        pinger channel1 channel2 <!> ponger channel1 channel2
 
-    override this.effect = pinger channel1 channel2 <!> ponger channel1 channel2
+type PingPongAppCE() =
+    inherit FIOApp<unit, obj>()
+
+    let channel1 = Channel<string>()
+    let channel2 = Channel<string>()
+
+    let pinger (channel1: Channel<string>) (channel2: Channel<string>) =
+        fio {
+            let! ping = channel1.Send "ping"
+            do! !+ printfn($"pinger sent: %s{ping}")
+            let! pong = channel2.Receive()
+            do! !+ printfn($"pinger received: %s{pong}")
+        }
+
+    let ponger (channel1: Channel<string>) (channel2: Channel<string>) =
+        fio {
+            let! ping = channel1.Receive()
+            do! !+ printfn($"ponger received: %s{ping}")
+            let! pong = channel2.Send "pong"
+            do! !+ printfn($"ponger sent: %s{pong}")
+        }
+
+    override this.effect =
+        pinger channel1 channel2 <!> ponger channel1 channel2
 
 type Error =
     | DbError of bool
@@ -126,29 +146,31 @@ type ErrorHandlingApp() =
         if Random().Next(0, 2) = 1 then !+ 'S' else !- 404
 
     let databaseResult: FIO<string, Error> =
-        readFromDatabase ?> fun error -> !-(DbError error)
+        readFromDatabase >>? fun error -> !- (DbError error)
 
     let webserviceResult: FIO<char, Error> =
-        awaitWebservice ?> fun error -> !-(WsError error)
+        awaitWebservice >>? fun error -> !- (WsError error)
 
-    override this.effect = databaseResult <^> webserviceResult ?> fun _ -> !+("default", 'D')
+    override this.effect =
+        databaseResult <^> webserviceResult >>? fun _ -> !+ ("default", 'D')
 
 type RaceServersApp() =
     inherit FIOApp<string, obj>()
 
     let serverRegionA =
         fio {
-            do! succeed <| Thread.Sleep(Random().Next(0, 101))
+            do! !+ Thread.Sleep(Random().Next(0, 101))
             return "server data (Region A)"
         }
 
     let serverRegionB =
         fio {
-            do! succeed <| Thread.Sleep(Random().Next(0, 101))
+            do! !+ Thread.Sleep(Random().Next(0, 101))
             return "server data (Region B)"
         }
 
-    override this.effect = serverRegionA <?> serverRegionB
+    override this.effect =
+        serverRegionA <?> serverRegionB
 
 // Release build required to run, will otherwise crash.
 type HighlyConcurrentApp() =
@@ -156,23 +178,25 @@ type HighlyConcurrentApp() =
 
     let rand = Random()
 
-    let sender channel id =
-        rand.Next(100, 501) *> channel
-        >> fun message ->
-            printfn $"Sender[%i{id}] sent: %i{message}"
-            ! ()
+    let sender (channel: Channel<int>) id =
+        fio {
+            let! message = !+ rand.Next(100, 501)
+            let! _ = channel.Send message
+            do! !+ printfn($"Sender[%i{id}] sent: %i{message}")
+        }
 
-    let rec receiver channel count (max: int) =
+    let rec receiver (channel: Channel<int>) count (max: int) =
         if count = 0 then
-            let maxFibers = max.ToString("N0", CultureInfo("en-US"))
-
-            succeed
-            <| printfn $"Successfully received a message from all %s{maxFibers} fibers"
+            fio {
+                let! maxFibers = !+ max.ToString("N0", CultureInfo("en-US"))
+                do! !+ printfn($"Successfully received a message from all %s{maxFibers} fibers")
+            }
         else
-            !*>channel
-            >> fun message ->
-                printfn $"Receiver received: %i{message}"
-                receiver channel (count - 1) max
+            fio {
+                let! message = channel.Receive()
+                do! !+ printfn($"Receiver received: %i{message}")
+                return! receiver channel (count - 1) max
+            }
 
     [<TailCall>]
     let rec create channel count acc =
@@ -191,26 +215,30 @@ type HighlyConcurrentApp() =
 type SocketChannelApp() =
     inherit FIOApp<unit, exn>()
 
-    let server port =
+    let server ip port =
         fio {
-            let! socket = SocketChannel.CreateLocalServerSocket<string>(port)
-            do! succeed <| printfn $"Server listening on port %i{port}..."
+            let! listener = !+ (new TcpListener(ip, port))
+            do! !+ listener.Start()
+            let! socketChannel = !+ SocketChannel<string>(listener.AcceptSocket())
+            do! !+ printfn($"Server listening on %A{ip}:%i{port}...")
 
             while true do
-                let! message = socket.Receive()
-                do! succeed <| printfn $"Server received: %s{message}"
+                let! message = socketChannel.Receive()
+                do! !+ printfn($"Server received: %s{message}")
 
-            return socket.Close()
+            return socketChannel.Close()
         }
 
     let client (ip: string) (port: int) =
         fio {
-            let! socket = SocketChannel.CreateClientSocket<string>(ip, port)
+            let! socket = !+ (new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            do! !+ socket.Connect(ip, port)
+            let! socketChannel = !+ SocketChannel<string>(socket)
 
             while true do
-                do! succeed <| printf "Enter a message: "
-                let! message = succeed <| Console.ReadLine()
-                do! socket.Send message >> fun _ -> ! ()
+                do! !+ printf("Enter a message: ")
+                let! message = !+ Console.ReadLine()
+                do! socketChannel.Send message
 
             return socket.Close()
         }
@@ -218,7 +246,7 @@ type SocketChannelApp() =
     override this.effect =
         let ip = "localhost"
         let port = 5000
-        server port <!> client ip port
+        server IPAddress.Loopback port <!> client ip port
 
 helloWorld1 ()
 Console.ReadLine() |> ignore
@@ -239,6 +267,9 @@ FIOApp.Run(GuessNumberApp())
 Console.ReadLine() |> ignore
 
 FIOApp.Run(PingPongApp())
+Console.ReadLine() |> ignore
+
+FIOApp.Run(PingPongAppCE())
 Console.ReadLine() |> ignore
 
 FIOApp.Run(ErrorHandlingApp())

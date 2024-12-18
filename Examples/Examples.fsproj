@@ -8,6 +8,8 @@
 
     <ItemGroup>
         <Compile Include="Examples.fs" />
+        <None Include="ServerApp.fsx" />
+        <None Include="ClientApp.fsx" />
     </ItemGroup>
 
     <ItemGroup>

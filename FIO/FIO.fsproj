@@ -7,15 +7,20 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="FIO.Core.fs"/>
-        <Compile Include="FIO.Net.fs" />
-        <Compile Include="FIO.Runtime.Core.fs"/>
-        <Compile Include="FIO.Runtime.Tools.fs"/>
-        <Compile Include="FIO.Runtime.Naive.fs"/>
-        <Compile Include="FIO.Runtime.Intermediate.fs"/>
-        <Compile Include="FIO.Runtime.Advanced.fs"/>
-        <Compile Include="FIO.Runtime.Deadlocking.fs"/>
-        <Compile Include="FIOApp.fs"/>
+        <Compile Include="FIO.Core.DSL.fs" />
+        <Compile Include="FIO.Core.CE.fs" />
+        <Compile Include="FIO.Lib.Network.fs" />
+        <Compile Include="FIO.Runtime.Core.fs" />
+        <Compile Include="FIO.Runtime.Tools.fs" />
+        <Compile Include="FIO.Runtime.Naive.fs" />
+        <Compile Include="FIO.Runtime.Intermediate.fs" />
+        <Compile Include="FIO.Runtime.Advanced.fs" />
+        <Compile Include="FIO.Runtime.Deadlocking.fs" />
+        <Compile Include="FIOApp.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="FSharp.SystemTextJson" Version="1.3.13" />
     </ItemGroup>
 
 </Project>

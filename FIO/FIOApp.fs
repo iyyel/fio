@@ -25,14 +25,14 @@ type FIOApp<'R, 'E>() =
 
     static member Run<'R, 'E>(effect: FIO<'R, 'E>) : Unit =
         let fiber = defaultRuntime.Run effect
-        printfn $"%A{fiber.Await()}"
+        printfn $"%A{fiber.AwaitResult()}"
 
     abstract member effect: FIO<'R, 'E>
 
     member this.Run() : Unit =
         let fiber = defaultRuntime.Run this.effect
-        printfn $"%A{fiber.Await()}"
+        printfn $"%A{fiber.AwaitResult()}"
 
     member this.Run(runtime: Runtime) : Unit =
         let fiber = runtime.Run this.effect
-        printfn $"%A{fiber.Await()}"
+        printfn $"%A{fiber.AwaitResult()}"

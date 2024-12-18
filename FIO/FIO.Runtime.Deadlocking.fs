@@ -206,16 +206,16 @@ and DeadlockingRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as s
                     | Error err -> (Failure err, Evaluated, evalSteps - 1)
                 else
                     (Await ifiber, RescheduleForBlocking(BlockingFiber ifiber), evalSteps)
-            | SequenceSuccess(eff, cont) ->
+            | ChainSuccess(eff, cont) ->
                 match this.InternalRun eff prevAction evalSteps with
                 | Success res, Evaluated, evalSteps -> this.InternalRun (cont res) Evaluated evalSteps
                 | Failure err, Evaluated, evalSteps -> (Failure err, Evaluated, evalSteps)
-                | eff, action, evalSteps -> (SequenceSuccess(eff, cont), action, evalSteps)
-            | SequenceError(eff, cont) ->
+                | eff, action, evalSteps -> (ChainSuccess(eff, cont), action, evalSteps)
+            | ChainError(eff, cont) ->
                 match this.InternalRun eff prevAction evalSteps with
                 | Success res, Evaluated, evalSteps -> (Success res, Evaluated, evalSteps)
                 | Failure err, Evaluated, evalSteps -> this.InternalRun (cont err) Evaluated evalSteps
-                | eff, action, evalSteps -> (SequenceSuccess(eff, cont), action, evalSteps)
+                | eff, action, evalSteps -> (ChainSuccess(eff, cont), action, evalSteps)
             | Success res -> (Success res, Evaluated, evalSteps - 1)
             | Failure err -> (Failure err, Evaluated, evalSteps - 1)
 

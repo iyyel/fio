@@ -175,8 +175,8 @@ and IntermediateRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as 
                     handleResult (ifiber.Await()) newEvalSteps stack
                 else
                     ((Await ifiber, stack), RescheduleForBlocking(BlockingFiber ifiber), evalSteps)
-            | SequenceSuccess(effect, continuation) -> this.InternalRun effect prevAction evalSteps (SuccConts continuation :: stack)
-            | SequenceError(effect, continuation) -> this.InternalRun effect prevAction evalSteps (ErrorConts continuation :: stack)
+            | ChainSuccess(effect, continuation) -> this.InternalRun effect prevAction evalSteps (SuccConts continuation :: stack)
+            | ChainError(effect, continuation) -> this.InternalRun effect prevAction evalSteps (ErrorConts continuation :: stack)
             | Success result -> handleSuccess result newEvalSteps stack
             | Failure error -> handleError error newEvalSteps stack
 

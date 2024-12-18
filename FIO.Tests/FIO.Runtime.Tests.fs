@@ -1,5 +1,8 @@
 ﻿module FIO.Tests
 
+#nowarn "0988"
+
+open System.Threading
 open NUnit.Framework
 
 open FIO.Core
@@ -7,7 +10,6 @@ open FIO.Runtime
 open FIO.Runtime.Naive
 open FIO.Runtime.Intermediate
 open FIO.Runtime.Advanced
-open System.Threading
 
 [<TestFixture>]
 type RuntimeTests() =
@@ -37,31 +39,31 @@ type RuntimeTests() =
     member this.SucceedFunctionTest(runtime: Runtime) =
         // Arrange
         let expected = "Jinsei x Boku"
-        let effect = succeed expected
+        let effect = !+ expected
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.FailFunctionTest(runtime: Runtime) =
         // Arrange
         let expected = "Niche Syndrome"
-        let effect = fail expected
+        let effect = !- expected
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.StopFunctionTest(runtime: Runtime) =
@@ -71,29 +73,29 @@ type RuntimeTests() =
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.SendMessageFunctionTest(runtime: Runtime) =
         // Arrange
         let expected = "Beam of Light"
         let channel = Channel()
-        let effect = expected *> channel
+        let effect = expected **> channel
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
         Assert.That(channel.Count(), Is.EqualTo(1))
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ReceiveMessageFunctionTest(runtime: Runtime) =
@@ -102,17 +104,19 @@ type RuntimeTests() =
         let channel = Channel()
 
         let effect =
-            expected *> channel >> fun _ -> !*>channel >> fun result -> succeed result
+            expected **> channel >>= fun _ ->
+            !*? channel >>= fun result ->
+            !+ result
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
         Assert.That(channel.Count(), Is.EqualTo(0))
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ConcurrentlyAndAwaitSucceedFunctionTest(runtime: Runtime) =
@@ -120,16 +124,18 @@ type RuntimeTests() =
         let expected = "ONE OK ROCK"
 
         let effect =
-            !>(succeed expected) >> fun fiber -> !?>fiber >> fun result -> succeed result
+            !! !+ expected >>= fun fiber ->
+            !? fiber >>= fun result ->
+            !+ result
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ConcurrentlyAndAwaitFailFunctionTest(runtime: Runtime) =
@@ -137,16 +143,18 @@ type RuntimeTests() =
         let expected = "Kanjou Effect"
 
         let effect =
-            !>(fail expected) >> fun fiber -> !?>fiber >> fun result -> succeed result
+            !! !- expected >>= fun fiber ->
+            !? fiber >>= fun result ->
+            !+ result
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.SequenceSuccessErrorFunctionTest(runtime: Runtime) =
@@ -154,16 +162,18 @@ type RuntimeTests() =
         let expected = "Sleep Token"
 
         let effect =
-            succeed 42 >> fun _ -> fail expected >> fun _ -> succeed "will not succeed"
+            !+ 42 >>= fun _ ->
+            !- expected >>= fun _ ->
+            !+ "will not succeed"
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     // TODO: Hmm, are we sure about this behavior?
     [<TestCaseSource("GenerateRuntimes")>]
@@ -171,17 +181,19 @@ type RuntimeTests() =
         // Arrange
         let expected = "Bad Omens"
 
-        let effect =
-            fail 42 ?> fun _ -> succeed "will not succeed" >> fun _ -> fail expected
+        let effect = 
+            !- 42 >>? fun _ ->
+            !+ "will not succeed" >>= fun _ ->
+            !- expected
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeDoubleSuccessFunctionTest(runtime: Runtime) =
@@ -189,16 +201,16 @@ type RuntimeTests() =
         let spiritbox = "Spiritbox"
         let imminence = "Imminence"
         let expected = (spiritbox, imminence)
-        let effect = succeed spiritbox <*> succeed imminence
+        let effect = !+ spiritbox <*> !+ imminence
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeDoubleFailureFunctionTest(runtime: Runtime) =
@@ -206,16 +218,16 @@ type RuntimeTests() =
         let julieta = "Julieta"
         let groza = "Groza"
         let expected = julieta
-        let effect = fail julieta <*> fail groza
+        let effect = !- julieta <*> !- groza
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeSuccessFailureFunctionTest(runtime: Runtime) =
@@ -223,16 +235,16 @@ type RuntimeTests() =
         let ambitions = "Ambitions"
         let eyeOfTheStorm = "Eye of the Storm"
         let expected = eyeOfTheStorm
-        let effect = succeed ambitions <*> fail eyeOfTheStorm
+        let effect = !+ ambitions <*> !- eyeOfTheStorm
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeFailureSuccessFunctionTest(runtime: Runtime) =
@@ -240,31 +252,31 @@ type RuntimeTests() =
         let bombsAway = "Bombs Away"
         let takingOff = "Taking Off"
         let expected = bombsAway
-        let effect = fail bombsAway <*> succeed takingOff
+        let effect = !- bombsAway <*> !+ takingOff
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeUnitDoubleSuccessFunctionTest(runtime: Runtime) =
         // Arrange
         let expected = ()
-        let effect = succeed "I won't be there" <!> succeed "and neither will I"
+        let effect = !+ "I won't be there" <!> !+ "and neither will I"
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeUnitDoubleFailureFunctionTest(runtime: Runtime) =
@@ -272,16 +284,16 @@ type RuntimeTests() =
         let lostInTonight = "Lost in Tonight"
         let ghost = "and yet, I will not be there"
         let expected = lostInTonight
-        let effect = fail expected <!> fail ghost
+        let effect = !- expected <!> !- ghost
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeUnitSuccessFailureFunctionTest(runtime: Runtime) =
@@ -289,16 +301,16 @@ type RuntimeTests() =
         let startAgain = "Start Again"
         let ghost = "I am a ghost, boo"
         let expected = startAgain
-        let effect = succeed ghost <!> fail expected
+        let effect = !+ ghost <!> !- expected
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ParallelizeUnitFailureSuccessFunctionTest(runtime: Runtime) =
@@ -306,16 +318,16 @@ type RuntimeTests() =
         let oneWayTicket = "One Way Ticket"
         let ghost = "Boo, boo..."
         let expected = oneWayTicket
-        let effect = fail expected <!> succeed ghost
+        let effect = !- expected <!> !+ ghost
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ZipDoubleSuccessFunctionTest(runtime: Runtime) =
@@ -323,16 +335,16 @@ type RuntimeTests() =
         let standOutFitIn = "Stand Out Fit In"
         let worstInMe = "Worst In Me"
         let expected = (standOutFitIn, worstInMe)
-        let effect = succeed standOutFitIn <^> succeed worstInMe
+        let effect = !+ standOutFitIn <^> !+ worstInMe
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ZipDoubleFailureFunctionTest(runtime: Runtime) =
@@ -340,16 +352,16 @@ type RuntimeTests() =
         let itWasntEasy = "It Wasn't Easy"
         let lettingGo = "Letting Go"
         let expected = itWasntEasy
-        let effect = fail itWasntEasy <^> fail lettingGo
+        let effect = !- itWasntEasy <^> !- lettingGo
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ZipSuccessFailureFunctionTest(runtime: Runtime) =
@@ -357,16 +369,16 @@ type RuntimeTests() =
         let theLastTime = "The Last Time"
         let cantWait = "Cant Wait"
         let expected = cantWait
-        let effect = succeed theLastTime <^> fail cantWait
+        let effect = !+ theLastTime <^> !- cantWait
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.ZipFailureSuccessFunctionTest(runtime: Runtime) =
@@ -374,16 +386,16 @@ type RuntimeTests() =
         let wastedNights = "Wasted Nights"
         let growOldDieYoung = "Grow Old Die Young"
         let expected = wastedNights
-        let effect = fail wastedNights <^> succeed growOldDieYoung
+        let effect = !- wastedNights <^> !+ growOldDieYoung
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.RaceLeftSucceedsFunctionTest(runtime: Runtime) =
@@ -392,21 +404,24 @@ type RuntimeTests() =
         let iAmSoSlow = "Really slow..."
         let expected = thirtyFiveXXXV
 
-        let leftEffect = succeed thirtyFiveXXXV
+        let leftEffect = !+ thirtyFiveXXXV
 
         let rightEffect =
-            fioZ (fun _ -> succeed (Thread.Sleep(1000))) >> fun _ -> succeed iAmSoSlow
+            fio {
+                do! !+ Thread.Sleep(1000)
+                return iAmSoSlow
+            }
 
         let effect = leftEffect <?> rightEffect
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.RaceRightSucceedsFunctionTest(runtime: Runtime) =
@@ -416,20 +431,23 @@ type RuntimeTests() =
         let expected = nicheSyndrome
 
         let leftEffect =
-            fioZ (fun _ -> succeed (Thread.Sleep(1000))) >> fun _ -> succeed nowIAmSlow
+            fio {
+                do! !+ Thread.Sleep(1000)
+                return nowIAmSlow
+            }
 
-        let rightEffect = succeed nicheSyndrome
+        let rightEffect = !+ nicheSyndrome
 
         let effect = leftEffect <?> rightEffect
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.True)
         Assert.That(result.IsError, Is.False)
-        Assert.That(getSuccessResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getSuccessResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.RaceLeftFailsFunctionTest(runtime: Runtime) =
@@ -438,21 +456,24 @@ type RuntimeTests() =
         let livingDolls = "Living Dolls"
         let expected = kanjouEffect
 
-        let leftEffect = fail kanjouEffect
+        let leftEffect = !- kanjouEffect
 
         let rightEffect =
-            fioZ (fun _ -> succeed (Thread.Sleep(1000))) >> fun _ -> succeed livingDolls
+            fio {
+                do! !+ Thread.Sleep(1000)
+                return livingDolls
+            }
 
         let effect = leftEffect <?> rightEffect
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
 
     [<TestCaseSource("GenerateRuntimes")>]
     member this.RaceRightFailsFunctionTest(runtime: Runtime) =
@@ -462,17 +483,20 @@ type RuntimeTests() =
         let expected = reflection
 
         let leftEffect =
-            fioZ (fun _ -> succeed (Thread.Sleep(1000))) >> fun _ -> succeed nope
+            fio {
+                do! !+ Thread.Sleep(1000)
+                return nope
+            }
 
-        let rightEffect = fail reflection
+        let rightEffect = !- reflection
 
         let effect = leftEffect <?> rightEffect
 
         // Act
         let fiber = runtime.Run(effect)
-        let result = fiber.Await()
+        let result = fiber.AwaitResult()
 
         // Assert
         Assert.That(result.IsOk, Is.False)
         Assert.That(result.IsError, Is.True)
-        Assert.That(getFailureResult (result, expected), Is.EqualTo(expected))
+        Assert.That(getFailureResult(result, expected), Is.EqualTo(expected))
