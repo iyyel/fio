@@ -1,4 +1,10 @@
-﻿module FIO.App
+﻿(**********************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                *)
+(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
+(* All rights reserved                                                            *)
+(**********************************************************************************)
+
+module FIO.App
 
 open FIO.Core
 open FIO.Runtime
@@ -15,19 +21,18 @@ let internal defaultRuntime = AdvancedRuntime()
 [<AbstractClass>]
 type FIOApp<'R, 'E>() =
 
-    static member Run<'R, 'E> (fioApp : FIOApp<'R, 'E>) : Unit =
-        fioApp.Run()
+    static member Run<'R, 'E>(fioApp: FIOApp<'R, 'E>) : Unit = fioApp.Run()
 
-    static member Run<'R, 'E> (effect : FIO<'R, 'E>) : Unit =
+    static member Run<'R, 'E>(effect: FIO<'R, 'E>) : Unit =
         let fiber = defaultRuntime.Run effect
         printfn $"%A{fiber.Await()}"
 
-    abstract member effect : FIO<'R, 'E>
+    abstract member effect: FIO<'R, 'E>
 
     member this.Run() : Unit =
         let fiber = defaultRuntime.Run this.effect
         printfn $"%A{fiber.Await()}"
 
-    member this.Run(runtime : Runtime) : Unit =
-        let fiber = runtime.Run this.effect 
+    member this.Run(runtime: Runtime) : Unit =
+        let fiber = runtime.Run this.effect
         printfn $"%A{fiber.Await()}"
