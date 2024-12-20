@@ -1,8 +1,8 @@
-﻿(**********************************************************************************)
-(* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
-(* All rights reserved                                                            *)
-(**********************************************************************************)
+﻿(************************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                  *)
+(* Copyright (c) 2022-2025, Daniel Larsen and Technical University of Denmark (DTU) *)
+(* All rights reserved                                                              *)
+(************************************************************************************)
 
 module Examples
 
@@ -14,7 +14,6 @@ open System.Net.Sockets
 open System.Net
 
 open FIO.Core
-open FIO.App
 open FIO.Lib.Network.Socket
 open FIO.Runtime.Advanced
 
@@ -219,8 +218,10 @@ type SocketChannelApp() =
         fio {
             let! listener = !+ (new TcpListener(ip, port))
             do! !+ listener.Start()
-            let! socketChannel = !+ SocketChannel<string>(listener.AcceptSocket())
             do! !+ printfn($"Server listening on %A{ip}:%i{port}...")
+            let! socketChannel = !+ SocketChannel<string>(listener.AcceptSocket())
+            let! endpoint = socketChannel.RemoteEndPoint()
+            do! !+ printfn($"Client connected from %A{endpoint}.")
 
             while true do
                 let! message = socketChannel.Receive()

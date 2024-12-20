@@ -7,13 +7,13 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <None Include="ChatApplication\FIOChatClientApp.fsx" />
+        <None Include="ChatApplication\FIOChatServerApp.fsx" />
         <Compile Include="Examples.fs" />
-        <None Include="ServerApp.fsx" />
-        <None Include="ClientApp.fsx" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\FIO\FIO.fsproj"/>
+        <ProjectReference Include="..\FIO\FIO.fsproj" />
     </ItemGroup>
 
 </Project>

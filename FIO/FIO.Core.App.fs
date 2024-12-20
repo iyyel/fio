@@ -1,12 +1,12 @@
-﻿(**********************************************************************************)
-(* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
-(* All rights reserved                                                            *)
-(**********************************************************************************)
+﻿(************************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                  *)
+(* Copyright (c) 2022-2025, Daniel Larsen and Technical University of Denmark (DTU) *)
+(* All rights reserved                                                              *)
+(************************************************************************************)
 
-module FIO.App
+[<AutoOpen>]
+module rec FIO.Core.App
 
-open FIO.Core
 open FIO.Runtime
 open FIO.Runtime.Advanced
 
@@ -21,7 +21,8 @@ let internal defaultRuntime = AdvancedRuntime()
 [<AbstractClass>]
 type FIOApp<'R, 'E>() =
 
-    static member Run<'R, 'E>(fioApp: FIOApp<'R, 'E>) : Unit = fioApp.Run()
+    static member Run<'R, 'E>(app: FIOApp<'R, 'E>) : Unit =
+        app.Run()
 
     static member Run<'R, 'E>(effect: FIO<'R, 'E>) : Unit =
         let fiber = defaultRuntime.Run effect

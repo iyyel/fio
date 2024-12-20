@@ -1,17 +1,17 @@
-(**********************************************************************************)
-(* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
-(* All rights reserved                                                            *)
-(**********************************************************************************)
+(************************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                  *)
+(* Copyright (c) 2022-2025, Daniel Larsen and Technical University of Denmark (DTU) *)
+(* All rights reserved                                                              *)
+(************************************************************************************)
 
 namespace FIO.Lib.Network
 
-open System
 open System.IO
 open System.Net.Sockets
 open System.Text.Json
 open System.Text.Json.Serialization
 open FIO.Core
+open System.Net
 
 module Socket =
 
@@ -19,45 +19,43 @@ module Socket =
         let networkStream = new NetworkStream(socket)
         let reader = new StreamReader(networkStream)
         let writer = new StreamWriter(networkStream)
-        let channel = Channel<string>()
 
         do writer.AutoFlush <- true
 
         let options = JsonFSharpOptions.Default().ToJsonSerializerOptions()
 
         member this.Send(message: 'T) : FIO<unit, exn> =
-            fio {
-                try
-                    let serialized = JsonSerializer.Serialize(message, options)
-                    do! !+ writer.WriteLine(serialized)
-                with exn ->
-                    return! !- exn
-            }
+            try
+                let serialized = JsonSerializer.Serialize(message, options)
+                writer.WriteLine(serialized)
+                writer.Flush()
+                ! ()
+            with exn ->
+                !- exn
 
         member this.Receive() : FIO<'T, exn> =
-            let sendToChannel =
-                fio {
-                    try
-                        let! line = !+ reader.ReadLine()
+            try 
+                let line = reader.ReadLine()
+                !+ JsonSerializer.Deserialize<'T>(line, options)
+            with exn ->
+                !- exn
 
-                        if isNull line then
-                            return! !- (Exception "Connection closed")
-                        else
-                            return! channel.Send line
-                    with ex ->
-                        return! !- ex
-                }
+        member this.RemoteEndPoint() : FIO<EndPoint, exn> =
+            !+ socket.RemoteEndPoint
 
-            fio {
-                do! !!! sendToChannel
-                let! data = channel.Receive()
-                return JsonSerializer.Deserialize<'T>(data, options)
-            }
+        member this.Disconnect(reuseSocket: bool) : FIO<unit, exn> =
+            try
+                socket.Disconnect(reuseSocket)
+                ! ()
+            with exn ->
+                !- exn
+
+        member this.AddressFamily : FIO<AddressFamily, exn> =
+            !+ socket.AddressFamily
 
         member this.Close() : FIO<Unit, exn> =
-            fio {
-                try
-                    do! !+ socket.Close()
-                with exn ->
-                    return! !- exn
-            }
+            try
+                socket.Close()
+                ! ()
+            with exn ->
+                !- exn

@@ -1,8 +1,8 @@
-﻿(**********************************************************************************)
-(* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
-(* All rights reserved                                                            *)
-(**********************************************************************************)
+﻿(************************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                  *)
+(* Copyright (c) 2022-2025, Daniel Larsen and Technical University of Denmark (DTU) *)
+(* All rights reserved                                                              *)
+(************************************************************************************)
 
 [<AutoOpen>]
 module rec FIO.Core.DSL
@@ -103,7 +103,7 @@ and Channel<'R> private (
     ) =
 
     new() = Channel(new InternalQueue<obj>(), new InternalQueue<WorkItem>())
-
+    
     member internal this.AddBlockingWorkItem workItem =
         blockingWorkItemQueue.Add workItem
 
@@ -340,10 +340,6 @@ let ( <^> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R * 'R1
 /// If an error ('E) occurs the effect returns immediately.
 let ( <?> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R, 'E>) : FIO<'R, 'E> =
     leftEffect.Race rightEffect
-
-// 1. Test computation expressions. Er det ok? Kan det gøres bedre? Er syntaksen god?
-
-// 2. Find ud af hvordan vi får "gemt" en runtime og bare kan køre den på fio computation expressions. Måske en default advanced runtime eller noget i den stil? Find ud af om FIOApp virker fint.
 
 // 4. Kan vi omskrive eksemplerne og få dem til at køre med den nye stil (FIO, og app?)
 

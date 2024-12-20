@@ -1,8 +1,8 @@
-﻿(**********************************************************************************)
-(* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
-(* All rights reserved                                                            *)
-(**********************************************************************************)
+﻿(************************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                  *)
+(* Copyright (c) 2022-2025, Daniel Larsen and Technical University of Denmark (DTU) *)
+(* All rights reserved                                                              *)
+(************************************************************************************)
 
 [<AutoOpen>]
 module rec FIO.Core.CE
@@ -10,45 +10,45 @@ module rec FIO.Core.CE
 module internal FIOBuilderHelper =
 
     /// Binds the result of one FIO computation to the next.
-    let inline Bind (effect: FIO<'R1, 'E>) (continuation: 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal Bind (effect: FIO<'R1, 'E>) (continuation: 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
         effect >>= continuation
 
     /// Wraps a value in a successful FIO computation.
-    let inline Return (result: 'R) : FIO<'R, 'E> =
+    let inline internal Return (result: 'R) : FIO<'R, 'E> =
         !+ result
 
     /// Directly returns an existing FIO computation.
-    let inline ReturnFrom (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal ReturnFrom (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
         effect
 
-    let inline Yield (result: 'R) : FIO<'R, 'E> =
+    let inline internal Yield (result: 'R) : FIO<'R, 'E> =
         Return result
 
-    let inline YieldFrom (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal YieldFrom (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
         ReturnFrom effect
 
     /// Combines two computations, running one after the other.
-    let inline Combine (firstEffect: FIO<'R, 'E>) (secondEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> =
+    let inline internal Combine (firstEffect: FIO<'R, 'E>) (secondEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> =
         firstEffect >> secondEffect
 
     /// Handles "zero" computations, which in this case might signify failure or stopping.
-    let inline Zero () : FIO<Unit, 'E> =
+    let inline internal Zero () : FIO<Unit, 'E> =
         ! ()
 
     /// Delays the execution of an FIO computation.
-    let inline Delay (factory: unit -> FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal Delay (factory: unit -> FIO<'R, 'E>) : FIO<'R, 'E> =
         NonBlocking (fun () -> Ok()) >>= fun _ -> factory ()
 
     /// Evaluates a delayed FIO computation.
-    let inline Run (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal Run (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
         effect
 
     /// Handles failure cases in the effect using the provided handler.
-    let inline TryWith (effect: FIO<'R, 'E>) (handler: exn -> FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal TryWith (effect: FIO<'R, 'E>) (handler: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
         effect >>? handler
 
     /// Ensures a finalizer is executed after the main computation, regardless of success or failure.
-    let inline TryFinally (effect: FIO<'R, exn>) (finalizer: unit -> unit) : FIO<'R, exn> =
+    let inline internal TryFinally (effect: FIO<'R, exn>) (finalizer: unit -> unit) : FIO<'R, exn> =
         effect >>= fun result ->
             try
                 finalizer ()
@@ -56,7 +56,7 @@ module internal FIOBuilderHelper =
             with ex ->
                 !- ex
 
-    let inline While (guard: unit -> bool) (effect: FIO<'R, 'E>) : FIO<Unit, 'E> =
+    let inline internal While (guard: unit -> bool) (effect: FIO<'R, 'E>) : FIO<Unit, 'E> =
         let rec loop () =
             if guard () then
                 Delay (fun () -> effect >> loop ())
