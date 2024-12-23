@@ -47,27 +47,27 @@ and internal InternalFiber internal (
     ) =
 
     // Use semaphore instead?
-    member internal this.Complete result =
+    member internal this.Complete result : unit =
         if resultQueue.Count = 0 then
             resultQueue.Add result
         else
             failwith "InternalFiber: Complete was called on an already completed InternalFiber!"
 
-    member internal this.AwaitResult() =
+    member internal this.AwaitResult() : Result<obj, obj> =
         let result = resultQueue.Take()
         resultQueue.Add result
         result
 
-    member internal this.Completed() =
+    member internal this.Completed() : bool =
         resultQueue.Count > 0
 
-    member internal this.AddBlockingWorkItem workItem =
+    member internal this.AddBlockingWorkItem workItem : unit =
         blockingWorkItemQueue.Add workItem
 
-    member internal this.BlockingWorkItemsCount() =
+    member internal this.BlockingWorkItemsCount() : int =
         blockingWorkItemQueue.Count
 
-    member internal this.RescheduleBlockingWorkItems(workItemQueue: InternalQueue<WorkItem>) =
+    member internal this.RescheduleBlockingWorkItems(workItemQueue: InternalQueue<WorkItem>) : unit =
         while blockingWorkItemQueue.Count > 0 do
             workItemQueue.Add <| blockingWorkItemQueue.Take()
 
@@ -81,7 +81,7 @@ and Fiber<'R, 'E> private (
 
     new() = Fiber(new InternalQueue<Result<obj, obj>>(), new InternalQueue<WorkItem>())
 
-    member internal this.ToInternal() =
+    member internal this.ToInternal() : InternalFiber =
         InternalFiber(resultQueue, blockingWorkItemQueue)
 
     member this.AwaitResult() : Result<'R, 'E> =
@@ -91,6 +91,7 @@ and Fiber<'R, 'E> private (
         | Ok result -> Ok (result :?> 'R)
         | Error error -> Error (error :?> 'E)
 
+    /// Await is an effect that awaits the result of the fiber argument when executed.
     member this.Await() : FIO<'R, 'E> =
         Await <| this.ToInternal()
 
@@ -104,36 +105,40 @@ and Channel<'R> private (
 
     new() = Channel(new InternalQueue<obj>(), new InternalQueue<WorkItem>())
     
-    member internal this.AddBlockingWorkItem workItem =
+    member internal this.AddBlockingWorkItem workItem : unit =
         blockingWorkItemQueue.Add workItem
 
-    member internal this.RescheduleBlockingWorkItem(workItemQueue: InternalQueue<WorkItem>) =
+    member internal this.RescheduleBlockingWorkItem(workItemQueue: InternalQueue<WorkItem>) : unit =
         if blockingWorkItemQueue.Count > 0 then
             workItemQueue.Add <| blockingWorkItemQueue.Take()
 
-    member internal this.HasBlockingWorkItems() =
+    member internal this.HasBlockingWorkItems() : bool =
         blockingWorkItemQueue.Count > 0
 
-    member internal this.Upcast() =
+    member internal this.Upcast() : Channel<obj> =
         Channel<obj>(dataQueue, blockingWorkItemQueue)
 
-    member this.Add(data: 'R) =
-        dataQueue.Add data
+    member this.Add(message: 'R) : unit =
+        dataQueue.Add message
 
     member this.Take() : 'R =
         dataQueue.Take() :?> 'R
 
-    member this.Count() =
+    member this.Count() : int =
         dataQueue.Count
 
-    member this.Receive<'R, 'E>() : FIO<'R, 'E> =
-        Blocking this
-
+    /// Send is an effect that puts the message argument on the channel and succeeds 
+    /// with the message argument when executed.
     member this.Send<'R, 'E> (message: 'R) : FIO<'R, 'E> =
         Send (message, this)
 
-/// FIO is an effect that can either succeed with a result ('R)
-/// or fail with an error ('E) when interpreted.
+    /// Receive is an effect that awaits message retrieval on the channel and succeeds 
+    /// with the first message that is retrieved when executed.
+    member this.Receive<'R, 'E>() : FIO<'R, 'E> =
+        Blocking this
+
+/// The FIO type models a functional effect that can either succeed
+/// with a result or fail with an error when executed.
 and FIO<'R, 'E> =
     internal
     | NonBlocking of action: (unit -> Result<'R, 'E>)
@@ -146,49 +151,46 @@ and FIO<'R, 'E> =
     | Success of result: 'R
     | Failure of error: 'E
 
-    /// Fork is an effect that executes the effect argument concurrently when interpreted.
-    /// The effect succeeds with the associated fiber which can be awaited to retrieve the result.
+    /// Fork is an effect that executes the effect argument concurrently
+    /// and succeeds with the associated fiber when executed.
     member this.Fork<'R, 'E, 'E1>() : FIO<Fiber<'R, 'E>, 'E1> =
         let fiber = new Fiber<'R, 'E>()
         Concurrent (this.Upcast(), fiber, fiber.ToInternal())
 
-    /// OnSuccess is an effect that passes the success result ('R1) of the effect argument
-    /// to the continuation function when interpreted.
-    /// If an error ('E) occurs the effect returns immediately.
+    /// OnSuccess is an effect that passes the success result of the effect argument
+    /// to the specified continuation function when executed. Errors are 
+    /// immediately returned.
     member this.OnSuccess<'R, 'R1, 'E> (continuation: 'R -> FIO<'R1, 'E>) : FIO<'R1, 'E> =
         ChainSuccess (this.UpcastResult(), fun result -> continuation (result :?> 'R))
 
-    /// OnError is an effect that passes the error result ('E1) of the effect argument
-    /// to the continuation function when interpreted.
-    /// If a success ('R) occurs the effect returns immediately. TODO: Is this part true?
+    /// OnError is an effect that passes the error of the effect argument
+    /// to the specified continuation function when executed. Success results are 
+    /// immediately returned. // TODO: Is this part true?
     member this.OnError<'R, 'E, 'E1> (continuation: 'E -> FIO<'R, 'E1>) : FIO<'R, 'E1> =
         ChainError (this.Upcast(), fun error -> continuation (error :?> 'E))
 
     /// Then is an effect that sequences the two effect arguments where the result
-    /// of the first effect ('R1) is ignored.
-    /// If an error ('E) occurs the effect returns immediately.
+    /// of the first effect is ignored. Errors are immediately returned.
     member this.Then<'R, 'R1, 'E> (other: FIO<'R1, 'E>) : FIO<'R1, 'E> =
         ChainSuccess (this.UpcastResult(), fun _ -> other)
 
-    /// Parallel is an effect that executes the two effect arguments in parallel when interpreted.
-    /// The effects succeeds with the results of the two effect arguments in a tuple ('R1 * 'R2).
-    /// If an error ('E) occurs the effect returns immediately.
+    /// Parallel is an effect that executes the two effect arguments in parallel and succeeds
+    /// with the results in a tuple when executed. Errors are immediately returned.
     member this.Parallel<'R, 'R1, 'E> (other: FIO<'R1, 'E>) : FIO<'R * 'R1, 'E> =
         other.Fork().OnSuccess(fun otherFiber ->
             this.OnSuccess(fun thisResult ->
-                (Await <| otherFiber.ToInternal()).OnSuccess(fun otherResult -> // TODO: ISSUE: If an error occurs here, it is not immediately thrown. Figure out why.
+                (Await <| otherFiber.ToInternal()).OnSuccess(fun otherResult ->
                     Success (thisResult, otherResult))))
 
-    /// Zip is an effect that succeeds with the results of the effect arguments ('R1, 'R2) in a tuple ('R1 * 'R2) when interpreted.
-    /// If an error ('E) occurs the effect returns immediately.
+    /// Zip is an effect that succeeds with the results of the effect arguments in a
+    /// tuple when executed. Errors are immediately returned.
     member this.Zip<'R, 'R1, 'E> (other: FIO<'R1, 'E>) : FIO<'R * 'R1, 'E> =
         this.OnSuccess(fun thisResult ->
             other.OnSuccess(fun otherResult ->
                 Success (thisResult, otherResult)))
 
-    /// Race is an effect that races the two effect arguments against each other,
-    /// where the result of the effect that completes first ('R) is returned on success when interpreted.
-    /// If an error ('E) occurs the effect returns immediately.
+    /// Race is an effect that succeeds with the result of the effect that
+    /// completes first when executed. Errors are immediately returned.
     member this.Race<'R, 'E> (other: FIO<'R, 'E>) : FIO<'R, 'E> =
         let rec loop (thisFiber: InternalFiber) (otherFiber: InternalFiber) =
             if thisFiber.Completed() then thisFiber
@@ -251,98 +253,92 @@ and FIO<'R, 'E> =
     member internal this.Upcast<'R, 'E>() : FIO<obj, obj> =
         this.UpcastResult().UpcastError()
 
-/// succeed is an effect that succeeds with the result argument ('R) when interpreted.
+/// succeed is an effect that succeeds with the result argument when executed.
 let succeed<'R, 'E> (result: 'R) : FIO<'R, 'E> =
     Success result
 
-/// !+ is an alias of succeed which succeeds with the result argument ('R) when interpreted.
-let ( !+ ) (result: 'R) : FIO<'R, 'E> =
+/// !+ is a short-hand alias of succeed which succeeds with the result argument when executed.
+let inline ( !+ ) (result: 'R) : FIO<'R, 'E> =
     succeed result
 
-/// fail is an effect that fails with the error argument ('E) when interpreted.
+/// fail is an effect that fails with the error argument when executed.
 let fail<'R, 'E> (error: 'E) : FIO<'R, 'E> =
     Failure error
 
-/// !- is an alias of fail which fails with the error argument ('E) when interpreted.
-let ( !- ) (error: 'E) : FIO<'R, 'E> =
+/// !- is a short-hand alias of fail which fails with the error argument when executed.
+let inline ( !- ) (error: 'E) : FIO<'R, 'E> =
     fail error
 
-/// **> is an alias of send which puts a message on the channel argument when interpreted.
-/// The effect succeeds with the message argument ('R).
-let ( **> ) (message: 'R) (channel: Channel<'R>) : FIO<'R, 'E> =
+/// **> is a short-hand alias of Send on a channel which is an effect that puts the message argument
+/// on the channel argument and succeeds with the message argument when executed.
+let inline ( **> ) (message: 'R) (channel: Channel<'R>) : FIO<'R, 'E> =
     channel.Send message
 
-/// !*> is an alias of receive which awaits message retrieval on the channel argument when interpreted.
-/// The effect succeeds with the received message argument ('R).
-let ( !*? ) (channel: Channel<'R>) : FIO<'R, 'E> =
+/// !*? is a short-hand alias of Receive on a channel which awaits message retrieval on the channel argument
+/// and succeeds with the first message that is retrieved when executed.
+let inline ( !*? ) (channel: Channel<'R>) : FIO<'R, 'E> =
     channel.Receive()
 
-/// !> is an alias of concurrently which executes the effect argument concurrently when interpreted.
-/// The effect succeeds with the associated fiber which can be awaited to retrieve the result.
-let ( ! ) (effect: FIO<'R, 'E>) : FIO<Fiber<'R, 'E>, 'E1> =
+/// ! is a short-hand alias of Fork on an effect which executes the effect argument concurrently
+/// and succeeds with the associated fiber when executed.
+let inline ( ! ) (effect: FIO<'R, 'E>) : FIO<Fiber<'R, 'E>, 'E1> =
     effect.Fork()
 
-/// !> is an alias of concurrently which executes the effect argument concurrently when interpreted.
-/// The effect succeeds with the associated fiber which can be awaited to retrieve the result.
-let ( !! ) (effect: FIO<'R, 'E>) : FIO<unit, 'E1> =
+/// !! is a short-hand alias of Fork on an effect which executes the effect argument concurrently
+/// and succeeds with unit when executed.
+let inline ( !! ) (effect: FIO<'R, 'E>) : FIO<unit, 'E1> =
     effect.Fork().OnSuccess(fun _ -> !+ ())
 
-/// !?> is an alias of await which awaits the result of the fiber argument when interpreted.
-/// The effect succeeds with the result of the fiber argument ('R).
-let ( !? ) (fiber: Fiber<'R, 'E>) : FIO<'R, 'E> =
+/// !? is a short-hand alias of Await on a fiber which awaits the result
+/// of the fiber argument when executed.
+let inline ( !? ) (fiber: Fiber<'R, 'E>) : FIO<'R, 'E> =
     fiber.Await()
 
-/// >>= is an alias of chainSuccess which passes the success result ('R1) of the effect argument
-/// to the continuation function when interpreted.
-/// If an error ('E) occurs the effect returns immediately.
-let ( >>= ) (effect: FIO<'R, 'E>) (continuation: 'R -> FIO<'R1, 'E>) : FIO<'R1, 'E> =
+/// >>= is a short-hand alias of OnSuccess on an effect which passes the success result of the effect argument
+/// to the specified continuation function when executed. Errors are 
+/// immediately returned.
+let inline ( >>= ) (effect: FIO<'R, 'E>) (continuation: 'R -> FIO<'R1, 'E>) : FIO<'R1, 'E> =
     effect.OnSuccess continuation
 
-/// >> is an alias of Then which sequences the two effect arguments where the result
-/// of the first effect ('R1) is ignored.
-/// If an error ('E) occurs the effect returns immediately.
-let ( >> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> =
+/// >> is a short-hand of Then which sequences the two effect arguments where the result
+/// of the first effect is ignored. Errors are immediately returned.
+let inline ( >> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> =
     leftEffect.Then rightEffect
 
-/// >>? is an alias of sequenceError which passes the error result ('E1) of the effect argument
-/// to the continuation function when interpreted.
-/// If a success ('R) occurs the effect returns immediately. TODO: Is this part true?
-let ( >>? ) (effect: FIO<'R, 'E>) (continuation: 'E -> FIO<'R, 'E1>) : FIO<'R, 'E1> =
+/// >>? is a short-hand alias of OnError on an effect which sequences the two effect arguments where the result
+/// of the first effect is ignored. Errors are immediately returned.
+let inline ( >>? ) (effect: FIO<'R, 'E>) (continuation: 'E -> FIO<'R, 'E1>) : FIO<'R, 'E1> =
     effect.OnError continuation
 
-/// <*> is an alias of parallelize which executes the two effect arguments in parallel when interpreted.
-/// The effects succeeds with the results of the two effect arguments in a tuple ('R1 * 'R2).
-/// If an error ('E) occurs the effect returns immediately.
-let ( <*> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R * 'R1, 'E> =
+/// <*> is a short-hand alias of Parallel on an effect which executes the two effect arguments in parallel and succeeds
+/// with the results in a tuple when executed. Errors are immediately returned.
+let inline ( <*> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R * 'R1, 'E> =
     leftEffect.Parallel rightEffect
 
-/// <!> is an alias of parallelize which executes the two effect arguments in parallel when interpreted.
-/// The effects succeeds with Unit.
-/// If an error ('E) occurs the effect returns immediately.
-let ( <!> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<Unit, 'E> =
+/// <!> is a short-hand alias of Parallel on an effect which executes the two effect arguments in parallel and succeeds
+/// with unit when executed. Errors are immediately returned.
+let inline ( <!> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<unit, 'E> =
     leftEffect <*> rightEffect >> !+ ()
 
-/// <^> is an alias of zip which succeeds with the results of the effect arguments ('R1, 'R2) in a tuple ('R1 * 'R2) when interpreted.
-/// If an error ('E) occurs the effect returns immediately.
-let ( <^> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R * 'R1, 'E> =
+/// <^> is a short-hand alias of Zip on an effect which succeeds with the results of the effect arguments in a
+/// tuple when executed. Errors are immediately returned.
+let inline ( <^> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R * 'R1, 'E> =
     leftEffect.Zip rightEffect
 
-/// <?> is an alias of race which races the two effect arguments against each other,
-/// where the result of the effect that completes first ('R) is returned on success when interpreted.
-/// If an error ('E) occurs the effect returns immediately.
-let ( <?> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R, 'E>) : FIO<'R, 'E> =
+/// <?> is an alias of Race on an effect which succeeds with the result of the effect that
+/// completes first when executed. Errors are immediately returned.
+let inline ( <?> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R, 'E>) : FIO<'R, 'E> =
     leftEffect.Race rightEffect
 
-// 4. Kan vi omskrive eksemplerne og få dem til at køre med den nye stil (FIO, og app?)
+// TODO:
 
-// 5. Advanced runtime virker ikke altid i tests. Kan vi finde ud af hvorfor? Internemdiate virker måske ikke, da jeg har fjernet async.
+// 1. try-with in computation expressions is not exactly nice. It relies hardcore on exceptions. Can we do better?
 
-// 6. Flere tests?
+// 2. See if we can use Channel instead of BlockingCollection?
 
-// 7. Publish en nuget pakke.
+// 3. Re-write benchmarks using FIO computation expressions.
 
-// TODO: Replace data available and completed and all that jazz with semaphores to make thread-safe Channel and Fibers? Perhaps create semaphores?
+// 4. Advanced and intermediate runtimes are not always working with tests. Figure out why.
+// 4.1 Perhaps look into property-based testing?
 
-
-// 1. Få <*> til at virke som den skal.
-// 2. Lav repo's til chat appen?
+// 5.  Replace data available and completed and all that jazz with semaphores to make thread-safe Channel and Fibers? Perhaps create semaphores?
