@@ -48,7 +48,7 @@ type NaiveRuntime() =
             |> ignore
 
             handleSuccess fiber stack
-        | Await ifiber -> handleResult (ifiber.Await()) stack
+        | Await ifiber -> handleResult (ifiber.AwaitResult()) stack
         | ChainSuccess(effect, continuation) -> this.InternalRun effect (SuccConts continuation :: stack)
         | ChainError(effect, continuation) -> this.InternalRun effect (ErrorConts continuation :: stack)
         | Success result -> handleSuccess result stack

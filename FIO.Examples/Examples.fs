@@ -30,7 +30,7 @@ let helloWorld2 () =
     printfn $"%A{result}"
 
 let concurrency () =
-    let concurrent = !! !+ 42 >>= fun fiber -> !? fiber >>= succeed
+    let concurrent = ! !+ 42 >>= fun fiber -> !? fiber >>= succeed
     let fiber = AdvancedRuntime().Run concurrent
     let result = fiber.AwaitResult()
     printfn $"%A{result}"
@@ -94,14 +94,14 @@ type PingPongApp() =
         printfn $"pinger sent: %s{ping}"
         !*? channel2 >>= fun pong ->
         printfn $"pinger received: %s{pong}"
-        ! ()
+        !+ ()
 
     let ponger channel1 channel2 =
         !*? channel1 >>= fun ping ->
         printfn $"ponger received: %s{ping}"
         "pong" **> channel2 >>= fun pong ->
         printfn $"ponger sent: %s{pong}"
-        ! ()
+        !+ ()
 
     override this.effect =
         pinger channel1 channel2 <!> ponger channel1 channel2
@@ -227,7 +227,7 @@ type SocketChannelApp() =
                 let! message = socketChannel.Receive()
                 do! !+ printfn($"Server received: %s{message}")
 
-            return socketChannel.Close()
+            do! socketChannel.Close()
         }
 
     let client (ip: string) (port: int) =
@@ -241,7 +241,7 @@ type SocketChannelApp() =
                 let! message = !+ Console.ReadLine()
                 do! socketChannel.Send message
 
-            return socket.Close()
+            do! socketChannel.Close()
         }
 
     override this.effect =

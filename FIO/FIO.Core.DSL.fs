@@ -53,7 +53,7 @@ and internal InternalFiber internal (
         else
             failwith "InternalFiber: Complete was called on an already completed InternalFiber!"
 
-    member internal this.Await() =
+    member internal this.AwaitResult() =
         let result = resultQueue.Take()
         resultQueue.Add result
         result
@@ -176,7 +176,7 @@ and FIO<'R, 'E> =
     member this.Parallel<'R, 'R1, 'E> (other: FIO<'R1, 'E>) : FIO<'R * 'R1, 'E> =
         other.Fork().OnSuccess(fun otherFiber ->
             this.OnSuccess(fun thisResult ->
-                (Await <| otherFiber.ToInternal()).OnSuccess(fun otherResult ->
+                (Await <| otherFiber.ToInternal()).OnSuccess(fun otherResult -> // TODO: ISSUE: If an error occurs here, it is not immediately thrown. Figure out why.
                     Success (thisResult, otherResult))))
 
     /// Zip is an effect that succeeds with the results of the effect arguments ('R1, 'R2) in a tuple ('R1 * 'R2) when interpreted.
@@ -196,7 +196,7 @@ and FIO<'R, 'E> =
             else loop thisFiber otherFiber
         this.Fork().OnSuccess(fun thisFiber ->
             other.Fork().OnSuccess(fun otherFiber ->
-                match (loop (thisFiber.ToInternal()) (otherFiber.ToInternal())).Await() with
+                match (loop (thisFiber.ToInternal()) (otherFiber.ToInternal())).AwaitResult() with
                 | Ok result -> Success (result :?> 'R)
                 | Error error -> Failure (error :?> 'E)))
 
@@ -267,14 +267,6 @@ let fail<'R, 'E> (error: 'E) : FIO<'R, 'E> =
 let ( !- ) (error: 'E) : FIO<'R, 'E> =
     fail error
 
-/// stop is an effect that ends the effect by succeeding with Unit when interpreted.
-let stop<'E> (unit: Unit) : FIO<Unit, 'E> =
-    Success unit
-
-/// ! is an alias of stop which ends the effect by succeeding with Unit when interpreted.
-let ( ! ) (unit: Unit) : FIO<Unit, 'E> =
-    stop unit
-
 /// **> is an alias of send which puts a message on the channel argument when interpreted.
 /// The effect succeeds with the message argument ('R).
 let ( **> ) (message: 'R) (channel: Channel<'R>) : FIO<'R, 'E> =
@@ -287,13 +279,13 @@ let ( !*? ) (channel: Channel<'R>) : FIO<'R, 'E> =
 
 /// !> is an alias of concurrently which executes the effect argument concurrently when interpreted.
 /// The effect succeeds with the associated fiber which can be awaited to retrieve the result.
-let ( !! ) (effect: FIO<'R, 'E>) : FIO<Fiber<'R, 'E>, 'E1> =
+let ( ! ) (effect: FIO<'R, 'E>) : FIO<Fiber<'R, 'E>, 'E1> =
     effect.Fork()
 
 /// !> is an alias of concurrently which executes the effect argument concurrently when interpreted.
 /// The effect succeeds with the associated fiber which can be awaited to retrieve the result.
-let ( !!! ) (effect: FIO<'R, 'E>) : FIO<unit, 'E1> =
-    effect.Fork().OnSuccess(fun _ -> ! ())
+let ( !! ) (effect: FIO<'R, 'E>) : FIO<unit, 'E1> =
+    effect.Fork().OnSuccess(fun _ -> !+ ())
 
 /// !?> is an alias of await which awaits the result of the fiber argument when interpreted.
 /// The effect succeeds with the result of the fiber argument ('R).
@@ -328,7 +320,7 @@ let ( <*> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R * 'R1
 /// The effects succeeds with Unit.
 /// If an error ('E) occurs the effect returns immediately.
 let ( <!> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<Unit, 'E> =
-    leftEffect <*> rightEffect >>= fun _ -> ! ()
+    leftEffect <*> rightEffect >> !+ ()
 
 /// <^> is an alias of zip which succeeds with the results of the effect arguments ('R1, 'R2) in a tuple ('R1 * 'R2) when interpreted.
 /// If an error ('E) occurs the effect returns immediately.
@@ -350,3 +342,7 @@ let ( <?> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R, 'E>) : FIO<'R, 'E> =
 // 7. Publish en nuget pakke.
 
 // TODO: Replace data available and completed and all that jazz with semaphores to make thread-safe Channel and Fibers? Perhaps create semaphores?
+
+
+// 1. Få <*> til at virke som den skal.
+// 2. Lav repo's til chat appen?

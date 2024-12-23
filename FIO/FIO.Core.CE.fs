@@ -33,7 +33,7 @@ module internal FIOBuilderHelper =
 
     /// Handles "zero" computations, which in this case might signify failure or stopping.
     let inline internal Zero () : FIO<Unit, 'E> =
-        ! ()
+        !+ ()
 
     /// Delays the execution of an FIO computation.
     let inline internal Delay (factory: unit -> FIO<'R, 'E>) : FIO<'R, 'E> =
@@ -61,7 +61,7 @@ module internal FIOBuilderHelper =
             if guard () then
                 Delay (fun () -> effect >> loop ())
             else
-                ! ()
+                !+ ()
         loop ()
 
 type FIOBuilder() =

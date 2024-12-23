@@ -201,7 +201,7 @@ and DeadlockingRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as s
                 (Success fiber, Evaluated, evalSteps - 1)
             | Await ifiber ->
                 if ifiber.Completed() then
-                    match ifiber.Await() with
+                    match ifiber.AwaitResult() with
                     | Ok res -> (Success res, Evaluated, evalSteps - 1)
                     | Error err -> (Failure err, Evaluated, evalSteps - 1)
                 else

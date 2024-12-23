@@ -1,26 +1,40 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <GenerateDocumentationFile>true</GenerateDocumentationFile>
-        <WarningsAsErrors>true</WarningsAsErrors>
-    </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<WarningsAsErrors>true</WarningsAsErrors>
+		<Title>FIO</Title>
+		<Description>FIO is a type-safe, highly concurrent and asynchronous library for F# that is based on principles from pure functional programming. It provides a construct known as the IO monad for handling expressions with side effects.</Description>
+		<PackageProjectUrl>https://github.com/iyyel/fio</PackageProjectUrl>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<RepositoryUrl>https://github.com/iyyel/fio</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<Version>0.0.1</Version>
+	</PropertyGroup>
 
-    <ItemGroup>
-        <Compile Include="FIO.Core.DSL.fs" />
-        <Compile Include="FIO.Core.CE.fs" />
-        <Compile Include="FIO.Lib.Network.fs" />
-        <Compile Include="FIO.Runtime.Core.fs" />
-        <Compile Include="FIO.Runtime.Tools.fs" />
-        <Compile Include="FIO.Runtime.Naive.fs" />
-        <Compile Include="FIO.Runtime.Intermediate.fs" />
-        <Compile Include="FIO.Runtime.Advanced.fs" />
-        <Compile Include="FIO.Runtime.Deadlocking.fs" />
-        <Compile Include="FIO.Core.App.fs" />
-    </ItemGroup>
+	<ItemGroup>
+		<Compile Include="FIO.Core.DSL.fs" />
+		<Compile Include="FIO.Core.CE.fs" />
+		<Compile Include="FIO.Lib.Network.fs" />
+		<Compile Include="FIO.Runtime.Core.fs" />
+		<Compile Include="FIO.Runtime.Tools.fs" />
+		<Compile Include="FIO.Runtime.Naive.fs" />
+		<Compile Include="FIO.Runtime.Intermediate.fs" />
+		<Compile Include="FIO.Runtime.Advanced.fs" />
+		<Compile Include="FIO.Runtime.Deadlocking.fs" />
+		<Compile Include="FIO.Core.App.fs" />
+	</ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="FSharp.SystemTextJson" Version="1.3.13" />
-    </ItemGroup>
+	<ItemGroup>
+		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="FSharp.SystemTextJson" Version="1.3.13" />
+	</ItemGroup>
 
 </Project>

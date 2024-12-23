@@ -1,23 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <OutputType>Exe</OutputType>
-        <WarningsAsErrors>true</WarningsAsErrors>
-    </PropertyGroup>
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<OutputType>Exe</OutputType>
+		<WarningsAsErrors>true</WarningsAsErrors>
+	</PropertyGroup>
 
-    <ItemGroup>
-        <Compile Include="Benchmarks.fs"/>
-        <Compile Include="ArgParser.fs"/>
-        <Compile Include="Program.fs"/>
-    </ItemGroup>
+	<ItemGroup>
+		<Compile Include="Benchmarks.fs"/>
+		<Compile Include="ArgParser.fs"/>
+		<Compile Include="Program.fs"/>
+	</ItemGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Argu" Version="6.2.5"/>
-    </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Argu" Version="6.2.5"/>
+	</ItemGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="..\FIO\FIO.fsproj"/>
-    </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\FIO\FIO.fsproj"/>
+	</ItemGroup>
 
 </Project>

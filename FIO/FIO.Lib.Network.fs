@@ -29,7 +29,7 @@ module Socket =
                 let serialized = JsonSerializer.Serialize(message, options)
                 writer.WriteLine(serialized)
                 writer.Flush()
-                ! ()
+                !+ ()
             with exn ->
                 !- exn
 
@@ -41,21 +41,20 @@ module Socket =
                 !- exn
 
         member this.RemoteEndPoint() : FIO<EndPoint, exn> =
-            !+ socket.RemoteEndPoint
+            try
+                !+ socket.RemoteEndPoint
+            with exn ->
+                !- exn
 
         member this.Disconnect(reuseSocket: bool) : FIO<unit, exn> =
             try
                 socket.Disconnect(reuseSocket)
-                ! ()
+                !+ ()
             with exn ->
                 !- exn
 
         member this.AddressFamily : FIO<AddressFamily, exn> =
             !+ socket.AddressFamily
 
-        member this.Close() : FIO<Unit, exn> =
-            try
-                socket.Close()
-                ! ()
-            with exn ->
-                !- exn
+        member this.Close() : FIO<unit, exn> =
+            !+ socket.Close()

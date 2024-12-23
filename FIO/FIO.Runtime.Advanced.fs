@@ -183,7 +183,7 @@ and AdvancedRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as self
                 handleSuccess fiber newEvalSteps stack
             | Await ifiber ->
                 if ifiber.Completed() then
-                    handleResult (ifiber.Await()) newEvalSteps stack
+                    handleResult (ifiber.AwaitResult()) newEvalSteps stack
                 else
                     ((Await ifiber, stack), RescheduleForBlocking(BlockingFiber ifiber), evalSteps)
             | ChainSuccess(effect, continuation) -> this.InternalRun effect prevAction evalSteps (SuccConts continuation :: stack)

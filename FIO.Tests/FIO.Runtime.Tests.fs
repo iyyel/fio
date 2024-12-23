@@ -75,7 +75,7 @@ type RuntimeTests() =
     member this.StopFunctionTest(runtime: Runtime) =
         // Arrange
         let expected = ()
-        let effect = ! ()
+        let effect = !+ ()
 
         // Act
         let fiber = runtime.Run(effect)
@@ -130,7 +130,7 @@ type RuntimeTests() =
         let expected = "ONE OK ROCK"
 
         let effect =
-            !! !+ expected >>= fun fiber ->
+            ! !+ expected >>= fun fiber ->
             !? fiber >>= fun result ->
             !+ result
 
@@ -149,7 +149,7 @@ type RuntimeTests() =
         let expected = "Kanjou Effect"
 
         let effect =
-            !! !- expected >>= fun fiber ->
+            ! !- expected >>= fun fiber ->
             !? fiber >>= fun result ->
             !+ result
 
