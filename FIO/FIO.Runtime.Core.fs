@@ -1,0 +1,13 @@
+﻿(************************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                  *)
+(* Copyright (c) 2022-2025, Daniel Larsen and Technical University of Denmark (DTU) *)
+(* All rights reserved                                                              *)
+(************************************************************************************)
+
+namespace rec FIO.Runtime
+
+open FIO.Core
+
+[<AbstractClass>]
+type Runtime() =
+    abstract member Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
