@@ -11,7 +11,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="FIO" Version="0.0.1" />
+	  <ProjectReference Include="..\FIO\FIO.fsproj" />
 	</ItemGroup>
 
 </Project>

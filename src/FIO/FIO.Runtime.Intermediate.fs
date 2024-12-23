@@ -75,15 +75,14 @@ and internal BlockingWorker
     member private this.HandleBlockingItem blockingItem workItem =
         match blockingItem with
         | BlockingChannel chan ->
-            // TODO: Are we sure that the intermediate runtime works without this?
-            // if chan.DataAvailable() then
-            //    chan.UseAvailableData()
-            workItemQueue.Add workItem
+            if chan.DataAvailable() then
+                chan.UseAvailableData()
+                workItemQueue.Add workItem
 #if DETECT_DEADLOCK
             deadlockDetector.RemoveBlockingItem blockingItem
 #endif
-        // else
-        //    blockingItemQueue.Add ((blockingItem, workItem))
+            else
+              blockingItemQueue.Add ((blockingItem, workItem))
         | BlockingFiber ifiber ->
             if ifiber.Completed() then
                 workItemQueue.Add workItem

@@ -8,6 +8,8 @@
 module rec FIO.Core.DSL
 
 open System.Collections.Concurrent
+open System.Threading.Channels
+open System.Threading
 
 type internal Action =
     | RescheduleForRunning
@@ -100,10 +102,11 @@ and Fiber<'R, 'E> private (
 /// retrieved (blocking) on a channel.
 and Channel<'R> private (
     dataQueue: InternalQueue<obj>,
-    blockingWorkItemQueue: InternalQueue<WorkItem>
+    blockingWorkItemQueue: InternalQueue<WorkItem>,
+    dataCounter: int64 ref
     ) =
 
-    new() = Channel(new InternalQueue<obj>(), new InternalQueue<WorkItem>())
+    new() = Channel(new InternalQueue<obj>(), new InternalQueue<WorkItem>(), ref 0)
     
     member internal this.AddBlockingWorkItem workItem : unit =
         blockingWorkItemQueue.Add workItem
@@ -116,9 +119,17 @@ and Channel<'R> private (
         blockingWorkItemQueue.Count > 0
 
     member internal this.Upcast() : Channel<obj> =
-        Channel<obj>(dataQueue, blockingWorkItemQueue)
+        Channel<obj>(dataQueue, blockingWorkItemQueue, dataCounter)
+
+    member internal this.UseAvailableData() =
+        Interlocked.Decrement dataCounter |> ignore
+
+    member internal this.DataAvailable() =
+        let mutable temp = dataCounter.Value
+        Interlocked.Read &temp > 0
 
     member this.Add(message: 'R) : unit =
+        Interlocked.Increment dataCounter |> ignore
         dataQueue.Add message
 
     member this.Take() : 'R =
@@ -341,4 +352,6 @@ let inline ( <?> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R, 'E>) : FIO<'R
 // 4. Advanced and intermediate runtimes are not always working with tests. Figure out why.
 // 4.1 Perhaps look into property-based testing?
 
-// 5.  Replace data available and completed and all that jazz with semaphores to make thread-safe Channel and Fibers? Perhaps create semaphores?
+// 5. Replace data available and completed and all that jazz with semaphores to make thread-safe Channel and Fibers? Perhaps create semaphores?
+
+// 6. Everything that can be TailCall should have the TailCall attribute.

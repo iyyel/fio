@@ -46,15 +46,15 @@ type WelcomeApp() =
         }
 
 type EnterNumberApp() =
-    inherit FIOApp<unit, unit>()
+    inherit FIOApp<string, string>()
 
     override this.effect =
         fio {
             do! !+ printf("Enter a number: ")
             let! input = !+ Console.ReadLine()
             match Int32.TryParse(input) with
-            | true, number -> do! !+ printfn($"You entered the number: {number}.")
-            | false, _ -> do! !- printfn("You entered an invalid number!")
+            | true, number -> return $"You entered the number: {number}."
+            | false, _ -> return! !- "You entered an invalid number!"
         }
 
 type GuessNumberApp() =
@@ -188,7 +188,7 @@ type HighlyConcurrentApp() =
         if count = 0 then
             fio {
                 let! maxFibers = !+ max.ToString("N0", CultureInfo("en-US"))
-                do! !+ printfn($"Successfully received a message from all %s{maxFibers} fibers")
+                do! !+ printfn($"Successfully received a message from all %s{maxFibers} fibers.")
             }
         else
             fio {
@@ -248,7 +248,7 @@ type SocketChannelApp() =
         let ip = "localhost"
         let port = 5000
         server IPAddress.Loopback port <!> client ip port
-
+(*
 helloWorld1 ()
 Console.ReadLine() |> ignore
 
@@ -264,7 +264,7 @@ Console.ReadLine() |> ignore
 FIOApp.Run(EnterNumberApp())
 Console.ReadLine() |> ignore
 
-FIOApp.Run(GuessNumberApp())
+FIOApp.Run(GuessNumberApp()) // TODO: Does not work?
 Console.ReadLine() |> ignore
 
 FIOApp.Run(PingPongApp())
@@ -278,9 +278,11 @@ Console.ReadLine() |> ignore
 
 FIOApp.Run(RaceServersApp())
 Console.ReadLine() |> ignore
-
+*)
 FIOApp.Run(HighlyConcurrentApp())
 Console.ReadLine() |> ignore
 
+(*
 FIOApp.Run(SocketChannelApp())
 Console.ReadLine() |> ignore
+*)
