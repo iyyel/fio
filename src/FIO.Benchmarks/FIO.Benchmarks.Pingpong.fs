@@ -21,7 +21,7 @@ type private Actor =
       SendingChannel: int channel
       ReceivingChannel: int channel }
 
-let private createPingActor actor startSignalChannel rounds  : FIO<BenchmarkResult, obj> =
+let private createPingActor actor startSignalChannel rounds : FIO<BenchmarkResult, obj> =
     let stopwatch = Stopwatch()
 
     // TODO: Make tail-recursive.
