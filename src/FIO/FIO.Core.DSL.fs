@@ -44,8 +44,8 @@ and internal WorkItem =
 and internal InternalQueue<'T> = BlockingCollection<'T>
 
 and internal InternalFiber internal (
-    resultQueue: InternalQueue<Result<obj, obj>>,
-    blockingWorkItemQueue: InternalQueue<WorkItem>
+        resultQueue: InternalQueue<Result<obj, obj>>,
+        blockingWorkItemQueue: InternalQueue<WorkItem>
     ) =
 
     // Use semaphore instead?
@@ -77,8 +77,8 @@ and internal InternalFiber internal (
 /// Fibers are used to execute multiple effects in parallel and
 /// can be awaited to retrieve the result of the effect.
 and Fiber<'R, 'E> private (
-    resultQueue: InternalQueue<Result<obj, obj>>,
-    blockingWorkItemQueue: InternalQueue<WorkItem>
+        resultQueue: InternalQueue<Result<obj, obj>>,
+        blockingWorkItemQueue: InternalQueue<WorkItem>
     ) =
 
     new() = Fiber(new InternalQueue<Result<obj, obj>>(), new InternalQueue<WorkItem>())
@@ -101,9 +101,9 @@ and Fiber<'R, 'E> private (
 /// data of the type 'D. Data can be both be sent and
 /// retrieved (blocking) on a channel.
 and Channel<'R> private (
-    dataQueue: InternalQueue<obj>,
-    blockingWorkItemQueue: InternalQueue<WorkItem>,
-    dataCounter: int64 ref
+        dataQueue: InternalQueue<obj>,
+        blockingWorkItemQueue: InternalQueue<WorkItem>,
+        dataCounter: int64 ref
     ) =
 
     new() = Channel(new InternalQueue<obj>(), new InternalQueue<WorkItem>(), ref 0)
@@ -121,10 +121,10 @@ and Channel<'R> private (
     member internal this.Upcast() : Channel<obj> =
         Channel<obj>(dataQueue, blockingWorkItemQueue, dataCounter)
 
-    member internal this.UseAvailableData() =
+    member internal this.UseAvailableData() : unit =
         Interlocked.Decrement dataCounter |> ignore
 
-    member internal this.DataAvailable() =
+    member internal this.DataAvailable() : bool =
         let mutable temp = dataCounter.Value
         Interlocked.Read &temp > 0
 
@@ -329,8 +329,8 @@ let inline ( >> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R
 
 /// An alias for `ApplyWith`, which combines two effects: one producing a function and the other a value, 
 /// and applies the function to the value.
-let inline ( >>> ) (effect: FIO<'R,' E>) (funcEffect: FIO<'R -> 'R1, 'E>) : FIO<'R1, 'E> =
-    effect.ApplyWith funcEffect
+let inline ( >>> ) (leftEffect: FIO<'R,' E>) (rightEffect: FIO<'R -> 'R1, 'E>) : FIO<'R1, 'E> =
+    leftEffect.ApplyWith rightEffect
 
 /// An alias for `InParallelWith`, which executes two effects concurrently and succeeds with a tuple of their results when both complete.
 /// If either effect fails, the error is immediately returned.
@@ -350,20 +350,3 @@ let inline ( <^> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'
 /// An alias for `RaceWith`, which succeeds with the result of the effect that completes first.
 let inline ( <?> ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R, 'E>) : FIO<'R, 'E> =
     leftEffect.RaceWith rightEffect
-
-// TODO:
-
-// 1. try-with in computation expressions is not exactly nice. It relies hardcore on exceptions. Can we do better?
-
-// 2. Look through Examples.fs. again. Some of them can be improved a little bit.
-
-// 3. Syntax for different effects. Look into Fsharp for fun and profit. See if you can create apply function.
-
-// 2. Re-write benchmarks using FIO computation expressions.
-
-// 4. Advanced and intermediate runtimes are not always working with tests. Figure out why.
-// 4.1 Perhaps look into property-based testing?
-
-// 5. Replace data available and completed and all that jazz with semaphores to make thread-safe Channel and Fibers? Perhaps create semaphores?
-
-// 6. Everything that can be TailCall should have the TailCall attribute.

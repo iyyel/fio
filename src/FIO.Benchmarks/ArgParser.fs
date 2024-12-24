@@ -62,22 +62,22 @@ type Parser() =
 
         let pingpongConfig =
             match results.TryGetResult Pingpong with
-            | Some roundCount -> [ Benchmark.PingpongC { RoundCount = roundCount } ]
+            | Some roundCount -> [ Benchmark.PingpongC { Rounds = roundCount } ]
             | _ -> []
 
         let threadringConfig =
             match results.TryGetResult Threadring with
             | Some(processCount, roundCount) ->
                 [ Benchmark.ThreadringC
-                      { ProcessCount = processCount
-                        RoundCount = roundCount } ]
+                      { Actors = processCount
+                        Rounds = roundCount } ]
             | _ -> []
 
         let bigConfig =
             match results.TryGetResult Big with
             | Some(processCount, roundCount) ->
                 [ Benchmark.BigC
-                      { ProcessCount = processCount
+                      { Actors = processCount
                         RoundCount = roundCount } ]
             | _ -> []
 
@@ -85,13 +85,13 @@ type Parser() =
             match results.TryGetResult Bang with
             | Some(processCount, roundCount) ->
                 [ Benchmark.BangC
-                      { ProcessCount = processCount
-                        RoundCount = roundCount } ]
+                      { Actors = processCount
+                        Rounds = roundCount } ]
             | _ -> []
 
         let spawnConfig =
             match results.TryGetResult Spawn with
-            | Some processcount -> [ Benchmark.SpawnC { ProcessCount = processcount } ]
+            | Some processcount -> [ Benchmark.ForkC { Actors = processcount } ]
             | _ -> []
 
         let configs =
