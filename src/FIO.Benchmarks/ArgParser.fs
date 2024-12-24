@@ -1,8 +1,8 @@
-﻿(**********************************************************************************)
-(* FIO - A type-safe, highly concurrent programming library for F#                *)
-(* Copyright (c) 2025, Daniel Larsen and Technical University of Denmark (DTU)    *)
-(* All rights reserved                                                            *)
-(**********************************************************************************)
+﻿(************************************************************************************)
+(* FIO - A type-safe, highly concurrent programming library for F#                  *)
+(* Copyright (c) 2022-2025, Daniel Larsen and Technical University of Denmark (DTU) *)
+(* All rights reserved                                                              *)
+(************************************************************************************)
 
 module ArgParser
 
@@ -10,7 +10,7 @@ open Argu
 
 open FIO.Runtime
 
-open Benchmarks
+open FIO.Benchmarks
 
 type Arguments =
     | Naive_Runtime
@@ -62,13 +62,13 @@ type Parser() =
 
         let pingpongConfig =
             match results.TryGetResult Pingpong with
-            | Some roundCount -> [ Benchmark.Pingpong { RoundCount = roundCount } ]
+            | Some roundCount -> [ Benchmark.PingpongC { RoundCount = roundCount } ]
             | _ -> []
 
         let threadringConfig =
             match results.TryGetResult Threadring with
             | Some(processCount, roundCount) ->
-                [ Benchmark.Threadring
+                [ Benchmark.ThreadringC
                       { ProcessCount = processCount
                         RoundCount = roundCount } ]
             | _ -> []
@@ -76,7 +76,7 @@ type Parser() =
         let bigConfig =
             match results.TryGetResult Big with
             | Some(processCount, roundCount) ->
-                [ Benchmark.Big
+                [ Benchmark.BigC
                       { ProcessCount = processCount
                         RoundCount = roundCount } ]
             | _ -> []
@@ -84,14 +84,14 @@ type Parser() =
         let bangConfig =
             match results.TryGetResult Bang with
             | Some(processCount, roundCount) ->
-                [ Benchmark.Bang
+                [ Benchmark.BangC
                       { ProcessCount = processCount
                         RoundCount = roundCount } ]
             | _ -> []
 
         let spawnConfig =
             match results.TryGetResult Spawn with
-            | Some processcount -> [ Benchmark.Spawn { ProcessCount = processcount } ]
+            | Some processcount -> [ Benchmark.SpawnC { ProcessCount = processcount } ]
             | _ -> []
 
         let configs =

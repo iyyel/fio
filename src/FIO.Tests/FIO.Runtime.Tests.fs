@@ -91,7 +91,7 @@ type RuntimeTests() =
         // Arrange
         let expected = "Beam of Light"
         let channel = Channel()
-        let effect = expected **> channel
+        let effect = expected --> channel
 
         // Act
         let fiber = runtime.Run(effect)
@@ -110,8 +110,8 @@ type RuntimeTests() =
         let channel = Channel()
 
         let effect =
-            expected **> channel >>= fun _ ->
-            !*? channel >>= fun result ->
+            expected --> channel >>= fun _ ->
+            !->? channel >>= fun result ->
             !+ result
 
         // Act

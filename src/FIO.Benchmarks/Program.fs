@@ -6,7 +6,7 @@
 
 module Program
 
-open Benchmarks.Benchmark
+open FIO.Benchmarks
 
 open System.Threading
 

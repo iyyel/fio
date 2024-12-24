@@ -7,17 +7,23 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="Benchmarks.fs"/>
-		<Compile Include="ArgParser.fs"/>
-		<Compile Include="Program.fs"/>
+		<Compile Include="FIO.Benchmarks.Core.fs" />
+		<Compile Include="FIO.Benchmarks.Pingpong.fs" />
+		<Compile Include="FIO.Benchmarks.Threadring.fs" />
+		<Compile Include="FIO.Benchmarks.Big.fs" />
+		<Compile Include="FIO.Benchmarks.Bang.fs" />
+		<Compile Include="FIO.Benchmarks.Fork.fs" />
+		<Compile Include="FIO.Benchmarks.fs" />
+		<Compile Include="ArgParser.fs" />
+		<Compile Include="Program.fs" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Argu" Version="6.2.5"/>
+		<PackageReference Include="Argu" Version="6.2.5" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<ProjectReference Include="..\FIO\FIO.fsproj"/>
+		<ProjectReference Include="..\FIO\FIO.fsproj" />
 	</ItemGroup>
 
 </Project>
