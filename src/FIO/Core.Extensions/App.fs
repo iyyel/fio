@@ -14,28 +14,36 @@ open FIO.Runtime.Advanced
 
 open System.Threading
 
-let maxThreads = 32767
+let private maxThreads = 32767
 ThreadPool.SetMaxThreads(maxThreads, maxThreads) |> ignore
 ThreadPool.SetMinThreads(maxThreads, maxThreads) |> ignore
 
-let internal defaultRuntime = AdvancedRuntime()
+let private defaultRuntime = AdvancedRuntime()
+
+let private printResult (fiber: Fiber<'R, 'E>) =
+    printfn $"%A{fiber.AwaitResult()}"
 
 [<AbstractClass>]
-type FIOApp<'R, 'E>() =
+type FIOApp<'R, 'E>(runtime: Runtime) =
 
-    static member Run<'R, 'E>(app: FIOApp<'R, 'E>) : Unit =
+    new() = FIOApp(defaultRuntime)
+
+    static member Run(app: FIOApp<'R, 'E>) : unit =
         app.Run()
 
-    static member Run<'R, 'E>(effect: FIO<'R, 'E>) : Unit =
+    static member Run(app: FIOApp<'R, 'E>, runtime: Runtime) : unit =
+        app.Run(runtime)
+
+    static member Run(effect: FIO<'R, 'E>) : unit =
         let fiber = defaultRuntime.Run effect
-        printfn $"%A{fiber.AwaitResult()}"
+        printResult fiber
 
     abstract member effect: FIO<'R, 'E>
 
-    member this.Run() : Unit =
-        let fiber = defaultRuntime.Run this.effect
-        printfn $"%A{fiber.AwaitResult()}"
-
-    member this.Run(runtime: Runtime) : Unit =
+    member this.Run() : unit =
         let fiber = runtime.Run this.effect
-        printfn $"%A{fiber.AwaitResult()}"
+        printResult fiber
+
+    member this.Run(runtime: Runtime) : unit =
+        let fiber = runtime.Run this.effect
+        printResult fiber

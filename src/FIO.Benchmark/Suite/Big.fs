@@ -136,7 +136,7 @@ let Create processCount roundCount : FIO<int64, obj> =
         createProcess pa (10 * (processCount - 2)) roundCount timerChan goChan
         <!> createProcess pb (10 * (processCount - 1)) roundCount timerChan goChan
 
-    ! (TimerEffect processCount processCount processCount timerChan)
+    ! TimerEffect(processCount, processCount, processCount, timerChan)
     >>= fun fiber ->
         (TimerMessage.MessageChannel goChan) --> timerChan
         >>= fun _ ->

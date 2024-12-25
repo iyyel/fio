@@ -18,7 +18,7 @@ module internal SimpleTimer =
         | Start
         | Stop
 
-    let TimerEffect startCount stopCount channel : FIO<TimerResult, 'E> =
+    let TimerEffect(startCount, stopCount, channel) : FIO<TimerResult, 'E> =
         let stopwatch = Stopwatch()
 
         // TODO: Make tail-recursive.
@@ -67,7 +67,7 @@ module internal StopwatchTimer =
         | Start of Stopwatch
         | Stop
 
-    let TimerEffect stopCount channel : FIO<TimerResult, 'E> =
+    let TimerEffect(stopCount, channel) : FIO<TimerResult, 'E> =
         let mutable stopwatch = Stopwatch()
 
         // TODO: Make tail-recursive.
@@ -105,7 +105,7 @@ module internal ChannelTimer =
         | Start
         | Stop
 
-    let TimerEffect startCount messageCount stopCount channel : FIO<TimerResult, 'E> =
+    let TimerEffect(startCount, messageCount, stopCount, channel) : FIO<TimerResult, 'E> =
         let stopwatch = Stopwatch()
         let mutable messageChannel = Channel<int>()
 

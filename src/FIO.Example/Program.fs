@@ -14,8 +14,11 @@ open System.Net.Sockets
 open System.Net
 
 open FIO.Core
-open FIO.Library.Network.Socket
+open FIO.Library.Network.Sockets
 open FIO.Runtime.Advanced
+open System.Net.WebSockets
+open FIO.Library.Network.WebSockets
+open System.Text
 
 let helloWorld1 () =
     let hello: FIO<string, obj> = !+ "Hello world!"
@@ -24,13 +27,13 @@ let helloWorld1 () =
     printfn $"%A{result}"
 
 let helloWorld2 () =
-    let hello = !+ "Hello world!"
-    let fiber = AdvancedRuntime().Run hello
-    let result = fiber.AwaitResult()
+    let hello: FIO<obj, string> = !- "Hello world!"
+    let fiber: Fiber<obj, string> = AdvancedRuntime().Run hello
+    let result: Result<obj, string> = fiber.AwaitResult()
     printfn $"%A{result}"
 
 let helloWorld3 () =
-    let hello = !- "Hello world!"
+    let hello = !+ "Hello world!"
     let fiber = AdvancedRuntime().Run hello
     let result = fiber.AwaitResult()
     printfn $"%A{result}"
@@ -208,7 +211,7 @@ type HighlyConcurrentApp() =
         return! create channel (fiberCount - 1) acc random
     }
 
-type SocketChannelApp() =
+type SocketApp() =
     inherit FIOApp<unit, exn>()
 
     let server ip port = fio {
@@ -216,28 +219,28 @@ type SocketChannelApp() =
         do! !+ listener.Start()
         do! !+ printfn($"Server listening on %A{ip}:%i{port}...")
 
-        let! socketChannel = !+ SocketChannel<string>(listener.AcceptSocket())
-        let! endpoint = socketChannel.RemoteEndPoint()
+        let! socket = !+ Socket<string>(listener.AcceptSocket())
+        let! endpoint = socket.RemoteEndPoint()
         do! !+ printfn($"Client connected from %A{endpoint}.")
 
         while true do
-            let! message = socketChannel.Receive()
+            let! message = socket.Receive()
             do! !+ printfn($"Server received: %s{message}")
 
-        do! socketChannel.Close()
+        do! socket.Close()
     }
 
     let client (ip: string) (port: int) = fio {
-        let! socket = !+ (new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
-        do! !+ socket.Connect(ip, port)
-        let! socketChannel = !+ SocketChannel<string>(socket)
+        let! internalSocket = !+ (new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+        do! !+ internalSocket.Connect(ip, port)
+        let! socket = !+ Socket<string>(internalSocket)
 
         while true do
             do! !+ printf("Enter a message: ")
             let! message = !+ Console.ReadLine()
-            do! socketChannel.Send message
+            do! socket.Send message
 
-        do! socketChannel.Close()
+        do! socket.Close()
     }
 
     override this.effect = fio {
@@ -245,6 +248,69 @@ type SocketChannelApp() =
         let port = 5000
         return! server IPAddress.Loopback port
                 <!> client ip port
+    }
+
+type WebSocketApp() =
+    inherit FIOApp<unit, exn>()
+
+    let server = 
+        let handleWebSocket (webSocket: WebSocket) =
+            async {
+                let buffer = Array.zeroCreate 1024
+                while webSocket.State = WebSocketState.Open do
+                    try
+                        // Receive message
+                        let! result = webSocket.ReceiveAsync(ArraySegment(buffer), CancellationToken.None) |> Async.AwaitTask
+                        if result.MessageType = WebSocketMessageType.Close then
+                            // Close the WebSocket if a close frame is received
+                            do! webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None) |> Async.AwaitTask
+                        else
+                            // Decode the received message
+                            let message = Encoding.UTF8.GetString(buffer, 0, result.Count)
+                            printfn "Received: %s" message
+
+                            // Echo the message back to the client
+                            let response = sprintf "Echo: %s" message
+                            let responseBytes = Encoding.UTF8.GetBytes(response)
+                            do! webSocket.SendAsync(ArraySegment(responseBytes), WebSocketMessageType.Text, true, CancellationToken.None) |> Async.AwaitTask
+                    with ex ->
+                        printfn "Error: %s" ex.Message
+                        do! webSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Error", CancellationToken.None) |> Async.AwaitTask
+            }
+    
+        fio {
+            let! listener = !+ (new HttpListener())
+            let! prefix = !+ $"http://localhost:8080/"
+            do! !+ listener.Prefixes.Add(prefix)
+            do! !+ listener.Start()
+            do! !+ printfn($"WebSocket server listening at %s{prefix}")
+
+            while true do
+                try
+                    do! !+ printfn("Waiting for WebSocket connection request...")
+                    let! context = !+ (listener.GetContextAsync().Result)
+                    do! !+ printfn($"WebSocket connection request from %A{context.Request.RemoteEndPoint}")
+
+                    if context.Request.IsWebSocketRequest then
+                        let! webSocketContext = !+ (context.AcceptWebSocketAsync(subProtocol = null).Result)
+                        do! !+ printfn("WebSocket connection established")
+                        return! !! !+ (Async.Start(handleWebSocket webSocketContext.WebSocket))
+                    else
+                        // Respond with 400 if it's not a WebSocket request
+                        do! !+ (context.Response.StatusCode <- 400)
+                        return! !+ context.Response.Close()
+                with exn ->
+                    return! !- exn
+        }
+
+    let client = fio {
+        let! client = !+ (ClientWebSocket<int>(Uri("ws://localhost:8080/")))
+        do! client.Connect()
+        do! client.Send 42
+    }
+
+    override this.effect = fio {
+        return! server <!> client
     }
 
 helloWorld1 ()
@@ -259,29 +325,32 @@ Console.ReadLine() |> ignore
 concurrency ()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(WelcomeApp())
+WelcomeApp().Run()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(EnterNumberApp())
+EnterNumberApp().Run()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(GuessNumberApp()) // TODO: Does not work correctly.
+GuessNumberApp().Run() // TODO: Does not work correctly.
 Console.ReadLine() |> ignore
 
-FIOApp.Run(PingPongApp())
+PingPongApp().Run()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(PingPongCEApp())
+PingPongCEApp().Run()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(ErrorHandlingApp())
+ErrorHandlingApp().Run()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(RaceServersApp())
+RaceServersApp().Run()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(HighlyConcurrentApp())
+HighlyConcurrentApp().Run()
 Console.ReadLine() |> ignore
 
-FIOApp.Run(SocketChannelApp())
+SocketApp().Run()
+Console.ReadLine() |> ignore
+
+WebSocketApp().Run()
 Console.ReadLine() |> ignore

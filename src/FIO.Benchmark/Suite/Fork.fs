@@ -14,27 +14,31 @@ open FIO.Benchmark.Tools.Timing.StopwatchTimer
 open FIO.Core
 open System.Diagnostics
 
-let rec private createProcess timerChan =
-    TimerMessage.Stop --> timerChan >>= fun _ -> !+ ()
+let internal Create actorCount : FIO<int64, obj> =
 
-let Create processCount : FIO<int64, obj> =
+    let rec createActor timerChannel = fio {
+        return! timerChannel <!- TimerMessage.Stop
+    }
 
-    let rec createSpawnTime processCount timerChan acc =
-        match processCount with
-        | 0 -> acc
+    let rec createForkTime actorCount timerChannel acc = fio {
+        match actorCount with
+        | 0 -> 
+            return! acc
         | count ->
-            let eff = createProcess timerChan <!> acc
-            createSpawnTime (count - 1) timerChan eff
+            let newAcc = createActor timerChannel <!> acc
+            return! createForkTime (count - 1) timerChannel newAcc
+    }
 
-    let timerChan = Channel<TimerMessage>()
-    let effEnd = createProcess timerChan <!> createProcess timerChan
-    let stopwatch = Stopwatch()
+    fio {
+        let timerChan = Channel<TimerMessage>()
+        let stopwatch = Stopwatch()
+    
+        let! timerFiber = ! TimerEffect(actorCount, timerChan)
+        do! !+ stopwatch.Start()
+        do! timerChan <!- TimerMessage.Start stopwatch
 
-    ! (TimerEffect processCount timerChan)
-    >>= fun fiber ->
-        stopwatch.Start()
-
-        (TimerMessage.Start stopwatch) --> timerChan
-        >>= fun _ ->
-            createSpawnTime (processCount - 2) timerChan effEnd
-            >>= fun _ -> !? fiber >>= fun res -> succeed res
+        let effEnd = createActor timerChan <!> createActor timerChan
+        do! createForkTime (actorCount - 2) timerChan effEnd
+        let! result = !? timerFiber
+        return result
+    }

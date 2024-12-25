@@ -81,7 +81,7 @@ let internal Create actorCount rounds : FIO<int64, obj> =
         let effEnd = createActor pb rounds timerChan 
                      <!> createActor pa rounds timerChan
 
-        let! fiber = ! (TimerEffect actorCount 1 actorCount timerChan)
+        let! fiber = ! TimerEffect(actorCount, 1, actorCount, timerChan)
         do! (TimerMessage.MessageChannel pa.ReceivingChannel) -!> timerChan
         do! createThreadring ps effEnd timerChan
         let! time = !? fiber
