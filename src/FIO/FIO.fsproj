@@ -14,16 +14,16 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="FIO.Core.DSL.fs" />
-		<Compile Include="FIO.Core.CE.fs" />
-		<Compile Include="FIO.Lib.Network.fs" />
-		<Compile Include="FIO.Runtime.Core.fs" />
-		<Compile Include="FIO.Runtime.Tools.fs" />
-		<Compile Include="FIO.Runtime.Naive.fs" />
-		<Compile Include="FIO.Runtime.Intermediate.fs" />
-		<Compile Include="FIO.Runtime.Advanced.fs" />
-		<Compile Include="FIO.Runtime.Deadlocking.fs" />
-		<Compile Include="FIO.Core.App.fs" />
+		<Compile Include="Core\DSL.fs" />
+		<Compile Include="Core\CE.fs" />
+		<Compile Include="Runtime\Runtime.fs" />
+		<Compile Include="Runtime\Tools.fs" />
+		<Compile Include="Runtime\Naive.fs" />
+		<Compile Include="Runtime\Intermediate.fs" />
+		<Compile Include="Runtime\Advanced.fs" />
+		<Compile Include="Runtime\Deadlocking.fs" />
+		<Compile Include="Library\Network.fs" />
+		<Compile Include="Core.Extensions\App.fs" />
 	</ItemGroup>
 
 	<ItemGroup>

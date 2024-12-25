@@ -9,7 +9,7 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="FIO.Runtime.Tests.fs" />
+		<Compile Include="Runtime.Test.fs" />
 	</ItemGroup>
 
 	<ItemGroup>

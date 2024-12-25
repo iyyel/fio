@@ -7,6 +7,8 @@
 [<AutoOpen>]
 module rec FIO.Core.App
 
+open FIO.Core
+
 open FIO.Runtime
 open FIO.Runtime.Advanced
 

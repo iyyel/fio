@@ -14,7 +14,7 @@ open System.Net.Sockets
 open System.Net
 
 open FIO.Core
-open FIO.Lib.Network.Socket
+open FIO.Library.Network.Socket
 open FIO.Runtime.Advanced
 
 let helloWorld1 () =

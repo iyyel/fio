@@ -4,7 +4,7 @@
 (* All rights reserved                                                              *)
 (************************************************************************************)
 
-namespace FIO.Lib.Network
+namespace FIO.Library.Network
 
 open System.IO
 open System.Net.Sockets
