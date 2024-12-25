@@ -9,54 +9,48 @@ module rec FIO.Core.CE
 
 module internal FIOBuilderHelper =
 
-    /// Binds the result of one FIO computation to the next.
-    let inline internal Bind (effect: FIO<'R1, 'E>) (continuation: 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal Bind(effect: FIO<'R1, 'E>) (continuation: 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
         effect >>= continuation
 
-    /// Wraps a value in a successful FIO computation.
-    let inline internal Return (result: 'R) : FIO<'R, 'E> =
+    let inline internal Return(result: 'R) : FIO<'R, 'E> =
         !+ result
 
-    /// Directly returns an existing FIO computation.
-    let inline internal ReturnFrom (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal ReturnFrom(effect: FIO<'R, 'E>) : FIO<'R, 'E> =
         effect
 
-    let inline internal Yield (result: 'R) : FIO<'R, 'E> =
-        Return result
+    let inline internal Yield(result: 'R) : FIO<'R, 'E> =
+        FIOBuilderHelper.Return result
 
-    let inline internal YieldFrom (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
-        ReturnFrom effect
+    let inline internal YieldFrom(effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+        FIOBuilderHelper.ReturnFrom effect
 
-    /// Combines two computations, running one after the other.
-    let inline internal Combine (firstEffect: FIO<'R, 'E>) (secondEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> =
+    let inline internal Combine(firstEffect: FIO<'R, 'E>) (secondEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> =
         firstEffect >> secondEffect
 
-    /// Handles "zero" computations, which in this case might signify failure or stopping.
-    let inline internal Zero () : FIO<Unit, 'E> =
+    let inline internal Zero() : FIO<unit, 'E> =
         !+ ()
 
-    /// Delays the execution of an FIO computation.
-    let inline internal Delay (factory: unit -> FIO<'R, 'E>) : FIO<'R, 'E> =
-        NonBlocking (fun () -> Ok()) >>= fun _ -> factory ()
+    let inline internal Delay(factory: unit -> FIO<'R, 'E>) : FIO<'R, 'E> =
+        NonBlocking (fun () -> Ok()) >> factory ()
 
-    /// Evaluates a delayed FIO computation.
-    let inline internal Run (effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+    let inline internal Run(effect: FIO<'R, 'E>) : FIO<'R, 'E> =
         effect
 
-    /// Handles failure cases in the effect using the provided handler.
-    let inline internal TryWith (effect: FIO<'R, 'E>) (handler: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
-        effect >>? handler
+    let inline internal TryWith(effect: FIO<'R, 'E>) (handler: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
+        match effect with
+        | Success value -> !+ value
+        | Failure error -> handler error
+        | _ -> effect
 
-    /// Ensures a finalizer is executed after the main computation, regardless of success or failure.
-    let inline internal TryFinally (effect: FIO<'R, exn>) (finalizer: unit -> unit) : FIO<'R, exn> =
+    let inline internal TryFinally(effect: FIO<'R, 'E>) (finalizer: unit -> unit) : FIO<'R, 'E> =
         effect >>= fun result ->
             try
                 finalizer ()
                 !+ result
-            with ex ->
-                !- ex
+            with exn ->
+                !- (exn :?> 'E)
 
-    let inline internal While (guard: unit -> bool) (effect: FIO<'R, 'E>) : FIO<Unit, 'E> =
+    let inline internal While(guard: unit -> bool) (effect: FIO<'R, 'E>) : FIO<unit, 'E> =
         let rec loop () =
             if guard () then
                 Delay (fun () -> effect >> loop ())
@@ -65,40 +59,41 @@ module internal FIOBuilderHelper =
         loop ()
 
 type FIOBuilder() =
-    member this.Bind(effect, continuation) =
+
+    member this.Bind(effect: FIO<'R1, 'E>, continuation: 'R1 -> FIO<'R, 'E>) : FIO<'R, 'E> =
         FIOBuilderHelper.Bind effect continuation
 
-    member this.Return(result) =
+    member this.Return(result: 'R) : FIO<'R, 'E> =
         FIOBuilderHelper.Return result
 
-    member this.ReturnFrom(result) =
-        FIOBuilderHelper.ReturnFrom result
+    member this.ReturnFrom(effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+        FIOBuilderHelper.ReturnFrom effect
 
-    member this.Yield(result) =
+    member this.Yield(result: 'R) : FIO<'R, 'E> =
         FIOBuilderHelper.Yield result
 
-    member this.YieldFrom(result) =
-        FIOBuilderHelper.YieldFrom result
+    member this.YieldFrom(effect: FIO<'R, 'E>) : FIO<'R, 'E> =
+        FIOBuilderHelper.YieldFrom effect
 
-    member this.Combine(firstEffect, secondEffect) =
+    member this.Combine(firstEffect: FIO<'R, 'E>, secondEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> = 
         FIOBuilderHelper.Combine firstEffect secondEffect
 
-    member this.Zero() =
-        FIOBuilderHelper.Zero
+    member this.Zero() : FIO<unit, 'E> =
+        FIOBuilderHelper.Zero()
 
-    member this.Delay(factory) =
+    member this.Delay(factory: unit -> FIO<'R, 'E>) : FIO<'R, 'E> =
         FIOBuilderHelper.Delay factory
 
-    member this.Run(effect) =
+    member this.Run(effect: FIO<'R, 'E>) : FIO<'R, 'E> =
         FIOBuilderHelper.Run effect
 
-    member this.TryWith(effect, handler) = 
+    member this.TryWith(effect: FIO<'R, 'E>, handler: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> = 
         FIOBuilderHelper.TryWith effect handler
 
-    member this.TryFinally(effect, finalizer) =
+    member this.TryFinally(effect: FIO<'R, 'E>, finalizer: unit -> unit) : FIO<'R, 'E> =
         FIOBuilderHelper.TryFinally effect finalizer
 
-    member this.While(guard, effect) =
+    member this.While(guard: unit -> bool, effect: FIO<'R, 'E>) : FIO<unit, 'E> =
         FIOBuilderHelper.While guard effect
 
 let fio = FIOBuilder()

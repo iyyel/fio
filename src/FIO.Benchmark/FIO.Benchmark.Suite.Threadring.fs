@@ -9,10 +9,11 @@
 (* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)         *)
 (************************************************************************************)
 
-[<AutoOpen>]
-module rec FIO.Benchmarks.Threadring
+module internal rec FIO.Benchmark.Suite.Threadring
 
 open FIO.Core
+
+open FIO.Benchmark.Tools.Timing.ChannelTimer
 
 type private Actor =
     { Name: string
@@ -23,14 +24,14 @@ let private createActor actor rounds timerChannel : FIO<unit, obj> =
 
     let rec create rounds = fio {
         if rounds = 0 then
-            do! Timer.ChannelTimerMessage.Stop -*> timerChannel
+            do! TimerMessage.Stop -!> timerChannel
         else
-            let! received = !->? actor.ReceivingChannel
+            let! received = !<-- actor.ReceivingChannel
             #if DEBUG
             do! !+ printfn($"DEBUG: %s{actor.Name} received: %i{received}")
             #endif
             let! message = !+ (received + 1)
-            do! message -*> actor.SendingChannel
+            do! message -!> actor.SendingChannel
             #if DEBUG
             do! !+ printfn($"DEBUG: %s{actor.Name} sent: %i{message}")
             #endif
@@ -38,11 +39,11 @@ let private createActor actor rounds timerChannel : FIO<unit, obj> =
         }
 
     fio {
-        do! Timer.ChannelTimerMessage.Ready -*> timerChannel
+        do! TimerMessage.Start -!> timerChannel
         return! create rounds
     }
 
-let internal Create actorCount rounds : FIO<BenchmarkResult, obj> =
+let internal Create actorCount rounds : FIO<int64, obj> =
 
     let getRecvChan index (chans: Channel<int> list) =
         match index with
@@ -76,11 +77,12 @@ let internal Create actorCount rounds : FIO<BenchmarkResult, obj> =
         | _ -> failwith $"createThreadring failed! (at least 2 processes should exist) processCount = %i{actorCount}"
 
     fio {
-        let timerChan = Channel<Timer.ChannelTimerMessage<int>>()
-        let effEnd = createActor pb rounds timerChan <!> createActor pa rounds timerChan
+        let timerChan = Channel<TimerMessage<int>>()
+        let effEnd = createActor pb rounds timerChan 
+                     <!> createActor pa rounds timerChan
 
-        let! fiber = ! (Timer.ChannelEffect actorCount 1 actorCount timerChan)
-        do! (Timer.ChannelTimerMessage.Chan pa.ReceivingChannel) -*> timerChan
+        let! fiber = ! (TimerEffect actorCount 1 actorCount timerChan)
+        do! (TimerMessage.MessageChannel pa.ReceivingChannel) -!> timerChan
         do! createThreadring ps effEnd timerChan
         let! time = !? fiber
         return time

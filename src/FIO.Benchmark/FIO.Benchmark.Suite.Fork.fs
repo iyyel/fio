@@ -7,13 +7,15 @@
 (************************************************************************************)
 
 [<AutoOpen>]
-module rec FIO.Benchmarks.Fork
+module internal rec FIO.Benchmark.Suite.Fork
+
+open FIO.Benchmark.Tools.Timing.StopwatchTimer
 
 open FIO.Core
 open System.Diagnostics
 
 let rec private createProcess timerChan =
-    Timer.StopwatchTimerMessage.Stop --> timerChan >>= fun _ -> !+ ()
+    TimerMessage.Stop --> timerChan >>= fun _ -> !+ ()
 
 let Create processCount : FIO<int64, obj> =
 
@@ -24,15 +26,15 @@ let Create processCount : FIO<int64, obj> =
             let eff = createProcess timerChan <!> acc
             createSpawnTime (count - 1) timerChan eff
 
-    let timerChan = Channel<Timer.StopwatchTimerMessage>()
+    let timerChan = Channel<TimerMessage>()
     let effEnd = createProcess timerChan <!> createProcess timerChan
     let stopwatch = Stopwatch()
 
-    ! (Timer.StopwatchEffect processCount timerChan)
+    ! (TimerEffect processCount timerChan)
     >>= fun fiber ->
         stopwatch.Start()
 
-        (Timer.StopwatchTimerMessage.Start stopwatch) --> timerChan
+        (TimerMessage.Start stopwatch) --> timerChan
         >>= fun _ ->
             createSpawnTime (processCount - 2) timerChan effEnd
             >>= fun _ -> !? fiber >>= fun res -> succeed res

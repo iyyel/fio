@@ -23,15 +23,15 @@ type internal EvalWorker(runtime: IntermediateRuntime, workItemQueue: InternalQu
 #if DETECT_DEADLOCK
                 working <- true
 #endif
-                match runtime.InternalRun workItem.Effect workItem.PrevAction evalSteps workItem.Stack with
+                match runtime.InternalRun workItem.Effect workItem.LastAction evalSteps workItem.Stack with
                 | (Success res, _), Evaluated, _ -> workItem.Complete(Ok res)
                 | (Failure err, _), Evaluated, _ -> workItem.Complete(Error err)
                 | (eff, stack), RescheduleForRunning, _ ->
-                    let workItem = WorkItem.Create eff stack workItem.IFiber RescheduleForRunning
+                    let workItem = WorkItem.Create(eff, workItem.InternalFiber, stack, RescheduleForRunning)
                     workItemQueue.Add workItem
                 | (eff, stack), RescheduleForBlocking blockingItem, _ ->
                     let workItem =
-                        WorkItem.Create eff stack workItem.IFiber (RescheduleForBlocking blockingItem)
+                        WorkItem.Create(eff, workItem.InternalFiber, stack, (RescheduleForBlocking blockingItem))
 
                     blockingWorker.RescheduleForBlocking blockingItem workItem
                 | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
@@ -128,7 +128,7 @@ and IntermediateRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as 
     new() = IntermediateRuntime(System.Environment.ProcessorCount - 1, 1, 15)
 
     [<TailCall>]
-    member internal this.InternalRun effect prevAction evalSteps stack : (FIO<obj, obj> * Stack) * Action * int =
+    member internal this.InternalRun effect prevAction evalSteps stack : (FIO<obj, obj> * ContinuationStack) * RuntimeAction * int =
         let rec handleSuccess result newEvalSteps stack =
             match stack with
             | [] -> ((Success result, []), Evaluated, newEvalSteps)
@@ -167,7 +167,7 @@ and IntermediateRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as 
                 channel.Add message
                 handleSuccess message newEvalSteps stack
             | Concurrent(effect, fiber, ifiber) ->
-                workItemQueue.Add <| WorkItem.Create effect [] ifiber prevAction
+                workItemQueue.Add <| WorkItem.Create(effect, ifiber, [], prevAction)
                 handleSuccess fiber newEvalSteps stack
             | Await ifiber ->
                 if ifiber.Completed() then
@@ -183,7 +183,7 @@ and IntermediateRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as 
         let fiber = Fiber<'R, 'E>()
 
         workItemQueue.Add
-        <| WorkItem.Create (effect.Upcast()) [] (fiber.ToInternal()) Evaluated
+        <| WorkItem.Create(effect.Upcast(), fiber.ToInternal(), [], Evaluated)
 
         fiber
 

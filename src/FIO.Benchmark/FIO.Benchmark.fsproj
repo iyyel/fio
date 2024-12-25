@@ -7,13 +7,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Compile Include="FIO.Benchmarks.Core.fs" />
-		<Compile Include="FIO.Benchmarks.Pingpong.fs" />
-		<Compile Include="FIO.Benchmarks.Threadring.fs" />
-		<Compile Include="FIO.Benchmarks.Big.fs" />
-		<Compile Include="FIO.Benchmarks.Bang.fs" />
-		<Compile Include="FIO.Benchmarks.Fork.fs" />
-		<Compile Include="FIO.Benchmarks.fs" />
+		<Compile Include="FIO.Benchmark.Tools.Timing.fs" />
+		<Compile Include="FIO.Benchmark.Suite.Pingpong.fs" />
+		<Compile Include="FIO.Benchmark.Suite.Threadring.fs" />
+		<Compile Include="FIO.Benchmark.Suite.Big.fs" />
+		<Compile Include="FIO.Benchmark.Suite.Bang.fs" />
+		<Compile Include="FIO.Benchmark.Suite.Fork.fs" />
+		<Compile Include="FIO.Benchmark.Suite.Runner.fs" />
 		<Compile Include="ArgParser.fs" />
 		<Compile Include="Program.fs" />
 	</ItemGroup>

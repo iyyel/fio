@@ -111,7 +111,7 @@ type RuntimeTests() =
 
         let effect =
             expected --> channel >>= fun _ ->
-            !->? channel >>= fun result ->
+            !--> channel >>= fun result ->
             !+ result
 
         // Act

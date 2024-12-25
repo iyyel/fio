@@ -9,10 +9,11 @@
 (* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)         *)
 (************************************************************************************)
 
-[<AutoOpen>]
-module rec FIO.Benchmarks.Big
+module internal rec FIO.Benchmark.Suite.Big
 
 open FIO.Core
+
+open FIO.Benchmark.Tools.Timing.ChannelTimer
 
 type private Message =
     | Ping of int * Channel<Message>
@@ -44,7 +45,7 @@ let private createProcess proc msg roundCount timerChan goChan =
         if recvCount = 0 then
             createRecvPongs proc.ChansSend.Length roundCount
         else
-            !->? proc.ChanRecvPing
+            !--> proc.ChanRecvPing
             >>= fun msg ->
                 match msg with
                 | Ping(x, replyChan) ->
@@ -65,11 +66,11 @@ let private createProcess proc msg roundCount timerChan goChan =
     and createRecvPongs recvCount roundCount =
         if recvCount = 0 then
             if roundCount = 0 then
-                Timer.ChannelTimerMessage.Stop --> timerChan
+                TimerMessage.Stop --> timerChan
             else
                 createSendPings proc.ChansSend (roundCount - 1)
         else
-            !->? proc.ChanRecvPong
+            !--> proc.ChanRecvPong
             >>= fun msg ->
                 match msg with
                 | Pong x ->
@@ -79,8 +80,8 @@ let private createProcess proc msg roundCount timerChan goChan =
                     createRecvPongs (recvCount - 1) roundCount
                 | _ -> failwith "createRecvPongs: Received ping when pong should be received!"
 
-    Timer.ChannelTimerMessage.Ready --> timerChan
-    >>= fun _ -> !->? goChan >>= fun _ -> createSendPings proc.ChansSend (roundCount - 1)
+    TimerMessage.Start --> timerChan
+    >>= fun _ -> !--> goChan >>= fun _ -> createSendPings proc.ChansSend (roundCount - 1)
 
 let Create processCount roundCount : FIO<int64, obj> =
     let rec createProcesses processCount =
@@ -128,16 +129,16 @@ let Create processCount roundCount : FIO<int64, obj> =
         | pa :: pb :: ps -> (pa, pb, ps)
         | _ -> failwith $"createBig failed! (at least 2 processes should exist) processCount = %i{processCount}"
 
-    let timerChan = Channel<Timer.ChannelTimerMessage<int>>()
+    let timerChan = Channel<TimerMessage<int>>()
     let goChan = Channel<int>()
 
     let effEnd =
         createProcess pa (10 * (processCount - 2)) roundCount timerChan goChan
         <!> createProcess pb (10 * (processCount - 1)) roundCount timerChan goChan
 
-    ! (Timer.ChannelEffect processCount processCount processCount timerChan)
+    ! (TimerEffect processCount processCount processCount timerChan)
     >>= fun fiber ->
-        (Timer.ChannelTimerMessage.Chan goChan) --> timerChan
+        (TimerMessage.MessageChannel goChan) --> timerChan
         >>= fun _ ->
             createBig ps 0 timerChan goChan effEnd
             >>= fun _ -> !? fiber >>= fun res -> succeed res

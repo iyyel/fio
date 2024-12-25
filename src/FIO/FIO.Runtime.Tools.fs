@@ -105,11 +105,11 @@ type internal Monitor
         printfn "MONITOR: ------------ workItemQueue information start ------------"
 
         for workItem in queue.ToArray() do
-            let ifiber = workItem.IFiber
+            let ifiber = workItem.InternalFiber
             printfn $"MONITOR:    ------------ workItem start ------------"
             printfn $"MONITOR:      WorkItem IFiber completed: %A{ifiber.Completed()}"
             printfn $"MONITOR:      WorkItem IFiber blocking items count: %A{ifiber.BlockingWorkItemsCount()}"
-            printfn $"MONITOR:      WorkItem PrevAction: %A{workItem.PrevAction}"
+            printfn $"MONITOR:      WorkItem PrevAction: %A{workItem.LastAction}"
             printfn $"MONITOR:      WorkItem Eff: %A{workItem.Effect}"
             printfn $"MONITOR:    ------------ workItem end ------------"
 
@@ -128,10 +128,10 @@ type internal Monitor
                 printfn $"MONITOR:      Blocking IFiber completed: %A{ifiber.Completed()}"
                 printfn $"MONITOR:      Blocking IFiber blocking items count: %A{ifiber.BlockingWorkItemsCount()}"
 
-            let ifiber = workItem.IFiber
+            let ifiber = workItem.InternalFiber
             printfn $"MONITOR:      WorkItem IFiber completed: %A{ifiber.Completed()}"
             printfn $"MONITOR:      WorkItem IFiber blocking items count: %A{ifiber.BlockingWorkItemsCount()}"
-            printfn $"MONITOR:      WorkItem PrevAction: %A{workItem.PrevAction}"
+            printfn $"MONITOR:      WorkItem PrevAction: %A{workItem.LastAction}"
             printfn $"MONITOR:      WorkItem Eff: %A{workItem.Effect}"
             printfn $"MONITOR:    ------------ BlockingItem * WorkItem end ------------"
 

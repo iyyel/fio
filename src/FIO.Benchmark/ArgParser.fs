@@ -4,13 +4,13 @@
 (* All rights reserved                                                              *)
 (************************************************************************************)
 
-module ArgParser
+module internal ArgParser
 
 open Argu
 
 open FIO.Runtime
 
-open FIO.Benchmarks
+open FIO.Benchmark.Suite
 
 type Arguments =
     | Naive_Runtime
@@ -62,13 +62,13 @@ type Parser() =
 
         let pingpongConfig =
             match results.TryGetResult Pingpong with
-            | Some roundCount -> [ Benchmark.PingpongC { Rounds = roundCount } ]
+            | Some roundCount -> [ Runner.PingpongC { Rounds = roundCount } ]
             | _ -> []
 
         let threadringConfig =
             match results.TryGetResult Threadring with
             | Some(processCount, roundCount) ->
-                [ Benchmark.ThreadringC
+                [ Runner.ThreadringC
                       { Actors = processCount
                         Rounds = roundCount } ]
             | _ -> []
@@ -76,7 +76,7 @@ type Parser() =
         let bigConfig =
             match results.TryGetResult Big with
             | Some(processCount, roundCount) ->
-                [ Benchmark.BigC
+                [ Runner.BigC
                       { Actors = processCount
                         RoundCount = roundCount } ]
             | _ -> []
@@ -84,14 +84,14 @@ type Parser() =
         let bangConfig =
             match results.TryGetResult Bang with
             | Some(processCount, roundCount) ->
-                [ Benchmark.BangC
+                [ Runner.BangC
                       { Actors = processCount
                         Rounds = roundCount } ]
             | _ -> []
 
         let spawnConfig =
             match results.TryGetResult Spawn with
-            | Some processcount -> [ Benchmark.ForkC { Actors = processcount } ]
+            | Some processcount -> [ Runner.ForkC { Actors = processcount } ]
             | _ -> []
 
         let configs =

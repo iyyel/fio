@@ -34,15 +34,15 @@ type internal EvalWorker
 #if DETECT_DEADLOCK
                 working <- true
 #endif
-                match runtime.InternalRun workItem.Effect workItem.PrevAction evalSteps with
+                match runtime.InternalRun workItem.Effect workItem.LastAction evalSteps with
                 | Success res, Evaluated, _ -> self.CompleteWorkItem(workItem, Ok res)
                 | Failure err, Evaluated, _ -> self.CompleteWorkItem(workItem, Error err)
                 | eff, RescheduleForRunning, _ ->
-                    let workItem = WorkItem.Create eff [] workItem.IFiber RescheduleForRunning
+                    let workItem = WorkItem.Create(eff, workItem.InternalFiber, [], RescheduleForRunning)
                     self.RescheduleForRunning workItem
                 | eff, RescheduleForBlocking blockingItem, _ ->
                     let workItem =
-                        WorkItem.Create eff [] workItem.IFiber (RescheduleForBlocking blockingItem)
+                        WorkItem.Create(eff, workItem.InternalFiber, [], (RescheduleForBlocking blockingItem))
 
                     blockingWorker.RescheduleForBlocking blockingItem workItem
                 | _ -> failwith $"EvalWorker: Error occurred while evaluating effect!"
@@ -55,7 +55,7 @@ type internal EvalWorker
 
     member private _.CompleteWorkItem(workItem, res) =
         workItem.Complete res
-        blockingWorker.RescheduleBlockingEffects workItem.IFiber
+        blockingWorker.RescheduleBlockingEffects workItem.InternalFiber
 #if DETECT_DEADLOCK
         deadlockDetector.RemoveBlockingItem(BlockingFiber workItem.IFiber)
 #endif
@@ -178,7 +178,7 @@ and DeadlockingRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as s
 
     new() = DeadlockingRuntime(System.Environment.ProcessorCount - 1, 1, 15)
 
-    member internal this.InternalRun eff prevAction evalSteps : FIO<obj, obj> * Action * int =
+    member internal this.InternalRun eff prevAction evalSteps : FIO<obj, obj> * RuntimeAction * int =
         if evalSteps = 0 then
             (eff, RescheduleForRunning, 0)
         else
@@ -197,7 +197,7 @@ and DeadlockingRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as s
                 blockingEventQueue.Add <| chan
                 (Success value, Evaluated, evalSteps - 1)
             | Concurrent(eff, fiber, ifiber) ->
-                workItemQueue.Add <| WorkItem.Create eff [] ifiber prevAction
+                workItemQueue.Add <| WorkItem.Create(eff, ifiber, [], prevAction)
                 (Success fiber, Evaluated, evalSteps - 1)
             | Await ifiber ->
                 if ifiber.Completed() then
@@ -223,7 +223,7 @@ and DeadlockingRuntime(evalWorkerCount, blockingWorkerCount, evalStepCount) as s
         let fiber = Fiber<'R, 'E>()
 
         workItemQueue.Add
-        <| WorkItem.Create (eff.Upcast()) [] (fiber.ToInternal()) Evaluated
+        <| WorkItem.Create(eff.Upcast(), fiber.ToInternal(), [], Evaluated)
 
         fiber
 

@@ -92,12 +92,12 @@ type PingPongApp() =
     let pinger channel1 channel2 =
         "ping" --> channel1 >>= fun ping ->
         printfn $"pinger sent: %s{ping}"
-        !->? channel2 >>= fun pong ->
+        !--> channel2 >>= fun pong ->
         printfn $"pinger received: %s{pong}"
         !+ ()
 
     let ponger channel1 channel2 =
-        !->? channel1 >>= fun ping ->
+        !--> channel1 >>= fun ping ->
         printfn $"ponger received: %s{ping}"
         "pong" --> channel2 >>= fun pong ->
         printfn $"ponger sent: %s{pong}"
@@ -176,7 +176,7 @@ type HighlyConcurrentApp() =
 
     let sender (channel: Channel<int>) id (random: Random) = fio {
         let! message = !+ random.Next(100, 501)
-        do! message -*> channel
+        do! message -!> channel
         do! !+ printfn($"Sender[%i{id}] sent: %i{message}")
     }
 
@@ -185,7 +185,7 @@ type HighlyConcurrentApp() =
             let! maxFibers = !+ max.ToString("N0", CultureInfo("en-US"))
             do! !+ printfn($"Successfully received a message from all %s{maxFibers} fibers!")
         else
-            let! message = !->? channel
+            let! message = !<-- channel
             do! !+ printfn($"Receiver received: %i{message}")
             return! receiver channel (count - 1) max
     }

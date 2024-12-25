@@ -9,8 +9,8 @@
 (* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)         *)
 (************************************************************************************)
 
-[<AutoOpen>]
-module rec FIO.Benchmarks.Pingpong
+// TODO: Should this use TimerEffect?
+module internal rec FIO.Benchmark.Suite.Pingpong
 
 open FIO.Core
 
@@ -21,7 +21,7 @@ type private Actor =
       SendingChannel: int channel
       ReceivingChannel: int channel }
 
-let private createPingActor actor startSignalChannel rounds : FIO<BenchmarkResult, obj> =
+let private createPingActor actor startSignalChannel rounds : FIO<int64, obj> =
     let stopwatch = Stopwatch()
 
     // TODO: Make tail-recursive.
@@ -30,11 +30,11 @@ let private createPingActor actor startSignalChannel rounds : FIO<BenchmarkResul
             do! !+ stopwatch.Stop()
             return stopwatch.ElapsedMilliseconds    
         else
-            do! message -*> actor.SendingChannel
+            do! message -!> actor.SendingChannel
             #if DEBUG
             do! !+ printfn($"DEBUG: %s{actor.Name} sent ping: %i{message}")
             #endif
-            let! received = !->? actor.ReceivingChannel
+            let! received = !<-- actor.ReceivingChannel
             #if DEBUG
             do! !+ printfn($"DEBUG: %s{actor.Name} received pong: %i{received}")
             #endif
@@ -42,7 +42,7 @@ let private createPingActor actor startSignalChannel rounds : FIO<BenchmarkResul
     }
 
     fio {
-        do! !*>? startSignalChannel
+        do! !<!- startSignalChannel
         do! !+ stopwatch.Start()
         return! create 1 rounds
     }
@@ -54,12 +54,12 @@ let private createPongActor actor startSignalChannel rounds : FIO<unit, obj> =
         if rounds = 0 then
             return ()
         else
-            let! received = !->? actor.ReceivingChannel
+            let! received = !<-- actor.ReceivingChannel
             #if DEBUG
             do! !+ printfn($"DEBUG: %s{actor.Name} received ping: %i{received}")
             #endif
             let! message = !+ (received + 1)
-            do! message -*> actor.SendingChannel
+            do! message -!> actor.SendingChannel
             #if DEBUG
             do! !+ printfn($"DEBUG: %s{actor.Name} sent pong: %i{message}")
             #endif
@@ -67,11 +67,11 @@ let private createPongActor actor startSignalChannel rounds : FIO<unit, obj> =
     }
 
     fio {
-        do! 0 -*> startSignalChannel
+        do! 0 -!> startSignalChannel
         return! create rounds
     }
 
-let internal Create rounds : FIO<BenchmarkResult, obj> = fio {
+let internal Create rounds : FIO<int64, obj> = fio {
     let startSignalChannel = Channel<int>()
     let pingSendingChannel = Channel<int>()
     let pongSendingChannel = Channel<int>()
