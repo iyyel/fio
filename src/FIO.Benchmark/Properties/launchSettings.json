@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Benchmarks": {
+      "commandName": "Project",
+      "commandLineArgs": "--naive-runtime --runs 1 --threadring 2 1"
+    }
+  }
+}
