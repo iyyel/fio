@@ -10,4 +10,4 @@ open FIO.Core
 
 [<AbstractClass>]
 type Runtime() =
-    abstract member Run<'R, 'E> : FIO<'R, 'E> -> Fiber<'R, 'E>
+    abstract member Run : FIO<'R, 'E> -> Fiber<'R, 'E>

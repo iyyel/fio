@@ -20,53 +20,57 @@ type private Actor =
       SendingChannel: int channel
       ReceivingChannel: int channel }
 
-let private createActor actor rounds timerChannel : FIO<unit, obj> =
+[<TailCall>]
+let rec private createActorHelper rounds actor timerChannel = fio {
+    if rounds = 0 then
+        do! timerChannel <!- TimerMessage.Stop
+    else
+        let! received = !<-- actor.ReceivingChannel
+        #if DEBUG
+        do! !+ printfn($"DEBUG: %s{actor.Name} received: %i{received}")
+        #endif
+        let! message = !+ (received + 1)
+        do! actor.SendingChannel <!- message
+        #if DEBUG
+        do! !+ printfn($"DEBUG: %s{actor.Name} sent: %i{message}")
+        #endif
+        return! createActorHelper (rounds - 1) actor timerChannel
+}
 
-    let rec create rounds = fio {
-        if rounds = 0 then
-            do! TimerMessage.Stop -!> timerChannel
-        else
-            let! received = !<-- actor.ReceivingChannel
-            #if DEBUG
-            do! !+ printfn($"DEBUG: %s{actor.Name} received: %i{received}")
-            #endif
-            let! message = !+ (received + 1)
-            do! message -!> actor.SendingChannel
-            #if DEBUG
-            do! !+ printfn($"DEBUG: %s{actor.Name} sent: %i{message}")
-            #endif
-            return! create (rounds - 1)
-        }
+let private createActor rounds actor timerChannel = fio {
+    do! timerChannel <!- TimerMessage.Start
+    return! createActorHelper rounds actor timerChannel
+}
 
-    fio {
-        do! TimerMessage.Start -!> timerChannel
-        return! create rounds
-    }
+[<TailCall>]
+let rec private createThreadring rounds procs timerChannel acc =
+    match procs with
+    | [] ->
+        acc
+    | p :: ps ->
+        let newAcc = createActor rounds p timerChannel <!> acc
+        createThreadring rounds ps timerChannel newAcc
 
-let internal Create actorCount rounds : FIO<int64, obj> =
+let internal Create actorCount (rounds : int) : FIO<BenchmarkResult, obj> =
 
-    let getRecvChan index (chans: Channel<int> list) =
+    let getReceivingChannel index (channels: Channel<int> list) =
         match index with
-        | index when index - 1 < 0 -> chans.Item(List.length chans - 1)
-        | index -> chans.Item(index - 1)
+        | index when index - 1 < 0 ->
+            channels.Item(List.length channels - 1)
+        | index ->
+            channels.Item(index - 1)
 
-    let rec createActors chans allChans index acc =
-        match chans with
+    let rec createActors channels allChannels index acc =
+        match channels with
         | [] -> acc
-        | chan :: chans ->
-            let proc =
+        | chan::chans ->
+            let actor =
                 { Name = $"Actor-{index}"
                   SendingChannel = chan
-                  ReceivingChannel = getRecvChan index allChans }
+                  ReceivingChannel = getReceivingChannel index allChannels }
+            createActors chans allChannels (index + 1) (acc @ [ actor ])
 
-            createActors chans allChans (index + 1) (acc @ [ proc ])
-
-    let rec createThreadring procs acc timerChan =
-        match procs with
-        | [] -> acc
-        | p :: ps ->
-            let eff = createActor p rounds timerChan <!> acc
-            createThreadring ps eff timerChan
+   
 
     let chans = [ for _ in 1..actorCount -> Channel<int>() ]
     let procs = createActors chans chans 0 []
@@ -77,13 +81,13 @@ let internal Create actorCount rounds : FIO<int64, obj> =
         | _ -> failwith $"createThreadring failed! (at least 2 processes should exist) processCount = %i{actorCount}"
 
     fio {
-        let timerChan = Channel<TimerMessage<int>>()
-        let effEnd = createActor pb rounds timerChan 
-                     <!> createActor pa rounds timerChan
+        let timerChannel = Channel<TimerMessage<int>>()
+        let acc = createActor rounds pb timerChannel 
+                     <!> createActor rounds pa timerChannel
 
-        let! fiber = ! TimerEffect(actorCount, 1, actorCount, timerChan)
-        do! (TimerMessage.MessageChannel pa.ReceivingChannel) -!> timerChan
-        do! createThreadring ps effEnd timerChan
+        let! fiber = ! TimerEffect(actorCount, 1, actorCount, timerChannel)
+        do! timerChannel <!- TimerMessage.MessageChannel (pa.ReceivingChannel)
+        do! createThreadring rounds ps timerChannel acc
         let! time = !? fiber
         return time
     }

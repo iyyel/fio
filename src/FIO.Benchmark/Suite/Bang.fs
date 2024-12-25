@@ -49,7 +49,7 @@ let rec private createRecvProcess proc roundCount timerChan goChan =
     TimerMessage.Start --> timerChan
     >>= fun _ -> !--> goChan >>= fun _ -> create proc roundCount
 
-let Create processCount roundCount : FIO<int64, obj> =
+let Create processCount roundCount : FIO<BenchmarkResult, obj> =
     let rec createSendProcesses recvProcChan processCount =
         List.map
             (fun count ->

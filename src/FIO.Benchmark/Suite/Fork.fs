@@ -14,7 +14,7 @@ open FIO.Benchmark.Tools.Timing.StopwatchTimer
 open FIO.Core
 open System.Diagnostics
 
-let internal Create actorCount : FIO<int64, obj> =
+let internal Create actorCount : FIO<BenchmarkResult, obj> =
 
     let rec createActor timerChannel = fio {
         return! timerChannel <!- TimerMessage.Stop

@@ -9,7 +9,6 @@
 (* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)         *)
 (************************************************************************************)
 
-// TODO: Should this use TimerEffect?
 module internal rec FIO.Benchmark.Suite.Pingpong
 
 open FIO.Core
@@ -21,72 +20,68 @@ type private Actor =
       SendingChannel: int channel
       ReceivingChannel: int channel }
 
-let private createPingActor actor startSignalChannel rounds : FIO<int64, obj> =
-    let stopwatch = Stopwatch()
+[<TailCall>]
+let rec private createPingerHelper rounds actor message (stopwatch: Stopwatch) = fio {
+    if rounds = 0 then
+        do! !+ stopwatch.Stop()
+        return stopwatch.ElapsedMilliseconds    
+    else
+        do! actor.SendingChannel <!- message
+        #if DEBUG
+        do! !+ printfn($"DEBUG: %s{actor.Name} sent ping: %i{message}")
+        #endif
+        let! received = !<-- actor.ReceivingChannel
+        #if DEBUG
+        do! !+ printfn($"DEBUG: %s{actor.Name} received pong: %i{received}")
+        #endif
+        return! createPingerHelper (rounds - 1) actor (received + 1) stopwatch
+}
 
-    // TODO: Make tail-recursive.
-    let rec create message rounds = fio {
-        if rounds = 0 then
-            do! !+ stopwatch.Stop()
-            return stopwatch.ElapsedMilliseconds    
-        else
-            do! message -!> actor.SendingChannel
-            #if DEBUG
-            do! !+ printfn($"DEBUG: %s{actor.Name} sent ping: %i{message}")
-            #endif
-            let! received = !<-- actor.ReceivingChannel
-            #if DEBUG
-            do! !+ printfn($"DEBUG: %s{actor.Name} received pong: %i{received}")
-            #endif
-            return! create (received + 1) (rounds - 1)
-    }
+[<TailCall>]
+let rec private createPongerHelper rounds actor : FIO<unit, obj> = fio {
+    if rounds = 0 then
+        return ()
+    else
+        let! received = !<-- actor.ReceivingChannel
+        #if DEBUG
+        do! !+ printfn($"DEBUG: %s{actor.Name} received ping: %i{received}")
+        #endif
+        let! message = !+ (received + 1)
+        do! actor.SendingChannel <!- message
+        #if DEBUG
+        do! !+ printfn($"DEBUG: %s{actor.Name} sent pong: %i{message}")
+        #endif
+        return! createPongerHelper (rounds - 1) actor
+}
 
-    fio {
-        do! !<!- startSignalChannel
-        do! !+ stopwatch.Start()
-        return! create 1 rounds
-    }
+let private createPinger actor startSignalChannel rounds = fio {
+    let! stopwatch = !+ Stopwatch()
+    do! !<!- startSignalChannel
+    do! !+ stopwatch.Start()
+    return! createPingerHelper rounds actor 1 stopwatch
+}
 
-let private createPongActor actor startSignalChannel rounds : FIO<unit, obj> =
+let private createPonger actor startSignalChannel rounds = fio {
+    do! startSignalChannel <!- 0
+    return! createPongerHelper rounds actor
+}
 
-    // TODO: Make tail-recursive.
-    let rec create rounds = fio {
-        if rounds = 0 then
-            return ()
-        else
-            let! received = !<-- actor.ReceivingChannel
-            #if DEBUG
-            do! !+ printfn($"DEBUG: %s{actor.Name} received ping: %i{received}")
-            #endif
-            let! message = !+ (received + 1)
-            do! message -!> actor.SendingChannel
-            #if DEBUG
-            do! !+ printfn($"DEBUG: %s{actor.Name} sent pong: %i{message}")
-            #endif
-            return! create (rounds - 1)
-    }
-
-    fio {
-        do! 0 -!> startSignalChannel
-        return! create rounds
-    }
-
-let internal Create rounds : FIO<int64, obj> = fio {
+let internal Create rounds : FIO<BenchmarkResult, obj> = fio {
     let startSignalChannel = Channel<int>()
     let pingSendingChannel = Channel<int>()
     let pongSendingChannel = Channel<int>()
 
-    let pingActor =
-        { Name = "PingActor"
+    let pinger =
+        { Name = "Pinger"
           SendingChannel = pingSendingChannel
           ReceivingChannel = pongSendingChannel }
 
-    let pongActor =
-        { Name = "PongActor"
+    let ponger =
+        { Name = "Ponger"
           SendingChannel = pongSendingChannel
           ReceivingChannel = pingSendingChannel }
 
-    let! (result, _) = createPingActor pingActor startSignalChannel rounds
-                       <*> createPongActor pongActor startSignalChannel rounds
+    let! (result, _) = createPinger pinger startSignalChannel rounds
+                       <*> createPonger ponger startSignalChannel rounds
     return result
 }
