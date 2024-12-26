@@ -51,43 +51,38 @@ let rec private createThreadring rounds procs timerChannel acc =
         let newAcc = createActor rounds p timerChannel <!> acc
         createThreadring rounds ps timerChannel newAcc
 
-let internal Create actorCount (rounds : int) : FIO<BenchmarkResult, obj> =
+[<TailCall>]
+let rec private createActors channels (allChannels: Channel<int> list) index acc =
+    match channels with
+    | [] -> acc
+    | chan::chans ->
+        let actor =
+            { Name = $"Actor-{index}"
+              SendingChannel = chan
+              ReceivingChannel =
+                match index with
+                | index when index - 1 < 0 ->
+                    allChannels.Item(List.length allChannels - 1)
+                | index ->
+                    allChannels.Item(index - 1) }
+        createActors chans allChannels (index + 1) (acc @ [ actor ])
 
-    let getReceivingChannel index (channels: Channel<int> list) =
-        match index with
-        | index when index - 1 < 0 ->
-            channels.Item(List.length channels - 1)
-        | index ->
-            channels.Item(index - 1)
+let internal Create actorCount (rounds : int) : FIO<BenchmarkResult, obj> = fio {
+    let! channels = !+ [ for _ in 1..actorCount -> Channel<int>() ]
+    let! actors = !+ (createActors channels channels 0 [])
+    let! timerChannel = !+ Channel<TimerMessage<int>>()
 
-    let rec createActors channels allChannels index acc =
-        match channels with
-        | [] -> acc
-        | chan::chans ->
-            let actor =
-                { Name = $"Actor-{index}"
-                  SendingChannel = chan
-                  ReceivingChannel = getReceivingChannel index allChannels }
-            createActors chans allChannels (index + 1) (acc @ [ actor ])
+    let! firstActor, secondActor, rest =
+        match actors with
+        | first::second::rest -> !+ (first, second, rest)
+        | _ -> failwith $"Threadring failed: At least tow actors should exist. actorCount = %i{actorCount}"
 
-   
+    let acc = createActor rounds secondActor timerChannel 
+              <!> createActor rounds firstActor timerChannel
 
-    let chans = [ for _ in 1..actorCount -> Channel<int>() ]
-    let procs = createActors chans chans 0 []
-
-    let pa, pb, ps =
-        match procs with
-        | pa :: pb :: ps -> (pa, pb, ps)
-        | _ -> failwith $"createThreadring failed! (at least 2 processes should exist) processCount = %i{actorCount}"
-
-    fio {
-        let timerChannel = Channel<TimerMessage<int>>()
-        let acc = createActor rounds pb timerChannel 
-                     <!> createActor rounds pa timerChannel
-
-        let! fiber = ! TimerEffect(actorCount, 1, actorCount, timerChannel)
-        do! timerChannel <!- TimerMessage.MessageChannel (pa.ReceivingChannel)
-        do! createThreadring rounds ps timerChannel acc
-        let! time = !? fiber
-        return time
-    }
+    let! fiber = ! TimerEffect(actorCount, 1, actorCount, timerChannel)
+    do! timerChannel <!- TimerMessage.MessageChannel (firstActor.ReceivingChannel)
+    do! createThreadring rounds rest timerChannel acc
+    let! time = !? fiber
+    return time
+}

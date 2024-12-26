@@ -45,7 +45,7 @@ let private createActor actor message roundCount timerChan goChan =
                 match msg with
                 | Ping(x, replyChan) ->
 #if DEBUG
-                    printfn $"DEBUG: %s{proc.Name} received ping: %i{x}"
+                    printfn $"DEBUG: %s{actor.Name} received ping: %i{x}"
 #endif
                     let y = x + 1
                     let msgReply = Pong y
@@ -53,7 +53,7 @@ let private createActor actor message roundCount timerChan goChan =
                     msgReply --> replyChan
                     >>= fun _ ->
 #if DEBUG
-                        printfn $"DEBUG: %s{proc.Name} sent pong: %i{y}"
+                        printfn $"DEBUG: %s{actor.Name} sent pong: %i{y}"
 #endif
                         createRecvPings (recvCount - 1) roundCount
                 | _ -> failwith "createRecvPings: Received pong when ping should be received!"
@@ -70,7 +70,7 @@ let private createActor actor message roundCount timerChan goChan =
                 match msg with
                 | Pong x ->
 #if DEBUG
-                    printfn $"DEBUG: %s{proc.Name} received pong: %i{x}"
+                    printfn $"DEBUG: %s{actor.Name} received pong: %i{x}"
 #endif
                     createRecvPongs (recvCount - 1) roundCount
                 | _ -> failwith "createRecvPongs: Received ping when pong should be received!"

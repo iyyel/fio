@@ -42,7 +42,8 @@ module Sockets =
         member this.Receive() : FIO<'R, exn> =
             try 
                 let line = reader.ReadLine()
-                !+ JsonSerializer.Deserialize<'R>(line, options)
+                let message = JsonSerializer.Deserialize<'R>(line, options)
+                !+ message
             with exn ->
                 !- exn
 
@@ -67,12 +68,86 @@ module Sockets =
 
 module WebSockets =
 
-    type ClientWebSocket<'R>(uri: Uri) =
+    type WebSocket<'R> internal (webSocketContext: HttpListenerWebSocketContext) =
+        let options = JsonFSharpOptions.Default().ToJsonSerializerOptions()
+
+        member this.Send(message: 'R) : FIO<unit, exn> =
+            try
+                let serialized = JsonSerializer.Serialize(message, options)
+                let buffer = Encoding.UTF8.GetBytes(serialized)
+                webSocketContext.WebSocket.SendAsync(ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None).Wait()
+                !+ ()
+            with exn ->
+                !- exn
+
+            member this.Receive() : FIO<'R, exn> =
+                try
+                    let buffer = Array.zeroCreate 1024
+                    let result = webSocketContext.WebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None).Result
+
+                    if result.MessageType = WebSocketMessageType.Close then
+                        webSocketContext.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None).Wait()
+                        !- (new Exception("Received Close message"))
+                    else 
+                        let serialized = Encoding.UTF8.GetString(buffer, 0, result.Count)
+                        let received = JsonSerializer.Deserialize<'R>(serialized, options)
+                        !+ received
+                with exn ->
+                    webSocketContext.WebSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, exn.Message, CancellationToken.None).Wait()
+                    !- exn
+
+            member this.Close() : FIO<unit, exn> =
+                try
+                    webSocketContext.WebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None).Wait()
+                    !+ ()
+                with exn ->
+                    !- exn
+
+            member this.State : WebSocketState =
+                webSocketContext.WebSocket.State
+
+            member this.RequestUri : Uri =
+                webSocketContext.RequestUri
+
+    type ServerWebSocket<'R>() =
+        let listener = new HttpListener()
+        let options = JsonFSharpOptions.Default().ToJsonSerializerOptions()
+
+        member this.Start(url) : FIO<unit, exn> =
+            try
+                listener.Prefixes.Add(url)
+                listener.Start()
+                !+ ()
+            with exn ->
+                !- exn
+
+        member this.Accept() : FIO<WebSocket<'R>, exn> =
+            try
+                let context = listener.GetContextAsync().Result
+                if context.Request.IsWebSocketRequest then
+                    let webSocketContext = context.AcceptWebSocketAsync(subProtocol = null).Result
+                    !+ WebSocket<'R>(webSocketContext)
+                else
+                    context.Response.StatusCode <- 400
+                    context.Response.Close()
+                    !- (new Exception("Not a WebSocket request"))
+            with exn ->
+                !- exn
+
+        member this.Close() : FIO<unit, exn> =
+            try
+                listener.Stop()
+                !+ ()
+            with exn ->
+                !- exn
+
+    and ClientWebSocket<'R>() =
         let clientSocket = new ClientWebSocket()
         let options = JsonFSharpOptions.Default().ToJsonSerializerOptions()
 
-        member this.Connect() : FIO<unit, exn> =
+        member this.Connect(url) : FIO<unit, exn> =
             try
+                let uri = new Uri(url)
                 clientSocket.ConnectAsync(uri, CancellationToken.None)
                 |> Async.AwaitTask
                 |> Async.RunSynchronously
@@ -94,7 +169,8 @@ module WebSockets =
                 let buffer = Array.zeroCreate<byte> 1024
                 let result = clientSocket.ReceiveAsync(ArraySegment<byte>(buffer), CancellationToken.None).Result
                 let serialized = Encoding.UTF8.GetString(buffer, 0, result.Count)
-                !+ JsonSerializer.Deserialize<'R>(serialized, options)
+                let received = JsonSerializer.Deserialize<'R>(serialized, options) // crashes for strings
+                !+ received
             with exn ->
                 !- exn
 
@@ -113,14 +189,16 @@ module Http =
             member this.Get(url: string) : FIO<string, exn> =
                 try
                     let response = client.GetAsync(url).Result
-                    !+ response.Content.ReadAsStringAsync().Result
+                    let result = response.Content.ReadAsStringAsync().Result
+                    !+ result
                 with exn ->
                     !- exn  
     
             member this.Post(url: string, message: string) : FIO<string, exn> =
                 try
                     let response = client.PostAsync(url, new StringContent(message)).Result
-                    !+ response.Content.ReadAsStringAsync().Result
+                    let result = response.Content.ReadAsStringAsync().Result
+                    !+ result
                 with exn ->
                     !- exn
     
@@ -128,13 +206,15 @@ module Http =
                 try
                     let stringContent = new StringContent(message)
                     let response = client.PutAsync(url, stringContent).Result
-                    !+ response.Content.ReadAsStringAsync().Result
+                    let result = response.Content.ReadAsStringAsync().Result
+                    !+ result
                 with exn ->
                     !- exn
 
             member this.Delete(url: string) : FIO<string, exn> =
                 try
                     let response = client.DeleteAsync(url).Result
-                    !+ response.Content.ReadAsStringAsync().Result
+                    let result = response.Content.ReadAsStringAsync().Result
+                    !+ result
                 with exn ->
                     !- exn
