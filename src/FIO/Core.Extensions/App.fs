@@ -47,9 +47,10 @@ let private defaultErrorHandler error =
 let private defaultFiberHandler fiber = mergeFiber defaultSuccessHandler defaultErrorHandler fiber
 
 [<AbstractClass>]
-type FIOApp<'R, 'E> (runtime: Runtime) =
+type FIOApp<'R, 'E> (successHandler: 'R -> unit, errorHandler: 'E -> unit, runtime: Runtime) =
+    let fiberHandler = mergeFiber successHandler errorHandler
 
-    new() = FIOApp(defaultRuntime)
+    new() = FIOApp(defaultSuccessHandler, defaultErrorHandler, defaultRuntime)
 
     static member Run(app: FIOApp<'R, 'E>) =
         app.Run()
@@ -78,7 +79,7 @@ type FIOApp<'R, 'E> (runtime: Runtime) =
 
     member this.Run(runtime: Runtime) =
         let fiber = runtime.Run this.effect
-        defaultFiberHandler fiber
+        fiberHandler fiber
 
     member this.Run(successHandler: 'R -> 'F, errorHandler: 'E -> 'F) =
         this.Run(successHandler, errorHandler, runtime)
