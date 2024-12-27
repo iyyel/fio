@@ -37,10 +37,7 @@ module internal FIOBuilderHelper =
         effect
 
     let inline internal TryWith(effect: FIO<'R, 'E>) (handler: 'E -> FIO<'R, 'E>) : FIO<'R, 'E> =
-        match effect with
-        | Success value -> !+ value
-        | Failure error -> handler error
-        | _ -> effect
+        effect >>? handler
 
     let inline internal TryFinally(effect: FIO<'R, 'E>) (finalizer: unit -> unit) : FIO<'R, 'E> =
         effect >>= fun result ->
