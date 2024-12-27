@@ -93,7 +93,10 @@ module WebSockets =
                         let received = JsonSerializer.Deserialize<'R>(serialized, options)
                         !+ received
                 with exn ->
-                    webSocketContext.WebSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, exn.Message, CancellationToken.None).Wait()
+                    try
+                        webSocketContext.WebSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, exn.Message, CancellationToken.None).Wait()
+                    with _ -> 
+                        ()
                     !- exn
 
             member this.Close() : FIO<unit, exn> =
