@@ -184,6 +184,11 @@ and FIO<'R, 'E> =
     member inline this.Then(other: FIO<'R1, 'E>) : FIO<'R1, 'E> =
         this.BindOnSuccess(fun _ -> other)
 
+    /// ThenError sequences two effects, ignoring the error of the first effect.
+    /// If the first effect succeeds, the result is immediately returned.
+    member inline this.ThenError(other: FIO<'R, 'E1>) : FIO<'R, 'E1> =
+        this.BindOnError(fun _ -> other)
+
     /// ApplyWith combines two effects: one produces a function and the other produces a value.
     /// The function is applied to the value, and the result is returned.
     /// Errors are immediately returned if any effect fails.
@@ -358,6 +363,14 @@ module Operators =
     /// An alias for `Then`, which sequences two effects, ignoring the result of the first one.
     let inline ( << ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R1, 'E>) : FIO<'R, 'E> =
         rightEffect.Then leftEffect
+
+    /// An alias for `ThenError`, which sequences two effects, ignoring the error of the first one.
+    let inline ( >? ) (leftEffect: FIO<'R, 'E>) (rightEffect: FIO<'R, 'E1>) : FIO<'R, 'E1> =
+        leftEffect.ThenError rightEffect
+
+    /// An alias for `ThenError`, which sequences two effects, ignoring the error of the first one.
+    let inline ( ?< ) (leftEffect: FIO<'R, 'E1>) (rightEffect: FIO<'R, 'E>) : FIO<'R, 'E1> =
+        rightEffect.ThenError leftEffect
 
     /// An alias for `ApplyWith`, which combines two effects: one producing a function and the other a value, 
     /// and applies the function to the value.
