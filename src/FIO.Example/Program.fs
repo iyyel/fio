@@ -324,6 +324,11 @@ Console.ReadLine() |> ignore
 EnterNumberApp().Run()
 Console.ReadLine() |> ignore
 
+let appResult = EnterNumberApp().Run(
+    (fun success -> $"You won: %s{success}"), 
+    (fun error -> $"You lost: %s{error}"))
+printfn $"%s{appResult}"
+
 GuessNumberApp().Run() // TODO: Does not work correctly.
 Console.ReadLine() |> ignore
 
