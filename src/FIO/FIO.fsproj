@@ -10,7 +10,7 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/iyyel/fio</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<Version>0.0.8-alpha</Version>
+		<Version>0.0.9-alpha</Version>
 		<PackageIcon>fio_logo_wide.png</PackageIcon>
 	</PropertyGroup>
 
@@ -35,12 +35,18 @@
 		<DebugType>embedded</DebugType>
 		<!-- Ensure that files that are generated during the build by the .NET SDK are also included in your compiled library. -->
 		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Include="..\..\images\fio_logo_wide.png">
+		<None Include="..\..\assets\images\fio_logo_wide.png">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
+		</None>
+		<None Include="..\..\LICENSE.md">
+		  <Pack>True</Pack>
+		  <PackagePath>\</PackagePath>
 		</None>
 		<None Include="..\..\README.md">
 			<Pack>True</Pack>
