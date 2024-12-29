@@ -4,7 +4,7 @@
 (* All rights reserved                                                              *)
 (************************************************************************************)
 
-namespace rec FIO.Runtime
+namespace FIO.Runtime
 
 open FIO.Core
 

@@ -1,3 +1,3 @@
-﻿namespace rec FIO.Benchmarks.Suite
+﻿namespace FIO.Benchmarks.Suite
 
 type BenchmarkResult = int64

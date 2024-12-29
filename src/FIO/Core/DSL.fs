@@ -5,7 +5,7 @@
 (************************************************************************************)
 
 [<AutoOpen>]
-module rec FIO.Core.DSL
+module FIO.Core.DSL
 
 open System.Collections.Concurrent
 open System.Threading

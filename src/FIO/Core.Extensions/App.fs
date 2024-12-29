@@ -5,9 +5,7 @@
 (************************************************************************************)
 
 [<AutoOpen>]
-module rec FIO.Core.App
-
-open FIO.Core
+module FIO.Core.App
 
 open FIO.Runtime
 open FIO.Runtime.Advanced

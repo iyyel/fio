@@ -4,7 +4,7 @@
 (* All rights reserved                                                              *)
 (************************************************************************************)
 
-module internal rec FIO.Benchmarks.Suite.Runner
+module internal FIO.Benchmarks.Suite.Runner
 
 open FIO.Core
 open FIO.Runtime

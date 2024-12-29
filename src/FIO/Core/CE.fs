@@ -5,7 +5,7 @@
 (************************************************************************************)
 
 [<AutoOpen>]
-module rec FIO.Core.CE
+module FIO.Core.CE
 
 module internal FIOBuilderHelper =
 
@@ -19,10 +19,10 @@ module internal FIOBuilderHelper =
         effect
 
     let inline internal Yield(result: 'R) : FIO<'R, 'E> =
-        FIOBuilderHelper.Return result
+        Return result
 
     let inline internal YieldFrom(effect: FIO<'R, 'E>) : FIO<'R, 'E> =
-        FIOBuilderHelper.ReturnFrom effect
+        ReturnFrom effect
 
     let inline internal Combine(firstEffect: FIO<'R, 'E>) (secondEffect: FIO<'R1, 'E>) : FIO<'R1, 'E> =
         firstEffect >> secondEffect

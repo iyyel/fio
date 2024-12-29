@@ -7,7 +7,7 @@
 (************************************************************************************)
 
 [<AutoOpen>]
-module internal rec FIO.Benchmarks.Suite.Fork
+module internal FIO.Benchmarks.Suite.Fork
 
 open FIO.Benchmarks.Tools.Timing.StopwatchTimer
 
