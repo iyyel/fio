@@ -278,7 +278,8 @@ type WebSocketApp(serverUrl, clientUrl) =
 
             while true do
                 let! clientSocket = serverSocket.Accept()
-                do! !+ printfn($"Client connected from %s{clientSocket.RequestUri.ToString()}")
+                let! remoteEndPoint = clientSocket.RemoteEndPoint()
+                do! !+ printfn($"Client connected from %s{remoteEndPoint.ToString()}")
                 do! !! echo(clientSocket)
         }
 

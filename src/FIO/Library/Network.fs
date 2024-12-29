@@ -68,7 +68,7 @@ module Sockets =
 
 module WebSockets =
 
-    type WebSocket<'R> internal (webSocketContext: HttpListenerWebSocketContext) =
+    type WebSocket<'R> internal (webSocketContext: HttpListenerWebSocketContext, listenerContext: HttpListenerContext) =
         let options = JsonFSharpOptions.Default().ToJsonSerializerOptions()
 
         member this.Send(message: 'R) : FIO<unit, exn> =
@@ -109,8 +109,17 @@ module WebSockets =
             member this.State : WebSocketState =
                 webSocketContext.WebSocket.State
 
-            member this.RequestUri : Uri =
-                webSocketContext.RequestUri
+            member this.RemoteEndPoint() : FIO<EndPoint, exn> =
+                try
+                    !+ listenerContext.Request.RemoteEndPoint
+                with exn ->
+                    !- exn
+
+            member this.LocalEndPoint() : FIO<EndPoint, exn> =
+                try
+                    !+ listenerContext.Request.LocalEndPoint
+                with exn ->
+                    !- exn
 
     type ServerWebSocket<'R>() =
         let listener = new HttpListener()
@@ -129,7 +138,7 @@ module WebSockets =
                 let context = listener.GetContextAsync().Result
                 if context.Request.IsWebSocketRequest then
                     let webSocketContext = context.AcceptWebSocketAsync(subProtocol = null).Result
-                    !+ WebSocket<'R>(webSocketContext)
+                    !+ WebSocket<'R>(webSocketContext, context)
                 else
                     context.Response.StatusCode <- 400
                     context.Response.Close()
