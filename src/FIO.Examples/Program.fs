@@ -4,7 +4,7 @@
 (* All rights reserved                                                              *)
 (************************************************************************************)
 
-module private FIO.Example
+module private FIO.Examples
 
 open System
 

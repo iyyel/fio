@@ -9,11 +9,11 @@
 (* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)         *)
 (************************************************************************************)
 
-module internal rec FIO.Benchmark.Suite.Threadring
+module internal rec FIO.Benchmarks.Suite.Threadring
 
 open FIO.Core
 
-open FIO.Benchmark.Tools.Timing.ChannelTimer
+open FIO.Benchmarks.Tools.Timing.ChannelTimer
 
 type private Actor =
     { Name: string

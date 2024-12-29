@@ -9,7 +9,7 @@
 (* (http://soft.vub.ac.be/AGERE14/papers/ageresplash2014_submission_19.pdf)         *)
 (************************************************************************************)
 
-module internal rec FIO.Benchmark.Suite.Pingpong
+module internal rec FIO.Benchmarks.Suite.Pingpong
 
 open FIO.Core
 

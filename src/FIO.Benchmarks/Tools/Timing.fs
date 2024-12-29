@@ -4,7 +4,7 @@
 (* All rights reserved                                                              *)
 (************************************************************************************)
 
-module internal rec FIO.Benchmark.Tools.Timing
+module internal rec FIO.Benchmarks.Tools.Timing
 
 open FIO.Core
 

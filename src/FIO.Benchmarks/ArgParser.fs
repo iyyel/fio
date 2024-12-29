@@ -10,7 +10,7 @@ open Argu
 
 open FIO.Runtime
 
-open FIO.Benchmark.Suite
+open FIO.Benchmarks.Suite
 
 type Arguments =
     | Naive_Runtime

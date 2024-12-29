@@ -9,9 +9,9 @@
 (* (https://dl.acm.org/doi/10.1145/2364489.2364495I)                                *)
 (************************************************************************************)
 
-module internal rec FIO.Benchmark.Suite.Bang
+module internal rec FIO.Benchmarks.Suite.Bang
 
-open FIO.Benchmark.Tools.Timing.ChannelTimer
+open FIO.Benchmarks.Tools.Timing.ChannelTimer
 
 open FIO.Core
 
